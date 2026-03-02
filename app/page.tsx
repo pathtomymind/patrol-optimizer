@@ -25,7 +25,7 @@ export default function Home() {
   }[]>([]);
   const [showDirectModal, setShowDirectModal] = useState(false);
   const [editingPoint, setEditingPoint] = useState<{
-    id: number; address: string; destination: string; complaint: string; manager: string;
+    id: number; address: string; destination: string; complaint: string; manager: string; photoUrl: string;
   } | null>(null);
   const [directForm, setDirectForm] = useState({ address: '', destination: '', complaint: '', manager: '', photoUrl: '' });
   // 지점 상세정보 팝업
