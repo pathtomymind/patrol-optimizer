@@ -40,7 +40,7 @@ export default function Home() {
     setShowDirectModal(true);
   };
 
-  const handleDirectEdit = (point: { id: number; address: string; destination: string; complaint: string; manager: string }) => {
+  const handleDirectEdit = (point: { id: number; address: string; destination: string; complaint: string; manager: string; photoUrl: string }) => {
     setEditingPoint(point);
     setDirectForm({ address: point.address, destination: point.destination, complaint: point.complaint, manager: point.manager, photoUrl: point.photoUrl || '' });
     setShowDirectModal(true);
