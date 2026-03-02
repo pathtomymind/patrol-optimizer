@@ -36,7 +36,7 @@ export default function Home() {
 
   const handleDirectAdd = () => {
     setEditingPoint(null);
-    setDirectForm({ address: '', destination: '', complaint: '', manager: '' });
+    setDirectForm({ address: '', destination: '', complaint: '', manager: '', photoUrl: '' });
     setShowDirectModal(true);
   };
 
