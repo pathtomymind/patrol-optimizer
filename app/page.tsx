@@ -296,8 +296,8 @@ export default function Home() {
                               {point.id}
                             </div>
                             <div className="flex-1 cursor-pointer" onClick={() => {
-                              setEditingPoint(point);
-                              setDirectForm({ address: point.address, destination: '', complaint: point.complaint, manager: '' });
+                              setEditingPoint({ ...point, destination: '', manager: '', photoUrl: '' });
+                              setDirectForm({ address: point.address, destination: '', complaint: point.complaint, manager: '', photoUrl: '' });
                               setShowDirectModal(true);
                             }}>
                               <p className="text-white text-xs leading-snug">{point.address}</p>
