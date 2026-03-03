@@ -69,7 +69,10 @@ export default function Home() {
 
   // 이미지 업로드
   const [uploadedImages, setUploadedImages] = useState<{ id: number; url: string; name: string }[]>([]);
-  const [extractedPoints, setExtractedPoints] = useState<{ id: number; address: string; complaint: string }[]>([]);
+  const [extractedPoints, setExtractedPoints] = useState<{ 
+    id: number; address: string; complaint: string;
+    lat?: number | null; lng?: number | null; placeName?: string | null;
+  }[]>([]);
 
   const handleInputTabClick = () => {
     if (isAuthenticated) {
@@ -157,13 +160,40 @@ export default function Home() {
       const data = await res.json();
 
       if (res.ok) {
-        setExtractedPoints(
-          data.points.map((p: { address: string; destination: string; complaint: string }, idx: number) => ({
-            id: idx + 1,
-            address: p.destination ? `${p.address} (${p.destination})` : p.address,
-            complaint: p.complaint,
-          }))
+        // 각 지점마다 좌표 검색
+        const pointsWithCoords = await Promise.all(
+          data.points.map(async (p: { address: string; destination: string; complaint: string }, idx: number) => {
+            let lat = null;
+            let lng = null;
+            let placeName = null;
+
+            try {
+              const geoRes = await fetch('/api/geocode', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ destination: p.destination, address: p.address }),
+              });
+              if (geoRes.ok) {
+                const geoData = await geoRes.json();
+                lat = geoData.lat;
+                lng = geoData.lng;
+                placeName = geoData.placeName;
+              }
+            } catch (e) {
+              console.error('geocode 오류:', e);
+            }
+
+            return {
+              id: idx + 1,
+              address: p.destination ? `${p.address} (${p.destination})` : p.address,
+              complaint: p.complaint,
+              lat,
+              lng,
+              placeName,
+            };
+          })
         );
+        setExtractedPoints(pointsWithCoords);
       } else {
         alert(data.message || '추출 중 오류가 발생했습니다.');
       }
