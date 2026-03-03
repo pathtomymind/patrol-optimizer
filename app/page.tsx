@@ -79,12 +79,25 @@ export default function Home() {
     }
   };
 
-  const handleAuth = () => {
-    setIsAuthenticated(true);
-    setShowAuthModal(false);
-    setPassword('');
-    setAuthError('');
-    setActiveTab('input');
+  const handleAuth = async () => {
+    try {
+      const res = await fetch('/api/auth', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password }),
+      });
+      if (res.ok) {
+        setIsAuthenticated(true);
+        setShowAuthModal(false);
+        setPassword('');
+        setAuthError('');
+        setActiveTab('input');
+      } else {
+        setAuthError('비밀번호가 올바르지 않습니다.');
+      }
+    } catch {
+      setAuthError('서버 오류가 발생했습니다.');
+    }
   };
 
   const handleAuthClose = () => {
