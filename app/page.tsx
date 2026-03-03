@@ -122,12 +122,56 @@ export default function Home() {
     setUploadedImages((prev) => prev.filter((img) => img.id !== id));
   };
 
-  const handleExtract = () => {
-    // 임시: 더미 추출 결과
-    setExtractedPoints([
-      { id: 1, address: '태평로 132 (화순식당)', complaint: '에어라이트 보신탕 전단지' },
-      { id: 2, address: '가능동 663-9 (백정밥상)', complaint: '푸르넷 광고 벽보' },
-    ]);
+  const [isExtracting, setIsExtracting] = useState(false);
+
+  const handleExtract = async () => {
+    if (uploadedImages.length === 0) {
+      alert('이미지를 먼저 업로드해주세요.');
+      return;
+    }
+
+    setIsExtracting(true);
+    try {
+      // 이미지를 base64로 변환
+      const base64Images = await Promise.all(
+        uploadedImages.map((img) =>
+          fetch(img.url)
+            .then((r) => r.blob())
+            .then(
+              (blob) =>
+                new Promise<string>((resolve) => {
+                  const reader = new FileReader();
+                  reader.onloadend = () => resolve(reader.result as string);
+                  reader.readAsDataURL(blob);
+                })
+            )
+        )
+      );
+
+      const res = await fetch('/api/extract-points', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ images: base64Images }),
+      });
+
+      const data = await res.json();
+
+      if (res.ok) {
+        setExtractedPoints(
+          data.points.map((p: { address: string; destination: string; complaint: string }, idx: number) => ({
+            id: idx + 1,
+            address: p.destination ? `${p.address} (${p.destination})` : p.address,
+            complaint: p.complaint,
+          }))
+        );
+      } else {
+        alert(data.message || '추출 중 오류가 발생했습니다.');
+      }
+    } catch (error) {
+      alert('네트워크 오류가 발생했습니다.');
+    } finally {
+      setIsExtracting(false);
+    }
   };
 
   const handleExtractedDelete = (id: number) => {
@@ -291,10 +335,11 @@ export default function Home() {
                   {/* 지점 추출하기 버튼 */}
                   <button
                     onClick={handleExtract}
+                    disabled={isExtracting}
                     className="py-2 rounded text-white text-xs font-bold w-32"
-                    style={{ background: '#0a3d8f' }}
+                    style={{ background: isExtracting ? '#555' : '#0a3d8f' }}
                   >
-                    지점 추출하기
+                    {isExtracting ? '추출 중...' : '지점 추출하기'}
                   </button>
 
                   {/* 추출된 지점카드 */}
