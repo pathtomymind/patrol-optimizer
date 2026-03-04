@@ -134,68 +134,104 @@ export default function Home() {
     }
 
     setIsExtracting(true);
+    const startTime = performance.now();
     try {
-      // 이미지를 base64로 변환
-      const base64Images = await Promise.all(
+      // 이미지 압축 함수
+      const compressImage = (blob: Blob): Promise<string> => {
+        return new Promise((resolve) => {
+          const img = new Image();
+          const url = URL.createObjectURL(blob);
+          img.onload = () => {
+            const canvas = document.createElement('canvas');
+            const maxSize = 1024;
+            let w = img.width;
+            let h = img.height;
+            if (w > maxSize || h > maxSize) {
+              if (w > h) { h = Math.round(h * maxSize / w); w = maxSize; }
+              else { w = Math.round(w * maxSize / h); h = maxSize; }
+            }
+            canvas.width = w;
+            canvas.height = h;
+            const ctx = canvas.getContext('2d')!;
+            ctx.drawImage(img, 0, 0, w, h);
+            URL.revokeObjectURL(url);
+            resolve(canvas.toDataURL('image/jpeg', 0.7));
+          };
+          img.src = url;
+        });
+      };
+
+      // 이미지 압축
+      const compressedImages = await Promise.all(
         uploadedImages.map((img) =>
-          fetch(img.url)
-            .then((r) => r.blob())
-            .then(
-              (blob) =>
-                new Promise<string>((resolve) => {
-                  const reader = new FileReader();
-                  reader.onloadend = () => resolve(reader.result as string);
-                  reader.readAsDataURL(blob);
-                })
-            )
+          fetch(img.url).then((r) => r.blob()).then(compressImage)
         )
       );
 
-      const res = await fetch('/api/extract-points', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ images: base64Images }),
-      });
+      // 5장씩 배치 분할
+      const BATCH_SIZE = 5;
+      const batches: string[][] = [];
+      for (let i = 0; i < compressedImages.length; i += BATCH_SIZE) {
+        batches.push(compressedImages.slice(i, i + BATCH_SIZE));
+      }
 
-      const data = await res.json();
+      // 배치 병렬 호출
+      const batchResults = await Promise.all(
+        batches.map((batch) =>
+          fetch('/api/extract-points', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ images: batch }),
+          }).then((r) => r.json())
+        )
+      );
 
-      if (res.ok) {
+      // 결과 합치기
+      const allPoints = batchResults.flatMap((data) => data.points || []);
+
+      if (allPoints.length > 0) {
         // 각 지점마다 좌표 검색
-        const pointsWithCoords = await Promise.all(
-          data.points.map(async (p: { address: string; destination: string; complaint: string }, idx: number) => {
-            let lat = null;
-            let lng = null;
-            let placeName = null;
+        // 각 지점마다 좌표 검색
+      const pointsWithCoords = await Promise.all(
+        allPoints.map(async (p: { address: string; destination: string; complaint: string }, idx: number) => {
+          let lat = null;
+          let lng = null;
+          let placeName = null;
 
-            try {
-              const geoRes = await fetch('/api/geocode', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ destination: p.destination, address: p.address }),
-              });
-              if (geoRes.ok) {
-                const geoData = await geoRes.json();
-                lat = geoData.lat;
-                lng = geoData.lng;
-                placeName = geoData.placeName;
-              }
-            } catch (e) {
-              console.error('geocode 오류:', e);
+          try {
+            const geoRes = await fetch('/api/geocode', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ destination: p.destination, address: p.address }),
+            });
+            if (geoRes.ok) {
+              const geoData = await geoRes.json();
+              lat = geoData.lat;
+              lng = geoData.lng;
+              placeName = geoData.placeName;
             }
+          } catch (e) {
+            console.error('geocode 오류:', e);
+          }
 
-            return {
-              id: idx + 1,
-              address: p.destination ? `${p.address} (${p.destination})` : p.address,
-              complaint: p.complaint,
-              lat,
-              lng,
-              placeName,
-            };
-          })
-        );
+          return {
+            id: idx + 1,
+            address: p.destination ? `${p.address} (${p.destination})` : p.address,
+            complaint: p.complaint,
+            lat,
+            lng,
+            placeName,
+          };
+        })
+      );
+
+        const endTime = performance.now();
+        console.log(`✅ 총 소요시간: ${((endTime - startTime) / 1000).toFixed(1)}초`);
+        console.log(`📍 추출 지점 수: ${pointsWithCoords.length}개`);
+        console.log('추출된 지점들:', JSON.stringify(pointsWithCoords, null, 2));
         setExtractedPoints(pointsWithCoords);
       } else {
-        alert(data.message || '추출 중 오류가 발생했습니다.');
+        alert('추출된 지점이 없습니다.');
       }
     } catch (error) {
       alert('네트워크 오류가 발생했습니다.');

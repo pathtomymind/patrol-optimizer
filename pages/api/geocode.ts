@@ -1,5 +1,13 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 
+// 주소 전처리 함수
+function normalizeAddress(address: string): string {
+  if (address.includes('경기도')) return address;
+  if (address.includes('경기 ')) return address.replace('경기 ', '경기도 ');
+  if (address.includes('의정부')) return '경기도 ' + address;
+  return '경기도 의정부시 ' + address;
+}
+
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') {
     return res.status(405).json({ message: 'Method not allowed' });
@@ -93,7 +101,7 @@ async function getAddressCoord(
   clientSecret: string
 ): Promise<{ lat: number; lng: number } | null> {
   try {
-    const query = encodeURIComponent(`의정부 ${address}`);
+    const query = encodeURIComponent(normalizeAddress(address));
     const res = await fetch(
       `https://maps.apigw.ntruss.com/map-geocode/v2/geocode?query=${query}`,
       {
