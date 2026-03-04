@@ -70,8 +70,9 @@ export default function Home() {
   // 이미지 업로드
   const [uploadedImages, setUploadedImages] = useState<{ id: number; url: string; name: string }[]>([]);
   const [extractedPoints, setExtractedPoints] = useState<{ 
-    id: number; address: string; complaint: string;
+    id: number; address: string; destination?: string | null; complaint: string;
     lat?: number | null; lng?: number | null; placeName?: string | null;
+    source?: string | null;
   }[]>([]);
 
   const handleInputTabClick = () => {
@@ -198,30 +199,34 @@ export default function Home() {
           let lng = null;
           let placeName = null;
 
-          try {
-            const geoRes = await fetch('/api/geocode', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ destination: p.destination, address: p.address }),
-            });
-            if (geoRes.ok) {
-              const geoData = await geoRes.json();
-              lat = geoData.lat;
-              lng = geoData.lng;
-              placeName = geoData.placeName;
+          let source = null;
+            try {
+              const geoRes = await fetch('/api/geocode', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ destination: p.destination, address: p.address }),
+              });
+              if (geoRes.ok) {
+                const geoData = await geoRes.json();
+                lat = geoData.lat;
+                lng = geoData.lng;
+                placeName = geoData.placeName;
+                source = geoData.source;
+              }
+            } catch (e) {
+              console.error('geocode 오류:', e);
             }
-          } catch (e) {
-            console.error('geocode 오류:', e);
-          }
 
-          return {
-            id: idx + 1,
-            address: p.destination ? `${p.address} (${p.destination})` : p.address,
-            complaint: p.complaint,
-            lat,
-            lng,
-            placeName,
-          };
+            return {
+              id: idx + 1,
+              address: p.address,
+              destination: p.destination || null,
+              complaint: p.complaint,
+              lat,
+              lng,
+              placeName,
+              source,
+            };
         })
       );
 
@@ -424,8 +429,16 @@ export default function Home() {
                               setDirectForm({ address: point.address, destination: '', complaint: point.complaint, manager: '', photoUrl: '' });
                               setShowDirectModal(true);
                             }}>
-                              <p className="text-white text-xs leading-snug">{point.address}</p>
-                              <p className="text-blue-200 text-xs mt-0.5">{point.complaint}</p>
+                              <p className="text-xs leading-snug">
+                                {point.source === 'place_single' || point.source === 'place_nearest' ? (
+                                  <span style={{ color: '#a5d6a7' }}>{point.address}{point.destination ? ` (${point.destination})` : ''}</span>
+                                ) : point.source === 'address' ? (
+                                  <><span style={{ color: '#a5d6a7' }}>{point.address}</span>{point.destination ? <span className="text-white"> ({point.destination})</span> : ''}</>
+                                ) : (
+                                  <span className="text-white">{point.address}{point.destination ? ` (${point.destination})` : ''}</span>
+                                )}
+                              </p>
+                              <p className="text-xs mt-0.5" style={{ color: point.source ? '#a5d6a7' : 'white' }}>{point.complaint}</p>
                             </div>
                             <button
                               onClick={() => handleExtractedDelete(point.id)}
