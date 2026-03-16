@@ -1,0 +1,7 @@
+{
+  "functions": {
+    "pages/api/ors-route.ts": {
+      "maxDuration": 60
+    }
+  }
+}

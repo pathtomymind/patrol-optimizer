@@ -67,6 +67,7 @@ export default function MapPage() {
   const [lineMode, setLineMode] = useState<'straight' | 'road'>('straight');
   const lineModeRef = useRef<'straight' | 'road'>('straight');
   const [osrmError, setOsrmError] = useState(false);
+  const [roadLoading, setRoadLoading] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
   const [editStatus, setEditStatus] = useState('');
   const [editMemo, setEditMemo] = useState('');
@@ -447,7 +448,6 @@ export default function MapPage() {
   };
 
   const drawRoadLines = async (points: RoutePoint[], map: any, naver: any) => {
-    // ① 서버 헬스체크 (첫 구간으로 빠르게 확인)
     const TIMEOUT = 8000;
     const fetchWithTimeout = (url: string) => {
       const controller = new AbortController();
@@ -455,66 +455,111 @@ export default function MapPage() {
       return fetch(url, { signal: controller.signal }).finally(() => clearTimeout(timer));
     };
 
-    try {
-      const probe = await fetchWithTimeout(
-        `https://router.project-osrm.org/route/v1/driving/${points[0].lng},${points[0].lat};${points[1].lng},${points[1].lat}?overview=false`
-      );
-      if (!probe.ok) throw new Error(`${probe.status}`);
-      setOsrmError(false);
-    } catch {
-      // 서버 비정상 → 에러 표시 후 직선 fallback
-      setOsrmError(true);
-      points.slice(0, -1).forEach((from, i) => {
-        const to = points[i + 1];
-        const color = getLineColor(from, to);
-        const polyline = new naver.maps.Polyline({
-          map,
-          path: [new naver.maps.LatLng(from.lat, from.lng), new naver.maps.LatLng(to.lat, to.lng)],
-          strokeColor: color,
-          strokeWeight: 6,
-          strokeOpacity: 1,
-        });
-        polylinesRef.current.push(polyline);
-      });
-      return;
-    }
-
-    // ② 서버 정상 → 병렬 처리로 한 번에 그리기
     const segments = points.slice(0, -1).map((from, i) => ({
       from, to: points[i + 1], color: getLineColor(from, points[i + 1]),
     }));
 
-    const results = await Promise.all(
-      segments.map(async ({ from, to, color }) => {
-        try {
-          const res = await fetchWithTimeout(
-            `https://router.project-osrm.org/route/v1/driving/${from.lng},${from.lat};${to.lng},${to.lat}?overview=full&geometries=geojson`
-          );
-          if (!res.ok) throw new Error();
-          const data = await res.json();
-          if (data.routes?.[0]?.geometry?.coordinates) {
-            return {
-              coords: data.routes[0].geometry.coordinates.map((c: number[]) => ({ lat: c[1], lng: c[0] })),
-              color,
-            };
-          }
-        } catch {}
-        return {
-          coords: [{ lat: from.lat, lng: from.lng }, { lat: to.lat, lng: to.lng }],
-          color,
-        };
-      })
-    );
-
-    // 한 번에 렌더링
-    results.forEach(({ coords, color }) => {
-      const path = coords.map((c: { lat: number; lng: number }) => new naver.maps.LatLng(c.lat, c.lng));
-      const polyline = new naver.maps.Polyline({
-        map, path, strokeColor: color, strokeWeight: 6, strokeOpacity: 1,
+    // 공통 렌더링 함수
+    const renderResults = (results: { coords: { lat: number; lng: number }[]; color: string }[]) => {
+      results.forEach(({ coords, color }) => {
+        const path = coords.map((c: { lat: number; lng: number }) => new naver.maps.LatLng(c.lat, c.lng));
+        const polyline = new naver.maps.Polyline({
+          map, path, strokeColor: color, strokeWeight: 6, strokeOpacity: 1,
+        });
+        polylinesRef.current.push(polyline);
+        placeArrows(coords, null, map, naver);
       });
-      polylinesRef.current.push(polyline);
-      placeArrows(coords, null, map, naver);
-    });
+    };
+
+    // 직선 fallback 렌더링
+    const renderStraight = () => {
+      segments.forEach(({ from, to, color }) => {
+        const polyline = new naver.maps.Polyline({
+          map,
+          path: [new naver.maps.LatLng(from.lat, from.lng), new naver.maps.LatLng(to.lat, to.lng)],
+          strokeColor: color, strokeWeight: 6, strokeOpacity: 1,
+        });
+        polylinesRef.current.push(polyline);
+      });
+    };
+
+    // ① ORS 시도 (주 서비스 - 안정적)
+    setRoadLoading(true);
+    try {
+      console.log('[road] ORS 요청 시작...');
+      const orsRes = await fetch('/api/ors-route', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          date: routeRef.current?.date ?? '',
+          version: routeRef.current?.version ?? 0,
+          segments: segments.map(({ from, to }) => ({
+            fromLng: from.lng, fromLat: from.lat, toLng: to.lng, toLat: to.lat,
+          })),
+        }),
+      });
+      console.log('[road] ORS 응답 상태:', orsRes.status);
+      if (!orsRes.ok) throw new Error(`ORS HTTP ${orsRes.status}`);
+      const orsData = await orsRes.json();
+      if (orsData.fromCache) setRoadLoading(false); // 캐시 히트면 즉시 숨김
+      console.log('[road] ORS 결과 수:', orsData.results?.length, '/ 성공:', orsData.results?.filter((r: {ok: boolean}) => r.ok).length, orsData.fromCache ? '(캐시)' : '(신규)');
+      if (orsData.results?.length) {
+        const results = orsData.results.map((r: { ok: boolean; coords?: { lat: number; lng: number }[] }, i: number) => ({
+          coords: r.ok && r.coords ? r.coords : [
+            { lat: segments[i].from.lat, lng: segments[i].from.lng },
+            { lat: segments[i].to.lat, lng: segments[i].to.lng },
+          ],
+          color: segments[i].color,
+        }));
+        setOsrmError(false);
+        setRoadLoading(false);
+        renderResults(results);
+        return;
+      }
+    } catch (e) {
+      console.warn('[road] ORS 실패:', e);
+    }
+
+    // ② ORS 실패 → OSRM 폴백
+    try {
+      console.log('[road] OSRM 폴백 시도...');
+      const probeCount = Math.min(3, segments.length);
+      const probes = await Promise.all(
+        segments.slice(0, probeCount).map(({ from, to }) =>
+          fetchWithTimeout(
+            `https://router.project-osrm.org/route/v1/driving/${from.lng},${from.lat};${to.lng},${to.lat}?overview=false`
+          ).then(r => { console.log('[road] OSRM probe:', r.status); return r.ok; }).catch(() => false)
+        )
+      );
+      if (probes.every(ok => ok)) {
+        const results = await Promise.all(
+          segments.map(async ({ from, to, color }) => {
+            try {
+              const res = await fetchWithTimeout(
+                `https://router.project-osrm.org/route/v1/driving/${from.lng},${from.lat};${to.lng},${to.lat}?overview=full&geometries=geojson`
+              );
+              if (!res.ok) throw new Error();
+              const data = await res.json();
+              if (data.routes?.[0]?.geometry?.coordinates) {
+                return { coords: data.routes[0].geometry.coordinates.map((c: number[]) => ({ lat: c[1], lng: c[0] })), color };
+              }
+            } catch {}
+            return { coords: [{ lat: from.lat, lng: from.lng }, { lat: to.lat, lng: to.lng }], color };
+          })
+        );
+        setOsrmError(false);
+        renderResults(results);
+        return;
+      }
+    } catch (e) {
+      console.warn('[road] OSRM 폴백 실패:', e);
+    }
+
+    // ③ 둘 다 실패 → 직선 + 에러 배너
+    console.error('[road] ORS·OSRM 모두 실패 → 직선 표시');
+    setRoadLoading(false);
+    setOsrmError(true);
+    renderStraight();
   };
 
   const redrawLines = () => {
@@ -766,6 +811,24 @@ export default function MapPage() {
         </div>
       )}
 
+      {/* ORS 도로 경로 로딩 메시지 - 초록색, 화면 중앙 */}
+      {roadLoading && (
+        <div style={{
+          position: 'absolute',
+          top: '50%', left: '50%',
+          transform: 'translate(-50%, -50%)',
+          background: 'rgba(27,94,32,0.92)',
+          color: 'white', fontSize: '13px', fontWeight: 'bold',
+          padding: '12px 24px', borderRadius: '12px',
+          display: 'flex', alignItems: 'center', gap: '10px',
+          boxShadow: '0 4px 16px rgba(0,0,0,0.4)',
+          whiteSpace: 'nowrap', zIndex: 300,
+        }}>
+          <span style={{ fontSize: '16px' }}>🛣️</span>
+          <span>도로 경로를 불러오는 중...</span>
+        </div>
+      )}
+
       {/* OSRM 서버 오류 배너 - 하단 표시, 직선 모드 선택시 숨김 */}
       {lineMode === 'road' && osrmError && (
         <div style={{
@@ -777,7 +840,7 @@ export default function MapPage() {
           zIndex: 200,
         }}>
           <span>⚠️</span>
-          <span>도로 경로 서버에 접속할 수 없어 직선으로 표시합니다</span>
+          <span>도로 경로 서버(OSRM·ORS) 모두 응답 없음 — 직선으로 표시합니다</span>
         </div>
       )}
 
