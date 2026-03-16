@@ -68,6 +68,9 @@ export default function MapPage() {
   const lineModeRef = useRef<'straight' | 'road'>('straight');
   const [osrmError, setOsrmError] = useState(false);
   const [roadLoading, setRoadLoading] = useState(false);
+  const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const blinkIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const blinkRestoreRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
   const [editStatus, setEditStatus] = useState('');
   const [editMemo, setEditMemo] = useState('');
@@ -289,9 +292,18 @@ export default function MapPage() {
     // data-pulse 속성으로 마커 식별 후 외부에서 JS 애니메이션 적용
     const pulseId = `pulse-${point.order}-${point.lat}`.replace(/\./g, '_');
     const pulseDiv = showPulse ? `
-      <div data-pulse="${pulseId}-0" data-delay="0"    style="position:absolute;top:50%;left:50%;width:28px;height:28px;margin-left:-14px;margin-top:-14px;border-radius:50%;border:2px solid ${pulseColor};background:transparent;pointer-events:none;will-change:transform,opacity;transform-origin:center center;"></div>
-      <div data-pulse="${pulseId}-1" data-delay="600"  style="position:absolute;top:50%;left:50%;width:28px;height:28px;margin-left:-14px;margin-top:-14px;border-radius:50%;border:2px solid ${pulseColor};background:transparent;pointer-events:none;will-change:transform,opacity;transform-origin:center center;"></div>
-      <div data-pulse="${pulseId}-2" data-delay="1200" style="position:absolute;top:50%;left:50%;width:28px;height:28px;margin-left:-14px;margin-top:-14px;border-radius:50%;border:2px solid ${pulseColor};background:transparent;pointer-events:none;will-change:transform,opacity;transform-origin:center center;"></div>` : '';
+      <div data-pulse="${pulseId}-0" data-delay="0" style="position:absolute;top:50%;left:50%;width:28px;height:28px;margin-left:-14px;margin-top:-14px;border-radius:50%;border:2px solid ${pulseColor};background:transparent;pointer-events:none;will-change:transform,opacity;transform-origin:center center;"></div>
+      <div data-pulse="${pulseId}-1" data-delay="333" style="position:absolute;top:50%;left:50%;width:28px;height:28px;margin-left:-14px;margin-top:-14px;border-radius:50%;border:2px solid ${pulseColor};background:transparent;pointer-events:none;will-change:transform,opacity;transform-origin:center center;"></div>
+      <div data-pulse="${pulseId}-2" data-delay="666" style="position:absolute;top:50%;left:50%;width:28px;height:28px;margin-left:-14px;margin-top:-14px;border-radius:50%;border:2px solid ${pulseColor};background:transparent;pointer-events:none;will-change:transform,opacity;transform-origin:center center;"></div>
+      <div data-pulse="${pulseId}-3" data-delay="999" style="position:absolute;top:50%;left:50%;width:28px;height:28px;margin-left:-14px;margin-top:-14px;border-radius:50%;border:2px solid ${pulseColor};background:transparent;pointer-events:none;will-change:transform,opacity;transform-origin:center center;"></div>
+      <div data-pulse="${pulseId}-4" data-delay="1332" style="position:absolute;top:50%;left:50%;width:28px;height:28px;margin-left:-14px;margin-top:-14px;border-radius:50%;border:2px solid ${pulseColor};background:transparent;pointer-events:none;will-change:transform,opacity;transform-origin:center center;"></div>
+      <div data-pulse="${pulseId}-5" data-delay="1665" style="position:absolute;top:50%;left:50%;width:28px;height:28px;margin-left:-14px;margin-top:-14px;border-radius:50%;border:2px solid ${pulseColor};background:transparent;pointer-events:none;will-change:transform,opacity;transform-origin:center center;"></div>
+      <div data-pulse="${pulseId}-6" data-delay="1998" style="position:absolute;top:50%;left:50%;width:28px;height:28px;margin-left:-14px;margin-top:-14px;border-radius:50%;border:2px solid ${pulseColor};background:transparent;pointer-events:none;will-change:transform,opacity;transform-origin:center center;"></div>
+      <div data-pulse="${pulseId}-7" data-delay="2331" style="position:absolute;top:50%;left:50%;width:28px;height:28px;margin-left:-14px;margin-top:-14px;border-radius:50%;border:2px solid ${pulseColor};background:transparent;pointer-events:none;will-change:transform,opacity;transform-origin:center center;"></div>
+      <div data-pulse="${pulseId}-8" data-delay="2664" style="position:absolute;top:50%;left:50%;width:28px;height:28px;margin-left:-14px;margin-top:-14px;border-radius:50%;border:2px solid ${pulseColor};background:transparent;pointer-events:none;will-change:transform,opacity;transform-origin:center center;"></div>
+      <div data-pulse="${pulseId}-9" data-delay="2997" style="position:absolute;top:50%;left:50%;width:28px;height:28px;margin-left:-14px;margin-top:-14px;border-radius:50%;border:2px solid ${pulseColor};background:transparent;pointer-events:none;will-change:transform,opacity;transform-origin:center center;"></div>
+      <div data-pulse="${pulseId}-10" data-delay="3330" style="position:absolute;top:50%;left:50%;width:28px;height:28px;margin-left:-14px;margin-top:-14px;border-radius:50%;border:2px solid ${pulseColor};background:transparent;pointer-events:none;will-change:transform,opacity;transform-origin:center center;"></div>
+      <div data-pulse="${pulseId}-11" data-delay="3663" style="position:absolute;top:50%;left:50%;width:28px;height:28px;margin-left:-14px;margin-top:-14px;border-radius:50%;border:2px solid ${pulseColor};background:transparent;pointer-events:none;will-change:transform,opacity;transform-origin:center center;"></div>` : '';
     const cursorStyle = (showPulse && !isFixed) ? 'cursor:pointer;' : 'cursor:default;';
     return `
       <div style="position:relative;display:flex;flex-direction:column;align-items:center;overflow:visible;${cursorStyle}">
@@ -336,18 +348,23 @@ export default function MapPage() {
       const div = el as HTMLElement;
       if (div.dataset.animated) return;
       div.dataset.animated = '1';
-      const duration = 1800;          // 동심원 1개의 퍼지는 시간
+      const duration = 4000;          // 동심원 1개의 퍼지는 시간
       const delay = parseInt(div.dataset.delay || '0', 10);
       const step = (ts: number) => {
         // delay만큼 위상 이동 → 3개가 순서대로 퍼짐
         const progress = ((ts - delay) % duration + duration) % duration / duration;
         let scale: number, opacity: number;
-        if (progress < 0.75) {
-          // 1 → 3배로 커지면서 점점 투명해짐
-          scale = 1 + (progress / 0.75) * 2.0;
-          opacity = 0.75 * (1 - progress / 0.75);
+        if (progress < 0.15) {
+          // 빠르게 나타남
+          scale = 1 + (progress / 0.15) * 0.2;
+          opacity = (progress / 0.15) * 0.7;
+        } else if (progress < 0.75) {
+          // 천천히 퍼지면서 사라짐
+          const p = (progress - 0.15) / 0.60;
+          scale = 1.2 + p * 0.8;
+          opacity = 0.7 * (1 - p);
         } else {
-          scale = 3.0; opacity = 0;
+          scale = 2.0; opacity = 0;
         }
         if (div.isConnected) {
           div.style.transform = `scale(${scale.toFixed(3)})`;
@@ -604,7 +621,7 @@ export default function MapPage() {
     const showPulse = currentZoomRef.current >= PULSE_THRESHOLD;
 
     // ★ 마커 생성 + 클릭 이벤트 연결
-    points.forEach((point) => {
+    points.forEach((point, pointArrayIdx) => {
       const color = getMarkerColor(point);
       const marker = new naver.maps.Marker({
         map: showMarkers ? map : null,
@@ -624,6 +641,20 @@ export default function MapPage() {
             setShowDetailModal(true);
           }
         });
+
+        // ★ 롱프레스 → 해당 구간 초록 깜박임 (700ms 이상)
+        const startLongPress = () => {
+          longPressTimerRef.current = setTimeout(() => {
+            blinkSegment(pointArrayIdx);
+          }, 700);
+        };
+        const cancelLongPress = () => {
+          if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current);
+        };
+        naver.maps.Event.addListener(marker, 'mousedown', startLongPress);
+        naver.maps.Event.addListener(marker, 'mouseup', cancelLongPress);
+        naver.maps.Event.addListener(marker, 'touchstart', startLongPress);
+        naver.maps.Event.addListener(marker, 'touchend', cancelLongPress);
       }
 
       markersRef.current.push(marker);
@@ -660,6 +691,71 @@ export default function MapPage() {
       const to = point;
       polyline.setOptions({ strokeColor: getLineColor(from, to) });
     });
+  };
+
+  // ★ 특정 구간 폴리라인 초록 깜박임 (롱프레스)
+  // markerIdx: markersRef 배열 인덱스 (= route.points 인덱스)
+  const blinkSegment = (markerIdx: number) => {
+    if (!route || polylinesRef.current.length === 0) return;
+    const naver = (window as any).naver;
+    const map = naverMapRef.current;
+    // markerIdx번 지점 → markerIdx+1번 지점 구간
+    // 폴리라인[0] = points[0]→points[1], 폴리라인[N] = points[N]→points[N+1]
+    const segIdx = markerIdx;
+    const polyline = polylinesRef.current[segIdx];
+    if (!polyline) return;
+
+    const from = route.points[segIdx];
+    const to = route.points[segIdx + 1];
+    if (!from || !to) return;
+    const originalColor = getLineColor(from, to);
+
+    // 기존 깜박임 정리
+    if (blinkIntervalRef.current) clearInterval(blinkIntervalRef.current);
+    if (blinkRestoreRef.current) clearTimeout(blinkRestoreRef.current);
+
+    // 깜박임용 임시 화살표 마커
+    const blinkArrows: any[] = [];
+    const coords: { lat: number; lng: number }[] = [];
+    try {
+      const path = (polyline as any).getPath();
+      if (path && path.getLength) {
+        for (let i = 0; i < path.getLength(); i++) {
+          const pt = path.getAt(i);
+          coords.push({ lat: pt.lat(), lng: pt.lng() });
+        }
+      }
+    } catch {}
+    if (coords.length < 2) {
+      coords.push({ lat: from.lat, lng: from.lng }, { lat: to.lat, lng: to.lng });
+    }
+    placeArrows(coords, null, map, naver);
+    // 방금 추가된 화살표를 blinkArrows로 추적 (arrowMarkersRef 마지막부터)
+    const existingCount = arrowMarkersRef.current.length - coords.length;
+    for (let i = Math.max(0, arrowMarkersRef.current.length - Math.ceil(coords.length * 2)); i < arrowMarkersRef.current.length; i++) {
+      blinkArrows.push(arrowMarkersRef.current[i]);
+    }
+
+    // 진한 초록 깜박임 (zIndex 높여서 다른 선 위에 표시)
+    let visible = true;
+    polyline.setOptions({ strokeColor: '#1b5e20', strokeWeight: 8, strokeOpacity: 1, zIndex: 100 });
+    blinkIntervalRef.current = setInterval(() => {
+      visible = !visible;
+      polyline.setOptions({ strokeOpacity: visible ? 1 : 0 });
+      blinkArrows.forEach(a => a.setMap(visible ? map : null));
+    }, 300);
+
+    // 5초 후 원래대로
+    blinkRestoreRef.current = setTimeout(() => {
+      if (blinkIntervalRef.current) clearInterval(blinkIntervalRef.current);
+      polyline.setOptions({ strokeColor: originalColor, strokeWeight: 6, strokeOpacity: 1, zIndex: 0 });
+      blinkArrows.forEach(a => a.setMap(null));
+      // arrowMarkersRef에서 blinkArrows 제거
+      blinkArrows.forEach(a => {
+        const idx = arrowMarkersRef.current.indexOf(a);
+        if (idx !== -1) arrowMarkersRef.current.splice(idx, 1);
+      });
+    }, 5000);
   };
 
   // ★ 팝업에서 사용할 완료 상태 정보
@@ -954,16 +1050,14 @@ export default function MapPage() {
                           value={editStatus}
                           onChange={e => setEditStatus(e.target.value)}
                           style={{
-                            flex: 1, background: 'rgba(255,255,255,0.1)', color: 'white',
+                            flex: 1, background: '#1a3a6e', color: 'white',
                             border: '1px solid rgba(100,180,255,0.4)', borderRadius: '6px',
                             padding: '4px 8px', fontSize: '12px',
                           }}>
-                          <option value="">-- 선택 --</option>
-                          <option value="민원처리완료">민원처리완료</option>
-                          <option value="기처리">기처리</option>
-                          <option value="확인불가">확인불가</option>
-                          <option value="처리예정">처리예정</option>
-                          <option value="미처리">미처리</option>
+                          <option value="" style={{ background: '#1a3a6e', color: 'white' }}>선택 (미완료)</option>
+                          <option value="민원처리완료" style={{ background: '#1a3a6e', color: 'white' }}>민원처리완료</option>
+                          <option value="기처리" style={{ background: '#1a3a6e', color: 'white' }}>기처리</option>
+                          <option value="확인불가" style={{ background: '#1a3a6e', color: 'white' }}>확인불가</option>
                         </select>
                       </div>
                       <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
