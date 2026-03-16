@@ -1,0 +1,963 @@
+'use client';
+
+import { useState, useEffect, useRef } from 'react';
+import { useRouter } from 'next/navigation';
+
+type RoutePoint = {
+  order: number;
+  address: string;
+  destination: string | null;
+  complaint: string;
+  lat: number;
+  lng: number;
+  placeName: string | null;
+  source: string | null;
+  originalId?: number | null;
+  photoDescription?: string | null;
+  photoUrl?: string | null;
+  manager?: string | null;
+};
+
+type PointStatus = {
+  status: string;
+  memo: string;
+  updatedAt: number;
+};
+
+const DONE_STATUSES = ['민원처리완료', '기처리', '확인불가'];
+const ZOOM_THRESHOLD = 14;
+const PULSE_THRESHOLD = 15; // 이 줌 이상부터 펄스 + 클릭 팝업 활성화 (휠 약 2번)
+
+// ★ 펄스 애니메이션 CSS (전역 style 태그로 삽입)
+const PULSE_STYLE = `
+@keyframes marker-pulse {
+  0%   { transform: scale(1);   opacity: 0.8; }
+  70%  { transform: scale(2.2); opacity: 0; }
+  100% { transform: scale(2.2); opacity: 0; }
+}
+.pulse-ring {
+  position: absolute;
+  top: 50%; left: 50%;
+  width: 28px; height: 28px;
+  margin-left: -14px; margin-top: -14px;
+  border-radius: 50%;
+  animation: marker-pulse 1.8s ease-out infinite;
+  pointer-events: none;
+}
+`;
+
+export default function MapPage() {
+  const router = useRouter();
+  const mapRef = useRef<HTMLDivElement>(null);
+  const naverMapRef = useRef<naver.maps.Map | null>(null);
+  const markersRef = useRef<naver.maps.Marker[]>([]);
+  const polylinesRef = useRef<naver.maps.Polyline[]>([]);
+  const arrowMarkersRef = useRef<naver.maps.Marker[]>([]);
+  const polygonsRef = useRef<naver.maps.Polygon[]>([]);
+  const labelsRef = useRef<naver.maps.Marker[]>([]);
+  const currentZoomRef = useRef<number>(13);
+
+  const [route, setRoute] = useState<{ date: string; version: number; points: RoutePoint[] } | null>(null);
+  const routeRef = useRef<{ date: string; version: number; points: RoutePoint[] } | null>(null);
+  const [statuses, setStatuses] = useState<Record<string, PointStatus>>({});
+  const statusesRef = useRef<Record<string, PointStatus>>({});
+  const [isLoading, setIsLoading] = useState(true);
+  const [mapReady, setMapReady] = useState(false);
+  const [routeDrawn, setRouteDrawn] = useState(false);
+  const [lineMode, setLineMode] = useState<'straight' | 'road'>('straight');
+  const lineModeRef = useRef<'straight' | 'road'>('straight');
+  const [osrmError, setOsrmError] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [editStatus, setEditStatus] = useState('');
+  const [editMemo, setEditMemo] = useState('');
+  const [savingStatus, setSavingStatus] = useState(false);
+
+  // ★ 팝업 상태
+  const [selectedPoint, setSelectedPoint] = useState<RoutePoint | null>(null);
+  const [showDetailModal, setShowDetailModal] = useState(false);
+
+  const statusKey = (point: RoutePoint) =>
+    `${point.address}:${point.complaint}:${point.originalId ?? 'none'}`;
+
+  // ★ 펄스 CSS 삽입
+  useEffect(() => {
+    if (document.getElementById('pulse-style')) return;
+    const style = document.createElement('style');
+    style.id = 'pulse-style';
+    style.textContent = PULSE_STYLE;
+    document.head.appendChild(style);
+  }, []);
+
+  // 1. 경로 + 상태 로드
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const today = new Date().toLocaleDateString('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/\. /g, '-').replace('.', '');
+        const routeRes = await fetch(`/api/get-route?date=${today}`);
+        if (!routeRes.ok) return;
+        const routeData = await routeRes.json();
+        routeRef.current = routeData;
+        setRoute(routeData);
+
+        const statusRes = await fetch(`/api/get-status?date=${routeData.date}`);
+        if (statusRes.ok) {
+          const statusData = await statusRes.json();
+          statusesRef.current = statusData.statuses || {};
+          setStatuses(statusData.statuses || {});
+        }
+      } catch (e) {
+        console.error(e);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    load();
+  }, []);
+
+  // 2. 네이버 지도 SDK 로드
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if ((window as any).naver?.maps) {
+      setMapReady(true);
+      return;
+    }
+    const script = document.createElement('script');
+    const clientId = process.env.NEXT_PUBLIC_NAVER_CLIENT_ID;
+    script.src = `https://oapi.map.naver.com/openapi/v3/maps.js?ncpKeyId=${clientId}&submodules=geocoder`;
+    script.async = true;
+    script.onload = () => setMapReady(true);
+    document.head.appendChild(script);
+  }, []);
+
+  // 3. 지도 초기화
+  useEffect(() => {
+    if (!mapReady || !mapRef.current || naverMapRef.current) return;
+    const map = new (window as any).naver.maps.Map(mapRef.current, {
+      center: new (window as any).naver.maps.LatLng(37.7381, 127.0338),
+      zoom: 13,
+      mapTypeId: (window as any).naver.maps.MapTypeId.NORMAL,
+    });
+    naverMapRef.current = map;
+
+    loadGeoJson(map);
+
+    (window as any).naver.maps.Event.addListener(map, 'zoom_changed', (zoom: number) => {
+      currentZoomRef.current = zoom;
+      applyZoomVisibility(zoom);
+    });
+  }, [mapReady]);
+
+  // 4. 경로 + 지도 모두 준비되면 그리기
+  useEffect(() => {
+    if (!naverMapRef.current || !route || routeDrawn) return;
+    drawRoute();
+    setRouteDrawn(true);
+  }, [naverMapRef.current, route, mapReady]);
+
+  // 5. 상태 변경시 마커 색상 업데이트
+  useEffect(() => {
+    if (!routeDrawn) return;
+    updateMarkerColors();
+  }, [statuses, routeDrawn]);
+
+  // 5-2. 마운트 시 admin 인증 상태 확인
+  useEffect(() => {
+    const adminAuth = localStorage.getItem('patrol-admin-auth');
+    if (adminAuth === 'true') setIsAdmin(true);
+  }, []);
+
+  // 6. lineMode 변경시 경로선 재그리기 + localStorage 저장
+  useEffect(() => {
+    localStorage.setItem('patrol-linemode', lineMode);
+    if (!routeDrawn) return;
+    lineModeRef.current = lineMode;
+    redrawLines();
+  }, [lineMode]);
+
+  const applyZoomVisibility = (zoom: number) => {
+    const showMarkers = zoom >= ZOOM_THRESHOLD;
+    const showPulse = zoom >= PULSE_THRESHOLD;
+    const showLabels = zoom < ZOOM_THRESHOLD;
+
+    // 마커 표시/숨김 + 펄스 ON/OFF 재렌더링 (routeRef로 클로저 문제 회피)
+    const currentRoute = routeRef.current;
+    if (currentRoute) {
+      currentRoute.points.forEach((point, idx) => {
+        const marker = markersRef.current[idx];
+        if (!marker) return;
+        const color = getMarkerColor(point);
+        marker.setIcon({
+          content: makeMarkerContent(point, color, showPulse),
+          anchor: (window as any).naver.maps.Point ? new (window as any).naver.maps.Point(14, 14) : undefined,
+        });
+        marker.setMap(showMarkers ? naverMapRef.current : null);
+      });
+    } else {
+      markersRef.current.forEach(marker => {
+        marker.setMap(showMarkers ? naverMapRef.current : null);
+      });
+    }
+
+    labelsRef.current.forEach(label => {
+      label.setMap(showLabels ? naverMapRef.current : null);
+    });
+
+    // 펄스 활성화 시 DOM 반영 후 애니메이션 시작
+    if (showPulse) {
+      setTimeout(() => startPulseAnimations(), 300);
+    }
+  };
+
+  const loadGeoJson = async (map: naver.maps.Map) => {
+    try {
+      const res = await fetch('/uijeongbu.geojson');
+      const geoJson = await res.json();
+      const naver = (window as any).naver;
+
+      geoJson.features.forEach((feature: any) => {
+        const coords = feature.geometry.type === 'MultiPolygon'
+          ? feature.geometry.coordinates
+          : [feature.geometry.coordinates];
+
+        coords.forEach((polygon: any) => {
+          polygon.forEach((ring: any) => {
+            const path = ring.map((c: number[]) =>
+              new naver.maps.LatLng(c[1], c[0])
+            );
+            new naver.maps.Polygon({
+              map,
+              paths: [path],
+              fillColor: 'rgba(100,180,255,0.05)',
+              fillOpacity: 1,
+              strokeColor: 'rgba(100,180,255,0.5)',
+              strokeWeight: 1.5,
+              strokeOpacity: 1,
+            });
+          });
+        });
+
+        if (feature.geometry.type === 'Polygon' || feature.geometry.type === 'MultiPolygon') {
+          const nm: string = feature.properties.adm_nm || '';
+          const shortNm = nm.replace('경기도 의정부시 ', '');
+          const coords0 = feature.geometry.type === 'MultiPolygon'
+            ? feature.geometry.coordinates[0][0]
+            : feature.geometry.coordinates[0];
+          let sumLat = 0, sumLng = 0;
+          coords0.forEach((c: number[]) => { sumLng += c[0]; sumLat += c[1]; });
+          const centerLat = sumLat / coords0.length;
+          const centerLng = sumLng / coords0.length;
+
+          const label = new naver.maps.Marker({
+            map,
+            position: new naver.maps.LatLng(centerLat, centerLng),
+            icon: {
+              content: `<div style="color:rgba(180,220,255,0.9);font-size:13px;font-weight:bold;white-space:nowrap;text-shadow:0 1px 3px #000,0 0 8px rgba(0,0,0,0.8);">${shortNm}</div>`,
+              anchor: new naver.maps.Point(0, 0),
+            },
+            zIndex: 1,
+          });
+          labelsRef.current.push(label);
+        }
+      });
+    } catch (e) {
+      console.error('GeoJSON 로드 실패:', e);
+    }
+  };
+
+  const getMarkerColor = (point: RoutePoint) => {
+    if (point.source === 'fixed') return '#f57f17';
+    const st = statusesRef.current[statusKey(point)];
+    if (st && DONE_STATUSES.includes(st.status)) return '#1565c0';
+    return '#FF6B35';
+  };
+
+  const getLineColor = (_fromPoint: RoutePoint, toPoint: RoutePoint) => {
+    const toSt = statusesRef.current[statusKey(toPoint)];
+    return toSt && DONE_STATUSES.includes(toSt.status) ? '#1565c0' : '#FF6B35';
+  };
+
+  // ★ 마커 콘텐츠 - showPulse: JS 인라인 애니메이션으로 펄스 구현
+  const makeMarkerContent = (point: RoutePoint, color: string, showPulse = false) => {
+    const label = point.source === 'fixed' ? '🏛' : String(point.order);
+    const isFixed = point.source === 'fixed';
+    const pulseColor = color === '#1565c0'
+      ? 'rgba(21,101,192,0.6)'
+      : color === '#f57f17'
+      ? 'rgba(245,127,23,0.6)'
+      : 'rgba(255,107,53,0.6)';
+    // data-pulse 속성으로 마커 식별 후 외부에서 JS 애니메이션 적용
+    const pulseId = `pulse-${point.order}-${point.lat}`.replace(/\./g, '_');
+    const pulseDiv = showPulse ? `
+      <div data-pulse="${pulseId}-0" data-delay="0"    style="position:absolute;top:50%;left:50%;width:28px;height:28px;margin-left:-14px;margin-top:-14px;border-radius:50%;border:2px solid ${pulseColor};background:transparent;pointer-events:none;will-change:transform,opacity;transform-origin:center center;"></div>
+      <div data-pulse="${pulseId}-1" data-delay="600"  style="position:absolute;top:50%;left:50%;width:28px;height:28px;margin-left:-14px;margin-top:-14px;border-radius:50%;border:2px solid ${pulseColor};background:transparent;pointer-events:none;will-change:transform,opacity;transform-origin:center center;"></div>
+      <div data-pulse="${pulseId}-2" data-delay="1200" style="position:absolute;top:50%;left:50%;width:28px;height:28px;margin-left:-14px;margin-top:-14px;border-radius:50%;border:2px solid ${pulseColor};background:transparent;pointer-events:none;will-change:transform,opacity;transform-origin:center center;"></div>` : '';
+    const cursorStyle = (showPulse && !isFixed) ? 'cursor:pointer;' : 'cursor:default;';
+    return `
+      <div style="position:relative;display:flex;flex-direction:column;align-items:center;overflow:visible;${cursorStyle}">
+        ${pulseDiv}
+        <div style="
+          position:relative;z-index:1;
+          width:28px;height:28px;border-radius:50%;
+          background:${color};
+          border:2px solid white;
+          display:flex;align-items:center;justify-content:center;
+          font-size:${isFixed ? '14px' : '11px'};
+          font-weight:bold;color:white;
+          box-shadow:0 2px 6px rgba(0,0,0,0.5);
+        ">${label}</div>
+        <div style="
+          position:absolute;z-index:2;
+          bottom:32px;left:50%;
+          transform:translateX(-50%);
+          background:rgba(0,0,0,0.38);
+          color:rgba(255,255,255,0.95);font-size:9px;
+          padding:2px 5px;border-radius:4px;
+          white-space:nowrap;max-width:80px;
+          overflow:hidden;text-overflow:ellipsis;
+          pointer-events:none;
+        ">${point.destination || point.address.slice(0, 10)}</div>
+      </div>
+    `;
+  };
+
+  // ★ mapRef 컨테이너 내부에서 data-pulse 요소 찾아 rAF 애니메이션 적용
+  const startPulseAnimations = () => {
+    // 네이버 지도 마커는 mapRef.current 내부 div에 렌더링됨
+    const container = mapRef.current;
+    if (!container) return;
+    // 디버그: 전체 document와 container 양쪽 모두 탐색
+    const pulseEls1 = document.querySelectorAll('[data-pulse]');
+    const pulseEls2 = container.querySelectorAll('[data-pulse]');
+    console.log('[pulse] document 탐색:', pulseEls1.length, '/ container 탐색:', pulseEls2.length);
+    // 둘 다 합쳐서 처리
+    const allPulse = new Set([...Array.from(pulseEls1), ...Array.from(pulseEls2)]);
+    allPulse.forEach((el) => {
+      const div = el as HTMLElement;
+      if (div.dataset.animated) return;
+      div.dataset.animated = '1';
+      const duration = 1800;          // 동심원 1개의 퍼지는 시간
+      const delay = parseInt(div.dataset.delay || '0', 10);
+      const step = (ts: number) => {
+        // delay만큼 위상 이동 → 3개가 순서대로 퍼짐
+        const progress = ((ts - delay) % duration + duration) % duration / duration;
+        let scale: number, opacity: number;
+        if (progress < 0.75) {
+          // 1 → 3배로 커지면서 점점 투명해짐
+          scale = 1 + (progress / 0.75) * 2.0;
+          opacity = 0.75 * (1 - progress / 0.75);
+        } else {
+          scale = 3.0; opacity = 0;
+        }
+        if (div.isConnected) {
+          div.style.transform = `scale(${scale.toFixed(3)})`;
+          div.style.opacity = opacity.toFixed(3);
+          requestAnimationFrame(step);
+        }
+      };
+      requestAnimationFrame(step);
+    });
+  };
+
+  const calcBearing = (from: { lat: number; lng: number }, to: { lat: number; lng: number }) => {
+    const toRad = (d: number) => (d * Math.PI) / 180;
+    const dLng = toRad(to.lng - from.lng);
+    const lat1 = toRad(from.lat);
+    const lat2 = toRad(to.lat);
+    const y = Math.sin(dLng) * Math.cos(lat2);
+    const x = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLng);
+    return (Math.atan2(y, x) * 180) / Math.PI;
+  };
+
+  const makeArrowIcon = (bearing: number) => {
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="-5 -5 10 10">
+      <polygon points="0,-4 3,2 0,0 -3,2" fill="white" opacity="0.9" transform="rotate(${bearing})"/>
+    </svg>`;
+    return {
+      content: svg,
+      anchor: new (window as any).naver.maps.Point(5, 5),
+    };
+  };
+
+  const latLngDistanceM = (lat1: number, lng1: number, lat2: number, lng2: number) => {
+    const R = 6371000;
+    const toRad = (d: number) => (d * Math.PI) / 180;
+    const dLat = toRad(lat2 - lat1);
+    const dLng = toRad(lng2 - lng1);
+    const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  };
+
+  const placeArrows = (
+    coordPairs: { lat: number; lng: number }[],
+    bearing: number | null,
+    map: any,
+    naver: any,
+    intervalM = 80
+  ) => {
+    if (coordPairs.length < 2) return;
+    let accumulated = 0;
+    for (let i = 0; i < coordPairs.length - 1; i++) {
+      const from = coordPairs[i];
+      const to = coordPairs[i + 1];
+      const segDist = latLngDistanceM(from.lat, from.lng, to.lat, to.lng);
+      const segBearing = bearing ?? calcBearing(from, to);
+      let d = (accumulated === 0 ? intervalM / 2 : intervalM - (accumulated % intervalM));
+      while (d <= segDist) {
+        const t = d / segDist;
+        const lat = from.lat + (to.lat - from.lat) * t;
+        const lng = from.lng + (to.lng - from.lng) * t;
+        const arrow = new naver.maps.Marker({
+          map,
+          position: new naver.maps.LatLng(lat, lng),
+          icon: makeArrowIcon(segBearing),
+          zIndex: 5,
+          clickable: false,
+        });
+        arrowMarkersRef.current.push(arrow);
+        d += intervalM;
+      }
+      accumulated = (accumulated + segDist) % intervalM;
+    }
+  };
+
+  const drawStraightLines = (points: RoutePoint[], map: any, naver: any) => {
+    for (let i = 0; i < points.length - 1; i++) {
+      const from = points[i];
+      const to = points[i + 1];
+      const color = getLineColor(from, to);
+      const polyline = new naver.maps.Polyline({
+        map,
+        path: [
+          new naver.maps.LatLng(from.lat, from.lng),
+          new naver.maps.LatLng(to.lat, to.lng),
+        ],
+        strokeColor: color,
+        strokeWeight: 6,
+        strokeOpacity: 1,
+      });
+      polylinesRef.current.push(polyline);
+      const bearing = calcBearing(from, to);
+      placeArrows(
+        [{ lat: from.lat, lng: from.lng }, { lat: to.lat, lng: to.lng }],
+        bearing,
+        map,
+        naver
+      );
+    }
+  };
+
+  const drawRoadLines = async (points: RoutePoint[], map: any, naver: any) => {
+    // ① 서버 헬스체크 (첫 구간으로 빠르게 확인)
+    const TIMEOUT = 8000;
+    const fetchWithTimeout = (url: string) => {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), TIMEOUT);
+      return fetch(url, { signal: controller.signal }).finally(() => clearTimeout(timer));
+    };
+
+    try {
+      const probe = await fetchWithTimeout(
+        `https://router.project-osrm.org/route/v1/driving/${points[0].lng},${points[0].lat};${points[1].lng},${points[1].lat}?overview=false`
+      );
+      if (!probe.ok) throw new Error(`${probe.status}`);
+      setOsrmError(false);
+    } catch {
+      // 서버 비정상 → 에러 표시 후 직선 fallback
+      setOsrmError(true);
+      points.slice(0, -1).forEach((from, i) => {
+        const to = points[i + 1];
+        const color = getLineColor(from, to);
+        const polyline = new naver.maps.Polyline({
+          map,
+          path: [new naver.maps.LatLng(from.lat, from.lng), new naver.maps.LatLng(to.lat, to.lng)],
+          strokeColor: color,
+          strokeWeight: 6,
+          strokeOpacity: 1,
+        });
+        polylinesRef.current.push(polyline);
+      });
+      return;
+    }
+
+    // ② 서버 정상 → 병렬 처리로 한 번에 그리기
+    const segments = points.slice(0, -1).map((from, i) => ({
+      from, to: points[i + 1], color: getLineColor(from, points[i + 1]),
+    }));
+
+    const results = await Promise.all(
+      segments.map(async ({ from, to, color }) => {
+        try {
+          const res = await fetchWithTimeout(
+            `https://router.project-osrm.org/route/v1/driving/${from.lng},${from.lat};${to.lng},${to.lat}?overview=full&geometries=geojson`
+          );
+          if (!res.ok) throw new Error();
+          const data = await res.json();
+          if (data.routes?.[0]?.geometry?.coordinates) {
+            return {
+              coords: data.routes[0].geometry.coordinates.map((c: number[]) => ({ lat: c[1], lng: c[0] })),
+              color,
+            };
+          }
+        } catch {}
+        return {
+          coords: [{ lat: from.lat, lng: from.lng }, { lat: to.lat, lng: to.lng }],
+          color,
+        };
+      })
+    );
+
+    // 한 번에 렌더링
+    results.forEach(({ coords, color }) => {
+      const path = coords.map((c: { lat: number; lng: number }) => new naver.maps.LatLng(c.lat, c.lng));
+      const polyline = new naver.maps.Polyline({
+        map, path, strokeColor: color, strokeWeight: 6, strokeOpacity: 1,
+      });
+      polylinesRef.current.push(polyline);
+      placeArrows(coords, null, map, naver);
+    });
+  };
+
+  const redrawLines = () => {
+    if (!route || !naverMapRef.current) return;
+    const naver = (window as any).naver;
+    const map = naverMapRef.current;
+
+    polylinesRef.current.forEach(p => p.setMap(null));
+    arrowMarkersRef.current.forEach(m => m.setMap(null));
+    polylinesRef.current = [];
+    arrowMarkersRef.current = [];
+
+    const points = route.points;
+    if (lineModeRef.current === 'road') {
+      drawRoadLines(points, map, naver);
+    } else {
+      drawStraightLines(points, map, naver);
+    }
+  };
+
+  const drawRoute = () => {
+    if (!route || !naverMapRef.current) return;
+    const naver = (window as any).naver;
+    const map = naverMapRef.current;
+
+    markersRef.current.forEach(m => m.setMap(null));
+    polylinesRef.current.forEach(p => p.setMap(null));
+    arrowMarkersRef.current.forEach(m => m.setMap(null));
+    markersRef.current = [];
+    polylinesRef.current = [];
+    arrowMarkersRef.current = [];
+
+    const points = route.points;
+    // 저장된 lineMode로 시작 (직선/도로 기억)
+    if (lineModeRef.current === 'road') {
+      drawRoadLines(points, map, naver);
+    } else {
+      drawStraightLines(points, map, naver);
+    }
+
+    const showMarkers = currentZoomRef.current >= ZOOM_THRESHOLD;
+    const showPulse = currentZoomRef.current >= PULSE_THRESHOLD;
+
+    // ★ 마커 생성 + 클릭 이벤트 연결
+    points.forEach((point) => {
+      const color = getMarkerColor(point);
+      const marker = new naver.maps.Marker({
+        map: showMarkers ? map : null,
+        position: new naver.maps.LatLng(point.lat, point.lng),
+        icon: {
+          content: makeMarkerContent(point, color, showPulse),
+          anchor: new naver.maps.Point(14, 14),
+        },
+        zIndex: 10,
+      });
+
+      // ★ 마커 클릭 → 줌 PULSE_THRESHOLD 이상일 때만 팝업 (fixed 제외)
+      if (point.source !== 'fixed') {
+        naver.maps.Event.addListener(marker, 'click', () => {
+          if (currentZoomRef.current >= PULSE_THRESHOLD) {
+            setSelectedPoint(point);
+            setShowDetailModal(true);
+          }
+        });
+      }
+
+      markersRef.current.push(marker);
+    });
+
+    // 초기 줌이 이미 PULSE_THRESHOLD 이상이면 바로 펄스 시작
+    if (showPulse) {
+      setTimeout(() => startPulseAnimations(), 300);
+    }
+  };
+
+  const updateMarkerColors = () => {
+    if (!route || !naverMapRef.current) return;
+    const naver = (window as any).naver;
+    const showMarkers = currentZoomRef.current >= ZOOM_THRESHOLD;
+    const showPulse = currentZoomRef.current >= PULSE_THRESHOLD;
+
+    route.points.forEach((point, idx) => {
+      const marker = markersRef.current[idx];
+      if (!marker) return;
+      const color = getMarkerColor(point);
+      marker.setIcon({
+        content: makeMarkerContent(point, color, showPulse),
+        anchor: new naver.maps.Point(14, 14),
+      });
+      marker.setMap(showMarkers ? naverMapRef.current : null);
+    });
+
+    route.points.forEach((point, idx) => {
+      if (idx === 0) return;
+      const polyline = polylinesRef.current[idx - 1];
+      if (!polyline) return;
+      const from = route.points[idx - 1];
+      const to = point;
+      polyline.setOptions({ strokeColor: getLineColor(from, to) });
+    });
+  };
+
+  // ★ 팝업에서 사용할 완료 상태 정보
+  const getSelectedStatus = () => {
+    if (!selectedPoint) return { curStatus: '', curMemo: '', isDone: false };
+    const st = statuses[statusKey(selectedPoint)];
+    const curStatus = st?.status || '';
+    const curMemo = st?.memo || '';
+    const isDone = DONE_STATUSES.includes(curStatus);
+    return { curStatus, curMemo, isDone };
+  };
+
+  // 팝업 열릴 때 edit 상태 초기화
+  useEffect(() => {
+    if (showDetailModal && selectedPoint) {
+      const st = statuses[statusKey(selectedPoint)];
+      setEditStatus(st?.status || '');
+      setEditMemo(st?.memo || '');
+    }
+  }, [showDetailModal, selectedPoint]);
+
+  // 작업상태 저장
+  const handleSaveStatus = async () => {
+    if (!selectedPoint || !route) return;
+    setSavingStatus(true);
+    try {
+      await fetch('/api/save-status', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          date: route.date,
+          address: selectedPoint.address,
+          complaint: selectedPoint.complaint,
+          originalId: selectedPoint.originalId ?? null,
+          status: editStatus,
+          memo: editMemo,
+        }),
+      });
+      // 로컬 반영
+      const key = statusKey(selectedPoint);
+      setStatuses(prev => ({
+        ...prev,
+        [key]: { status: editStatus, memo: editMemo, updatedAt: Date.now() },
+      }));
+      statusesRef.current = {
+        ...statusesRef.current,
+        [key]: { status: editStatus, memo: editMemo, updatedAt: Date.now() },
+      };
+    } catch {}
+    setSavingStatus(false);
+  };
+
+  return (
+    <div style={{ width: '100vw', height: '100vh', background: '#0d1b2e', display: 'flex', flexDirection: 'column' }}>
+      {/* 상단 헤더 */}
+      <div style={{
+        background: 'linear-gradient(180deg, #1a3a6e 0%, #0d2444 100%)',
+        padding: '8px 12px',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '5px',
+        flexShrink: 0,
+        borderBottom: '1px solid rgba(100,180,255,0.3)',
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <button
+            onClick={() => router.back()}
+            style={{
+              background: 'rgba(255,255,255,0.1)',
+              border: '1px solid rgba(255,255,255,0.2)',
+              color: 'white',
+              borderRadius: '6px',
+              padding: '5px 10px',
+              fontSize: '12px',
+              cursor: 'pointer',
+              flexShrink: 0,
+            }}>
+            ← 카드 리스트
+          </button>
+          <div style={{ color: 'white', fontWeight: 'bold', fontSize: '15px' }}>순회 경로 지도</div>
+        </div>
+        {route && (
+          <div style={{ color: 'rgba(150,200,255,0.85)', fontSize: '11px', paddingLeft: '108px' }}>
+            {route.date} · 버전{route.version} · {route.points.filter(p => p.source !== 'fixed').length}개 지점
+          </div>
+        )}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', paddingLeft: '108px' }}>
+          <div style={{ display: 'flex', borderRadius: '6px', overflow: 'hidden', border: '1px solid rgba(255,255,255,0.25)' }}>
+            <button
+              onClick={() => setLineMode('straight')}
+              style={{
+                padding: '4px 10px',
+                fontSize: '11px',
+                fontWeight: 'bold',
+                cursor: 'pointer',
+                border: 'none',
+                background: lineMode === 'straight' ? 'rgba(100,180,255,0.4)' : 'rgba(255,255,255,0.08)',
+                color: lineMode === 'straight' ? 'white' : 'rgba(255,255,255,0.5)',
+              }}>직선</button>
+            <button
+              onClick={() => setLineMode('road')}
+              style={{
+                padding: '4px 10px',
+                fontSize: '11px',
+                fontWeight: 'bold',
+                cursor: 'pointer',
+                border: 'none',
+                borderLeft: '1px solid rgba(255,255,255,0.25)',
+                background: lineMode === 'road' ? 'rgba(100,180,255,0.4)' : 'rgba(255,255,255,0.08)',
+                color: lineMode === 'road' ? 'white' : 'rgba(255,255,255,0.5)',
+              }}>도로</button>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <div style={{ width: 9, height: 9, borderRadius: '50%', background: '#FF6B35', border: '1px solid white' }} />
+              <span style={{ color: 'rgba(255,255,255,0.7)', fontSize: '10px' }}>미완료</span>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <div style={{ width: 9, height: 9, borderRadius: '50%', background: '#1565c0', border: '1px solid white' }} />
+              <span style={{ color: 'rgba(255,255,255,0.7)', fontSize: '10px' }}>완료</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {isLoading && (
+        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'rgba(150,200,255,0.8)', fontSize: '14px' }}>
+          경로 불러오는 중...
+        </div>
+      )}
+
+      {!isLoading && !route && (
+        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'rgba(150,200,255,0.8)', fontSize: '14px' }}>
+          오늘 생성된 경로가 없습니다.
+        </div>
+      )}
+
+      {/* 지도 */}
+      <div ref={mapRef} style={{ flex: 1, width: '100%' }} />
+
+      {/* 도로 모드 로딩 안내 */}
+      {lineMode === 'road' && routeDrawn === false && route && mapReady && !osrmError && (
+        <div style={{
+          position: 'absolute', bottom: 16, left: '50%', transform: 'translateX(-50%)',
+          background: 'rgba(0,0,0,0.7)', color: 'white', fontSize: '12px',
+          padding: '6px 14px', borderRadius: '20px',
+        }}>
+          도로 경로 계산 중...
+        </div>
+      )}
+
+      {/* OSRM 서버 오류 배너 - 하단 표시, 직선 모드 선택시 숨김 */}
+      {lineMode === 'road' && osrmError && (
+        <div style={{
+          position: 'absolute', bottom: 40, left: '50%', transform: 'translateX(-50%)',
+          background: 'rgba(160,30,10,0.92)', color: 'white',
+          fontSize: '12px', padding: '7px 14px', borderRadius: '20px',
+          display: 'flex', alignItems: 'center', gap: '6px',
+          boxShadow: '0 2px 8px rgba(0,0,0,0.4)', whiteSpace: 'nowrap',
+          zIndex: 200,
+        }}>
+          <span>⚠️</span>
+          <span>도로 경로 서버에 접속할 수 없어 직선으로 표시합니다</span>
+        </div>
+      )}
+
+      {/* 줌 안내 토스트 - 팝업 없을 때만 표시 */}
+      {routeDrawn && !showDetailModal && (
+        <div style={{
+          position: 'absolute', bottom: 16, left: '50%', transform: 'translateX(-50%)',
+          background: 'rgba(0,0,0,0.55)', color: 'rgba(200,230,255,0.85)',
+          fontSize: '11px', padding: '5px 12px', borderRadius: '20px',
+          pointerEvents: 'none', whiteSpace: 'nowrap',
+        }}>
+          확대하면 지점 마커 표시 · 더 확대하면 마커 클릭으로 상세정보 확인
+        </div>
+      )}
+
+      {/* ★ 지점 상세정보 팝업 */}
+      {showDetailModal && selectedPoint && (() => {
+        const { curStatus, isDone } = getSelectedStatus();
+        const popupBg = curStatus && DONE_STATUSES.includes(curStatus) ? '#1a3a6e' : '#7a2800';
+        return (
+          <div
+            style={{
+              position: 'fixed', inset: 0, display: 'flex', alignItems: 'center',
+              justifyContent: 'center', zIndex: 50, background: 'rgba(0,0,0,0.6)',
+            }}
+            onClick={() => setShowDetailModal(false)}>
+            <div
+              style={{
+                background: popupBg, borderRadius: '12px', padding: '20px',
+                width: '88%', maxWidth: '400px', maxHeight: '90vh',
+                overflowY: 'auto', boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
+              }}
+              onClick={(e) => e.stopPropagation()}>
+
+              {/* 헤더 */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                <h2 style={{ color: 'white', fontWeight: 'bold', fontSize: '15px', display: 'flex', alignItems: 'center', gap: '8px', margin: 0, minWidth: 0 }}>
+                  <span style={{
+                    width: '28px', height: '28px', borderRadius: '50%',
+                    background: 'white', color: '#1a3a6e',
+                    fontSize: '13px', fontWeight: 'bold',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+                  }}>
+                    {selectedPoint.order}
+                  </span>
+                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {selectedPoint.destination
+                      ? `${selectedPoint.address} (${selectedPoint.destination})`
+                      : selectedPoint.address}
+                  </span>
+                </h2>
+                <span
+                  style={{ color: 'white', cursor: 'pointer', fontSize: '18px', flexShrink: 0, marginLeft: '8px' }}
+                  onClick={() => setShowDetailModal(false)}>✕</span>
+              </div>
+
+              {/* 정보 목록 */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                {[
+                  { label: '주소', value: selectedPoint.address },
+                  { label: '목적지', value: selectedPoint.destination || '-' },
+                  { label: '좌표확인', value:
+                    selectedPoint.source === 'place_single' || selectedPoint.source === 'place_nearest'
+                      ? '✅ 목적지로 위치 확인'
+                      : selectedPoint.source === 'address'
+                      ? '📍 주소로 위치 확인'
+                      : '❌ 위치 미확인' },
+                  { label: '원래순번', value: selectedPoint.originalId ? `${selectedPoint.originalId}번` : '-' },
+                  { label: '민원내용', value: selectedPoint.complaint || '-' },
+                  { label: '담당자', value: selectedPoint.manager || '-' },
+                ].map(({ label, value }) => (
+                  <div key={label} style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
+                    <span style={{ color: '#90caf9', fontSize: '11px', width: '60px', flexShrink: 0, paddingTop: '2px' }}>{label}</span>
+                    <span style={{ color: 'white', fontSize: '11px', flex: 1 }}>{value}</span>
+                  </div>
+                ))}
+
+                {/* 현장사진 */}
+                <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
+                  <span style={{ color: '#90caf9', fontSize: '11px', width: '60px', flexShrink: 0, paddingTop: '2px' }}>현장사진</span>
+                  <div style={{ flex: 1 }}>
+                    {selectedPoint.photoUrl ? (
+                      <img src={selectedPoint.photoUrl} alt="현장사진" style={{ width: '100%', borderRadius: '6px' }} />
+                    ) : (
+                      <div style={{
+                        borderRadius: '6px', height: '80px',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        background: 'rgba(255,255,255,0.1)', border: '1px dashed rgba(255,255,255,0.3)',
+                      }}>
+                        <span style={{ color: '#90caf9', fontSize: '11px' }}>사진 없음</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* 사진설명 */}
+                {selectedPoint.photoDescription && (
+                  <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
+                    <span style={{ color: '#90caf9', fontSize: '11px', width: '60px', flexShrink: 0, paddingTop: '2px' }}>사진설명</span>
+                    <span style={{ color: 'white', fontSize: '11px', flex: 1 }}>{selectedPoint.photoDescription}</span>
+                  </div>
+                )}
+
+                {/* 작업상태 - 관리자: 편집 가능 / 일반: 읽기전용 */}
+                <div style={{ marginTop: '4px', paddingTop: '12px', borderTop: '1px solid rgba(255,255,255,0.2)' }}>
+                  {isAdmin ? (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                      <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+                        <span style={{ color: '#90caf9', fontSize: '11px', width: '60px', flexShrink: 0 }}>작업상태</span>
+                        <select
+                          value={editStatus}
+                          onChange={e => setEditStatus(e.target.value)}
+                          style={{
+                            flex: 1, background: 'rgba(255,255,255,0.1)', color: 'white',
+                            border: '1px solid rgba(100,180,255,0.4)', borderRadius: '6px',
+                            padding: '4px 8px', fontSize: '12px',
+                          }}>
+                          <option value="">-- 선택 --</option>
+                          <option value="민원처리완료">민원처리완료</option>
+                          <option value="기처리">기처리</option>
+                          <option value="확인불가">확인불가</option>
+                          <option value="처리예정">처리예정</option>
+                          <option value="미처리">미처리</option>
+                        </select>
+                      </div>
+                      <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+                        <span style={{ color: '#90caf9', fontSize: '11px', width: '60px', flexShrink: 0 }}>메모</span>
+                        <input
+                          type="text"
+                          value={editMemo}
+                          onChange={e => setEditMemo(e.target.value)}
+                          placeholder="메모 입력"
+                          style={{
+                            flex: 1, background: 'rgba(255,255,255,0.1)', color: 'white',
+                            border: '1px solid rgba(100,180,255,0.4)', borderRadius: '6px',
+                            padding: '4px 8px', fontSize: '12px',
+                          }} />
+                      </div>
+                      <button
+                        onClick={handleSaveStatus}
+                        disabled={savingStatus}
+                        style={{
+                          marginTop: '2px', padding: '7px', borderRadius: '6px',
+                          background: savingStatus ? 'rgba(100,100,100,0.5)' : 'rgba(21,101,192,0.8)',
+                          color: 'white', fontSize: '12px', fontWeight: 'bold',
+                          border: 'none', cursor: savingStatus ? 'default' : 'pointer',
+                        }}>
+                        {savingStatus ? '저장 중...' : '저장'}
+                      </button>
+                    </div>
+                  ) : curStatus ? (
+                    <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
+                      <span style={{ color: '#90caf9', fontSize: '11px', width: '60px', flexShrink: 0, paddingTop: '2px' }}>작업상태</span>
+                      <span style={{ color: '#80cbc4', fontSize: '11px', fontWeight: 'bold' }}>{curStatus}</span>
+                    </div>
+                  ) : null}
+                </div>
+              </div>
+
+              {/* 티맵 / 네이버지도 버튼 */}
+              <div style={{ display: 'flex', gap: '8px', marginTop: '20px' }}>
+                <button
+                  onClick={() => window.open(`tmap://route?goalname=${encodeURIComponent(selectedPoint.destination || selectedPoint.address)}&goaly=${selectedPoint.lat}&goalx=${selectedPoint.lng}`)}
+                  style={{
+                    flex: 1, padding: '10px', borderRadius: '8px',
+                    background: '#0a3d8f', color: 'white',
+                    fontSize: '14px', fontWeight: 'bold', border: 'none', cursor: 'pointer',
+                  }}>티맵</button>
+                <button
+                  onClick={() => window.open(`nmap://navigation?dlat=${selectedPoint.lat}&dlng=${selectedPoint.lng}&dname=${encodeURIComponent(selectedPoint.destination || selectedPoint.address)}&appname=patrol-optimizer`)}
+                  style={{
+                    flex: 1, padding: '10px', borderRadius: '8px',
+                    background: '#1b5e20', color: 'white',
+                    fontSize: '14px', fontWeight: 'bold', border: 'none', cursor: 'pointer',
+                  }}>네이버지도</button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+    </div>
+  );
+}

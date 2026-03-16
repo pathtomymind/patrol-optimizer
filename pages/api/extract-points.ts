@@ -49,7 +49,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   {
     "address": "도로명 주소 또는 지번 주소",
     "destination": "핵심 상호명 또는 null",
-    "complaint": "광고물 종류 (예: 현수막, 벽보, 에어라이트 등)"
+    "complaint": "광고물 종류 (예: 현수막, 벽보, 에어라이트 등)",
+    "manager": "담당자 이름 또는 null",
+    "photoDescription": "현장사진이 있으면 간판명·건물색·특징물 등 핵심만 15자 이내로, 사진 없으면 null",
+    "imageIndex": "이 지점 정보가 몇 번째 이미지에서 추출되었는지 0부터 시작하는 인덱스",
+    "photoCrop": "현장사진이나 지도가 있으면 해당 행의 사진/지도 컬럼 전체 영역을 {\"x\": 0~1, \"y\": 0~1, \"w\": 0~1, \"h\": 0~1} 비율로 반환. 사진과 지도가 모두 있으면 두 영역을 모두 포함하는 최소 경계 박스로 반환. 반드시 해당 행의 위아래 경계를 정확히 포함하고, 우측 끝까지 포함되도록 w값을 충분히 크게 잡을 것. 사진/지도 없으면 null"
   }
 ]`;
 
@@ -62,8 +66,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         'anthropic-version': '2023-06-01',
       },
       body: JSON.stringify({
-        model: 'claude-opus-4-5',
-        max_tokens: 1024,
+        model: 'claude-sonnet-4-6',  /* model: 'claude-haiku-4-5-20251001', */  /* model: 'claude-opus-4-5', */
+        max_tokens: 4096,
+        temperature: 0,
         messages: [
           {
             role: 'user',

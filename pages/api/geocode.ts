@@ -21,7 +21,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   // 1단계: 목적지명으로 네이버 지역검색
   if (destination) {
     try {
-      const searchQuery = encodeURIComponent(`${destination} 의정부`);
+      const searchQuery = encodeURIComponent(`의정부 ${destination}`);
       const SEARCH_CLIENT_ID = process.env.NAVER_SEARCH_CLIENT_ID;
       const SEARCH_CLIENT_SECRET = process.env.NAVER_SEARCH_CLIENT_SECRET;
       
@@ -50,29 +50,31 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       }
 
       if (items.length > 1) {
-        // 여러 건: 주소 좌표와 비교해서 가장 가까운 것 선택
-        const addrCoord = await getAddressCoord(address, CLIENT_ID!, CLIENT_SECRET!);
-        if (addrCoord) {
+        // 여러 건: 주소 좌표와 비교해서 가장 가까운 것 선택, 주소 없으면 첫 번째 사용
+        const addrCoord = address ? await getAddressCoord(address, CLIENT_ID!, CLIENT_SECRET!) : null;
+        // 주소가 너무 광범위한 경우(동/읍/면 없이 시 단위만 반환) 무시
+        const validAddrCoord = addrCoord && address && normalizeAddress(address).split(' ').length >= 4 ? addrCoord : null;
+        let bestItem = items[0];
+        if (validAddrCoord) {
           let minDist = Infinity;
-          let bestItem = items[0];
           for (const item of items) {
             const lat = Number(item.mapy) / 1e7;
             const lng = Number(item.mapx) / 1e7;
             const dist = Math.sqrt(
-              Math.pow(lat - addrCoord.lat, 2) + Math.pow(lng - addrCoord.lng, 2)
+              Math.pow(lat - validAddrCoord.lat, 2) + Math.pow(lng - validAddrCoord.lng, 2)
             );
             if (dist < minDist) {
               minDist = dist;
               bestItem = item;
             }
           }
-          return res.status(200).json({
-            lat: Number(bestItem.mapy) / 1e7,
-            lng: Number(bestItem.mapx) / 1e7,
-            placeName: bestItem.title.replace(/<[^>]*>/g, ''),
-            source: 'place_nearest',
-          });
         }
+        return res.status(200).json({
+          lat: Number(bestItem.mapy) / 1e7,
+          lng: Number(bestItem.mapx) / 1e7,
+          placeName: bestItem.title.replace(/<[^>]*>/g, ''),
+          source: 'place_nearest',
+        });
       }
     } catch (error) {
       console.error('지역검색 오류:', error);
@@ -86,6 +88,18 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(200).json({
         ...addrCoord,
         placeName: address,
+        source: 'address',
+      });
+    }
+  }
+
+  // 3단계: 목적지명을 주소처럼 geocoding 시도
+  if (destination) {
+    const destCoord = await getAddressCoord(destination, CLIENT_ID!, CLIENT_SECRET!);
+    if (destCoord) {
+      return res.status(200).json({
+        ...destCoord,
+        placeName: destination,
         source: 'address',
       });
     }
