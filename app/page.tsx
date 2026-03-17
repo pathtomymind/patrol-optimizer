@@ -609,18 +609,115 @@ export default function Home() {
 
     setIsGenerating(true);
     try {
-      // 최근접 이웃 알고리즘
-      const unvisited = [...allPoints];
-      const ordered = [unvisited.splice(0, 1)[0]];
-      while (unvisited.length > 0) {
-        const last = ordered[ordered.length - 1];
-        let nearestIdx = 0;
-        let nearestDist = Infinity;
-        unvisited.forEach((p, i) => {
-          const dist = Math.pow((p.lat! - last.lat!), 2) + Math.pow((p.lng! - last.lng!), 2);
-          if (dist < nearestDist) { nearestDist = dist; nearestIdx = i; }
+      // ① ORS Matrix API로 도로 거리 행렬 계산 시도
+      let ordered: typeof allPoints = [];
+      let usedORS = false;
+
+      const cityHallCoord = { lat: 37.7381, lng: 127.0338 };
+      const matrixLocations = [cityHallCoord, ...allPoints.map(p => ({ lat: p.lat!, lng: p.lng! }))];
+
+      try {
+        const matrixRes = await fetch('/api/ors-matrix', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ locations: matrixLocations }),
         });
-        ordered.push(unvisited.splice(nearestIdx, 1)[0]);
+        const matrixData = await matrixRes.json();
+
+        if (matrixData.ok && matrixData.matrix) {
+          const matrix: number[][] = matrixData.matrix;
+          const n = allPoints.length;
+
+          // ── Step 1: 최근접 이웃 알고리즘 (시청=0번 고정 출발)
+          const visited = new Array(n + 1).fill(false);
+          visited[0] = true;
+          const orderIdxs: number[] = []; // matrix 인덱스 (1~n)
+          let current = 0;
+
+          while (orderIdxs.length < n) {
+            let nearestIdx = -1;
+            let nearestDist = Infinity;
+            for (let i = 1; i <= n; i++) {
+              if (!visited[i] && matrix[current][i] < nearestDist) {
+                nearestDist = matrix[current][i];
+                nearestIdx = i;
+              }
+            }
+            if (nearestIdx === -1) break;
+            visited[nearestIdx] = true;
+            orderIdxs.push(nearestIdx);
+            current = nearestIdx;
+          }
+
+          // ── Step 2: 2-opt 개선 (교차 구간 제거)
+          // 전체 경로: [0(시청), ...orderIdxs, 0(시청 복귀)]
+          // orderIdxs만 개선 대상 (시청 위치 고정)
+          const routeCost = (idxs: number[]) => {
+            let cost = matrix[0][idxs[0]]; // 시청 → 첫 지점
+            for (let i = 0; i < idxs.length - 1; i++) cost += matrix[idxs[i]][idxs[i + 1]];
+            cost += matrix[idxs[idxs.length - 1]][0]; // 마지막 지점 → 시청
+            return cost;
+          };
+
+          let improved = true;
+          let route2opt = [...orderIdxs];
+          let iterations = 0;
+          const beforeCost = routeCost(route2opt);
+
+          while (improved && iterations < 100) {
+            improved = false;
+            iterations++;
+            for (let i = 0; i < route2opt.length - 1; i++) {
+              for (let j = i + 2; j < route2opt.length; j++) {
+                // i→i+1 구간과 j→j+1 구간을 교체했을 때 거리 비교
+                const a = i === 0 ? 0 : route2opt[i - 1];
+                const b = route2opt[i];
+                const c = route2opt[j];
+                const d = j + 1 < route2opt.length ? route2opt[j + 1] : 0;
+
+                const before = matrix[a][b] + matrix[c][d];
+                const after  = matrix[a][c] + matrix[b][d];
+
+                if (after < before - 0.1) { // 0.1m 이상 단축될 때만 교체
+                  // i~j 구간 역순으로 뒤집기
+                  route2opt = [
+                    ...route2opt.slice(0, i),
+                    ...route2opt.slice(i, j + 1).reverse(),
+                    ...route2opt.slice(j + 1),
+                  ];
+                  improved = true;
+                }
+              }
+            }
+          }
+
+          const afterCost = routeCost(route2opt);
+          const improvement = Math.round((beforeCost - afterCost) / 10) / 100; // km
+          console.log(`✅ 2-opt 완료: ${iterations}회 반복, ${improvement}km 단축`);
+
+          ordered = route2opt.map(i => allPoints[i - 1]); // matrix 인덱스 → allPoints 0-based
+          usedORS = true;
+        }
+      } catch (matrixErr) {
+        console.warn('⚠️ ORS Matrix 실패, 직선거리 fallback:', matrixErr);
+      }
+
+      // ② ORS 실패 시 직선거리 최근접 이웃 알고리즘 (기존 방식)
+      if (!usedORS) {
+        const unvisited = [...allPoints];
+        const orderedFallback = [unvisited.splice(0, 1)[0]];
+        while (unvisited.length > 0) {
+          const last = orderedFallback[orderedFallback.length - 1];
+          let nearestIdx = 0;
+          let nearestDist = Infinity;
+          unvisited.forEach((p, i) => {
+            const dist = Math.pow((p.lat! - last.lat!), 2) + Math.pow((p.lng! - last.lng!), 2);
+            if (dist < nearestDist) { nearestDist = dist; nearestIdx = i; }
+          });
+          orderedFallback.push(unvisited.splice(nearestIdx, 1)[0]);
+        }
+        ordered = orderedFallback;
+        console.log('⚠️ 직선거리 알고리즘 사용');
       }
 
       const today = new Date().toLocaleDateString('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/\. /g, '-').replace('.', '');
@@ -653,7 +750,7 @@ export default function Home() {
       if (!res.ok) throw new Error('저장 실패');
       const data = await res.json();
       console.log('✅ 경로 저장 완료:', JSON.stringify(data, null, 2));
-      alert(`최적화 경로 생성 완료! (${today} 버전${data.version}, ${routePoints.length}개 지점)`);
+      alert(`최적화 경로 생성 완료! (${today} 버전${data.version}, ${routePoints.length}개 지점)\n경로 계산: ${usedORS ? '도로 거리 기반 + 2-opt 개선 (ORS)' : '직선 거리 기반 (fallback)'}`);
     } catch (e) {
       console.error(e);
       alert('경로 생성 중 오류가 발생했습니다.');
@@ -666,11 +763,16 @@ export default function Home() {
     if (isResetting) return;
     if (!window.confirm('추출된 지점 전체와 업로드 이미지를 모두 삭제합니다. 계속하시겠습니까?')) return;
     setIsResetting(true);
-    for (const point of extractedPoints) {
-      if (point.photoUrl && point.photoUrl.startsWith('https://')) {
-        try { await fetch('/api/delete-blob', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url: point.photoUrl }) }); } catch (e) { console.error('Blob 삭제 오류:', e); }
-      }
-    }
+    // 병렬 삭제로 변경 (순차 → 동시)
+    await Promise.all(
+      extractedPoints
+        .filter(p => p.photoUrl && p.photoUrl.startsWith('https://'))
+        .map(p => fetch('/api/delete-blob', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url: p.photoUrl }),
+        }).catch(e => console.error('Blob 삭제 오류:', e)))
+    );
     setUploadedImages([]);
     setExtractedPoints([]);
     const draft = JSON.parse(localStorage.getItem('draft-route') || '{}');
@@ -682,16 +784,22 @@ export default function Home() {
 
   const handleDirectReset = async () => {
     if (!window.confirm('직접입력 지점 전체를 삭제합니다. 계속하시겠습니까?')) return;
-    for (const point of directPoints) {
-      if (point.photoUrl && point.photoUrl.startsWith('https://')) {
-        try { await fetch('/api/delete-blob', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url: point.photoUrl }) }); } catch (e) { console.error('Blob 삭제 오류:', e); }
-      }
-    }
+    setIsResetting(true);
+    await Promise.all(
+      directPoints
+        .filter(p => p.photoUrl && p.photoUrl.startsWith('https://'))
+        .map(p => fetch('/api/delete-blob', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url: p.photoUrl }),
+        }).catch(e => console.error('Blob 삭제 오류:', e)))
+    );
     setDirectPoints([]);
     const draft = JSON.parse(localStorage.getItem('draft-route') || '{}');
     delete draft.directPoints;
     draft.lastModified = Date.now();
     localStorage.setItem('draft-route', JSON.stringify(draft));
+    setIsResetting(false);
   };
 
   return (
@@ -1290,7 +1398,7 @@ export default function Home() {
       )}
 
       {/* 전체 잠금 오버레이 */}
-      {(isExtracting || isResetting || isGenerating) && (
+      {(isExtracting || isResetting || isGenerating || deletingId !== null) && (
         <div className="fixed inset-0 z-40" style={{ background: 'rgba(0,0,0,0.3)', cursor: 'not-allowed' }} />
       )}
 

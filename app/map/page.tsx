@@ -72,6 +72,9 @@ export default function MapPage() {
   const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const blinkIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const blinkRestoreRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const blinkPolylineRef = useRef<any>(null);
+  const blinkArrowsRef = useRef<any[]>([]);
+  const blinkOriginalPolylineRef = useRef<any>(null);
   const [isAdmin, setIsAdmin] = useState(false);
   const [editStatus, setEditStatus] = useState('');
   const [editMemo, setEditMemo] = useState('');
@@ -603,6 +606,13 @@ export default function MapPage() {
     const naver = (window as any).naver;
     const map = naverMapRef.current;
 
+    // 진행 중인 blink 정리
+    if (blinkIntervalRef.current) { clearInterval(blinkIntervalRef.current); blinkIntervalRef.current = null; }
+    if (blinkRestoreRef.current) { clearTimeout(blinkRestoreRef.current); blinkRestoreRef.current = null; }
+    if (blinkPolylineRef.current) { blinkPolylineRef.current.setMap(null); blinkPolylineRef.current = null; }
+    blinkArrowsRef.current = [];
+    blinkOriginalPolylineRef.current = null;
+
     polylinesRef.current.forEach(p => p.setMap(null));
     arrowMarkersRef.current.forEach(m => m.setMap(null));
     polylinesRef.current = [];
@@ -730,17 +740,27 @@ export default function MapPage() {
     if (!from || !to) return;
     const originalColor = getLineColor(from, to);
 
-    // 기존 깜박임 정리 (이전 blink가 남아있으면 완전히 제거)
-    if (blinkIntervalRef.current) {
-      clearInterval(blinkIntervalRef.current);
-      blinkIntervalRef.current = null;
-    }
-    if (blinkRestoreRef.current) {
-      clearTimeout(blinkRestoreRef.current);
-      blinkRestoreRef.current = null;
-    }
+    // 기존 깜박임 완전 정리 (ref로 추적)
+    const cleanupBlink = () => {
+      if (blinkIntervalRef.current) { clearInterval(blinkIntervalRef.current); blinkIntervalRef.current = null; }
+      if (blinkRestoreRef.current) { clearTimeout(blinkRestoreRef.current); blinkRestoreRef.current = null; }
+      if (blinkPolylineRef.current) { blinkPolylineRef.current.setMap(null); blinkPolylineRef.current = null; }
+      blinkArrowsRef.current.forEach(a => {
+        a.setMap(null);
+        const idx = arrowMarkersRef.current.indexOf(a);
+        if (idx !== -1) arrowMarkersRef.current.splice(idx, 1);
+      });
+      blinkArrowsRef.current = [];
+      // 이전 원래 폴리라인 복원
+      if (blinkOriginalPolylineRef.current) {
+        const { polyline: prevPl, color: prevColor } = blinkOriginalPolylineRef.current;
+        prevPl.setOptions({ strokeColor: prevColor, strokeWeight: 6, strokeOpacity: 1, zIndex: 0 });
+        blinkOriginalPolylineRef.current = null;
+      }
+    };
+    cleanupBlink();
 
-    // 초록 깜박임용 임시 폴리라인 별도 생성 (기존 폴리라인 건드리지 않음)
+    // 초록 깜박임용 임시 폴리라인 별도 생성
     const coords: { lat: number; lng: number }[] = [];
     try {
       const path = (polyline as any).getPath();
@@ -755,11 +775,12 @@ export default function MapPage() {
       coords.push({ lat: from.lat, lng: from.lng }, { lat: to.lat, lng: to.lng });
     }
 
-    // 기존 폴리라인 숨기기
+    // 원래 폴리라인 숨기고 ref로 추적
     polyline.setOptions({ strokeOpacity: 0 });
+    blinkOriginalPolylineRef.current = { polyline, color: originalColor };
 
-    // 초록 깜박임 전용 임시 폴리라인 생성
-    const blinkPolyline = new naver.maps.Polyline({
+    // 임시 초록 폴리라인 생성 후 ref로 추적
+    blinkPolylineRef.current = new naver.maps.Polyline({
       map,
       path: coords.map(c => new naver.maps.LatLng(c.lat, c.lng)),
       strokeColor: '#1b5e20',
@@ -768,31 +789,21 @@ export default function MapPage() {
       zIndex: 100,
     });
 
-    // 깜박임 화살표 별도 배열로 관리
+    // 깜박임 화살표 ref로 추적
     const countBefore = arrowMarkersRef.current.length;
     placeArrows(coords, null, map, naver);
-    const blinkArrows = arrowMarkersRef.current.slice(countBefore);
+    blinkArrowsRef.current = arrowMarkersRef.current.slice(countBefore);
 
     let visible = true;
     blinkIntervalRef.current = setInterval(() => {
       visible = !visible;
-      blinkPolyline.setOptions({ strokeOpacity: visible ? 1 : 0 });
-      blinkArrows.forEach(a => a.setMap(visible ? map : null));
+      if (blinkPolylineRef.current) blinkPolylineRef.current.setOptions({ strokeOpacity: visible ? 1 : 0 });
+      blinkArrowsRef.current.forEach(a => a.setMap(visible ? map : null));
     }, 300);
 
     // 5초 후 원래대로
     blinkRestoreRef.current = setTimeout(() => {
-      if (blinkIntervalRef.current) { clearInterval(blinkIntervalRef.current); blinkIntervalRef.current = null; }
-      // 임시 폴리라인/화살표 제거
-      blinkPolyline.setMap(null);
-      blinkArrows.forEach(a => {
-        a.setMap(null);
-        const idx = arrowMarkersRef.current.indexOf(a);
-        if (idx !== -1) arrowMarkersRef.current.splice(idx, 1);
-      });
-      // 원래 폴리라인 복원
-      polyline.setOptions({ strokeColor: originalColor, strokeWeight: 6, strokeOpacity: 1, zIndex: 0 });
-      blinkRestoreRef.current = null;
+      cleanupBlink();
     }, 5000);
   };
 
@@ -849,15 +860,23 @@ export default function MapPage() {
   return (
     <div style={{ width: '100vw', height: '100vh', background: '#0d1b2e', display: 'flex', flexDirection: 'column' }}>
       {/* 상단 헤더 */}
-      <div style={{
-        background: 'linear-gradient(180deg, #1a3a6e 0%, #0d2444 100%)',
-        padding: '8px 12px',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: '5px',
-        flexShrink: 0,
-        borderBottom: '1px solid rgba(100,180,255,0.3)',
-      }}>
+      <div
+        style={{
+          background: 'linear-gradient(180deg, #1a3a6e 0%, #0d2444 100%)',
+          padding: '8px 12px',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '5px',
+          flexShrink: 0,
+          borderBottom: '1px solid rgba(100,180,255,0.3)',
+          touchAction: 'none',
+          userSelect: 'none',
+          WebkitUserSelect: 'none',
+        }}
+        onTouchStart={e => e.stopPropagation()}
+        onTouchMove={e => e.stopPropagation()}
+        onTouchEnd={e => e.stopPropagation()}
+      >
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
           <button
             onClick={() => router.back()}
