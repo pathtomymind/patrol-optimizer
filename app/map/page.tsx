@@ -68,6 +68,7 @@ export default function MapPage() {
   const lineModeRef = useRef<'straight' | 'road'>('straight');
   const [osrmError, setOsrmError] = useState(false);
   const [roadLoading, setRoadLoading] = useState(false);
+  const [newRouteAvailable, setNewRouteAvailable] = useState(false);
   const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const blinkIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const blinkRestoreRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -116,6 +117,24 @@ export default function MapPage() {
       }
     };
     load();
+  }, []);
+
+  // 1-1. 경로 버전 폴링 (30초마다 새 버전 체크)
+  useEffect(() => {
+    const checkNewRoute = async () => {
+      try {
+        const today = new Date().toLocaleDateString('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/\. /g, '-').replace('.', '');
+        const res = await fetch(`/api/get-route?date=${today}`);
+        if (!res.ok) return;
+        const data = await res.json();
+        const currentVersion = routeRef.current?.version ?? -1;
+        if (data.version > currentVersion) {
+          setNewRouteAvailable(true);
+        }
+      } catch {}
+    };
+    const timer = setInterval(checkNewRoute, 30000);
+    return () => clearInterval(timer);
   }, []);
 
   // 2. 네이버 지도 SDK 로드
@@ -306,7 +325,7 @@ export default function MapPage() {
       <div data-pulse="${pulseId}-11" data-delay="3663" style="position:absolute;top:50%;left:50%;width:28px;height:28px;margin-left:-14px;margin-top:-14px;border-radius:50%;border:2px solid ${pulseColor};background:transparent;pointer-events:none;will-change:transform,opacity;transform-origin:center center;"></div>` : '';
     const cursorStyle = (showPulse && !isFixed) ? 'cursor:pointer;' : 'cursor:default;';
     return `
-      <div style="position:relative;display:flex;flex-direction:column;align-items:center;overflow:visible;${cursorStyle}">
+      <div style="position:relative;display:flex;flex-direction:column;align-items:center;overflow:visible;user-select:none;-webkit-user-select:none;${cursorStyle}">
         ${pulseDiv}
         <div style="
           position:relative;z-index:1;
@@ -623,6 +642,8 @@ export default function MapPage() {
     // ★ 마커 생성 + 클릭 이벤트 연결
     points.forEach((point, pointArrayIdx) => {
       const color = getMarkerColor(point);
+      // 기점(첫 번째 fixed)은 zIndex를 높여서 종점(마지막 fixed) 위에 표시
+      const isFirstFixed = point.source === 'fixed' && pointArrayIdx === 0;
       const marker = new naver.maps.Marker({
         map: showMarkers ? map : null,
         position: new naver.maps.LatLng(point.lat, point.lng),
@@ -630,7 +651,7 @@ export default function MapPage() {
           content: makeMarkerContent(point, color, showPulse),
           anchor: new naver.maps.Point(14, 14),
         },
-        zIndex: 10,
+        zIndex: isFirstFixed ? 20 : 10,
       });
 
       // ★ 마커 클릭 → 줌 PULSE_THRESHOLD 이상일 때만 팝업 (fixed 제외)
@@ -641,21 +662,21 @@ export default function MapPage() {
             setShowDetailModal(true);
           }
         });
-
-        // ★ 롱프레스 → 해당 구간 초록 깜박임 (700ms 이상)
-        const startLongPress = () => {
-          longPressTimerRef.current = setTimeout(() => {
-            blinkSegment(pointArrayIdx);
-          }, 700);
-        };
-        const cancelLongPress = () => {
-          if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current);
-        };
-        naver.maps.Event.addListener(marker, 'mousedown', startLongPress);
-        naver.maps.Event.addListener(marker, 'mouseup', cancelLongPress);
-        naver.maps.Event.addListener(marker, 'touchstart', startLongPress);
-        naver.maps.Event.addListener(marker, 'touchend', cancelLongPress);
       }
+
+      // ★ 롱프레스 → 해당 구간 초록 깜박임 (fixed 포함 전체 마커)
+      const startLongPress = () => {
+        longPressTimerRef.current = setTimeout(() => {
+          blinkSegment(pointArrayIdx);
+        }, 700);
+      };
+      const cancelLongPress = () => {
+        if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current);
+      };
+      naver.maps.Event.addListener(marker, 'mousedown', startLongPress);
+      naver.maps.Event.addListener(marker, 'mouseup', cancelLongPress);
+      naver.maps.Event.addListener(marker, 'touchstart', startLongPress);
+      naver.maps.Event.addListener(marker, 'touchend', cancelLongPress);
 
       markersRef.current.push(marker);
     });
@@ -699,8 +720,7 @@ export default function MapPage() {
     if (!route || polylinesRef.current.length === 0) return;
     const naver = (window as any).naver;
     const map = naverMapRef.current;
-    // markerIdx번 지점 → markerIdx+1번 지점 구간
-    // 폴리라인[0] = points[0]→points[1], 폴리라인[N] = points[N]→points[N+1]
+
     const segIdx = markerIdx;
     const polyline = polylinesRef.current[segIdx];
     if (!polyline) return;
@@ -710,12 +730,17 @@ export default function MapPage() {
     if (!from || !to) return;
     const originalColor = getLineColor(from, to);
 
-    // 기존 깜박임 정리
-    if (blinkIntervalRef.current) clearInterval(blinkIntervalRef.current);
-    if (blinkRestoreRef.current) clearTimeout(blinkRestoreRef.current);
+    // 기존 깜박임 정리 (이전 blink가 남아있으면 완전히 제거)
+    if (blinkIntervalRef.current) {
+      clearInterval(blinkIntervalRef.current);
+      blinkIntervalRef.current = null;
+    }
+    if (blinkRestoreRef.current) {
+      clearTimeout(blinkRestoreRef.current);
+      blinkRestoreRef.current = null;
+    }
 
-    // 깜박임용 임시 화살표 마커
-    const blinkArrows: any[] = [];
+    // 초록 깜박임용 임시 폴리라인 별도 생성 (기존 폴리라인 건드리지 않음)
     const coords: { lat: number; lng: number }[] = [];
     try {
       const path = (polyline as any).getPath();
@@ -729,32 +754,45 @@ export default function MapPage() {
     if (coords.length < 2) {
       coords.push({ lat: from.lat, lng: from.lng }, { lat: to.lat, lng: to.lng });
     }
-    placeArrows(coords, null, map, naver);
-    // 방금 추가된 화살표를 blinkArrows로 추적 (arrowMarkersRef 마지막부터)
-    const existingCount = arrowMarkersRef.current.length - coords.length;
-    for (let i = Math.max(0, arrowMarkersRef.current.length - Math.ceil(coords.length * 2)); i < arrowMarkersRef.current.length; i++) {
-      blinkArrows.push(arrowMarkersRef.current[i]);
-    }
 
-    // 진한 초록 깜박임 (zIndex 높여서 다른 선 위에 표시)
+    // 기존 폴리라인 숨기기
+    polyline.setOptions({ strokeOpacity: 0 });
+
+    // 초록 깜박임 전용 임시 폴리라인 생성
+    const blinkPolyline = new naver.maps.Polyline({
+      map,
+      path: coords.map(c => new naver.maps.LatLng(c.lat, c.lng)),
+      strokeColor: '#1b5e20',
+      strokeWeight: 8,
+      strokeOpacity: 1,
+      zIndex: 100,
+    });
+
+    // 깜박임 화살표 별도 배열로 관리
+    const countBefore = arrowMarkersRef.current.length;
+    placeArrows(coords, null, map, naver);
+    const blinkArrows = arrowMarkersRef.current.slice(countBefore);
+
     let visible = true;
-    polyline.setOptions({ strokeColor: '#1b5e20', strokeWeight: 8, strokeOpacity: 1, zIndex: 100 });
     blinkIntervalRef.current = setInterval(() => {
       visible = !visible;
-      polyline.setOptions({ strokeOpacity: visible ? 1 : 0 });
+      blinkPolyline.setOptions({ strokeOpacity: visible ? 1 : 0 });
       blinkArrows.forEach(a => a.setMap(visible ? map : null));
     }, 300);
 
     // 5초 후 원래대로
     blinkRestoreRef.current = setTimeout(() => {
-      if (blinkIntervalRef.current) clearInterval(blinkIntervalRef.current);
-      polyline.setOptions({ strokeColor: originalColor, strokeWeight: 6, strokeOpacity: 1, zIndex: 0 });
-      blinkArrows.forEach(a => a.setMap(null));
-      // arrowMarkersRef에서 blinkArrows 제거
+      if (blinkIntervalRef.current) { clearInterval(blinkIntervalRef.current); blinkIntervalRef.current = null; }
+      // 임시 폴리라인/화살표 제거
+      blinkPolyline.setMap(null);
       blinkArrows.forEach(a => {
+        a.setMap(null);
         const idx = arrowMarkersRef.current.indexOf(a);
         if (idx !== -1) arrowMarkersRef.current.splice(idx, 1);
       });
+      // 원래 폴리라인 복원
+      polyline.setOptions({ strokeColor: originalColor, strokeWeight: 6, strokeOpacity: 1, zIndex: 0 });
+      blinkRestoreRef.current = null;
     }, 5000);
   };
 
@@ -937,6 +975,24 @@ export default function MapPage() {
         }}>
           <span>⚠️</span>
           <span>도로 경로 서버(OSRM·ORS) 모두 응답 없음 — 직선으로 표시합니다</span>
+        </div>
+      )}
+
+      {/* 새 경로 알림 배너 */}
+      {newRouteAvailable && (
+        <div
+          onClick={() => window.location.reload()}
+          style={{
+            position: 'absolute', top: 56, left: '50%', transform: 'translateX(-50%)',
+            background: 'rgba(21,101,192,0.95)', color: 'white',
+            fontSize: '12px', fontWeight: 'bold',
+            padding: '8px 18px', borderRadius: '20px',
+            display: 'flex', alignItems: 'center', gap: '8px',
+            boxShadow: '0 2px 8px rgba(0,0,0,0.4)',
+            whiteSpace: 'nowrap', zIndex: 300, cursor: 'pointer',
+          }}>
+          <span>🔄</span>
+          <span>새 경로가 생성되었습니다 — 탭하여 갱신</span>
         </div>
       )}
 

@@ -292,6 +292,25 @@ export default function Home() {
     return () => clearInterval(timer);
   }, [currentRoute?.date]);
 
+  // 경로 버전 폴링 (30초마다 새 버전 자동 반영)
+  useEffect(() => {
+    const checkNewRoute = async () => {
+      try {
+        const today = new Date().toLocaleDateString('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/\. /g, '-').replace('.', '');
+        const res = await fetch(`/api/get-route?date=${today}`);
+        if (!res.ok) return;
+        const data = await res.json();
+        const currentVersion = currentRoute?.version ?? -1;
+        if (data.version > currentVersion) {
+          setCurrentRoute(data);
+          loadStatuses(data.date);
+        }
+      } catch {}
+    };
+    const timer = setInterval(checkNewRoute, 30000);
+    return () => clearInterval(timer);
+  }, [currentRoute?.version]);
+
   const cropImage = (dataUrl: string, x: number, y: number, w: number, h: number): Promise<string> => {
     return new Promise((resolve) => {
       const img = new Image();
