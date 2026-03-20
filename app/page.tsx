@@ -673,25 +673,29 @@ export default function Home() {
           while (improved && iterations < 100) {
             improved = false;
             iterations++;
-            for (let i = 0; i < route2opt.length - 1; i++) {
-              for (let j = i + 2; j < route2opt.length; j++) {
-                // i→i+1 구간과 j→j+1 구간을 교체했을 때 거리 비교
-                const a = i === 0 ? 0 : route2opt[i - 1];
-                const b = route2opt[i];
-                const c = route2opt[j];
-                const d = j + 1 < route2opt.length ? route2opt[j + 1] : 0;
-
+            const len = route2opt.length;
+            // 전체 경로 노드: [0(시청), r[0], r[1], ..., r[n-1], 0(시청복귀)]
+            // 노드 인덱스 0~n+1, 실제값: node(k) = k===0||k===len+1 ? 0 : route2opt[k-1]
+            const node = (k: number) => k === 0 || k === len + 1 ? 0 : route2opt[k - 1];
+            outer:
+            for (let i = 1; i <= len - 1; i++) {
+              for (let j = i + 1; j <= len; j++) {
+                // 엣지 i-1→i 와 j→j+1 을 교체
+                const a = node(i - 1);
+                const b = node(i);
+                const c = node(j);
+                const d = node(j + 1);
                 const before = matrix[a][b] + matrix[c][d];
                 const after  = matrix[a][c] + matrix[b][d];
-
-                if (after < before - 0.1) { // 0.1m 이상 단축될 때만 교체
-                  // i~j 구간 역순으로 뒤집기
+                if (after < before - 0.1) {
+                  // i~j 구간 역순
                   route2opt = [
-                    ...route2opt.slice(0, i),
-                    ...route2opt.slice(i, j + 1).reverse(),
-                    ...route2opt.slice(j + 1),
+                    ...route2opt.slice(0, i - 1),
+                    ...route2opt.slice(i - 1, j).reverse(),
+                    ...route2opt.slice(j),
                   ];
                   improved = true;
+                  break outer;
                 }
               }
             }

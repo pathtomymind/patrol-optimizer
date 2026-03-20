@@ -26,7 +26,7 @@ type PointStatus = {
 
 const DONE_STATUSES = ['민원처리완료', '기처리', '확인불가'];
 const ZOOM_THRESHOLD = 14;
-const PULSE_THRESHOLD = 15; // 이 줌 이상부터 펄스 + 클릭 팝업 활성화 (휠 약 2번)
+const PULSE_THRESHOLD = 14; // 롱프레스 깜박임과 동일한 레벨 // 이 줌 이상부터 펄스 + 클릭 팝업 활성화 (휠 약 2번)
 
 // ★ 펄스 애니메이션 CSS (전역 style 태그로 삽입)
 const PULSE_STYLE = `
