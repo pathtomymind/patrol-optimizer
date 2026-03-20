@@ -180,8 +180,11 @@ export default function Home() {
   };
 
   // 완료상태 키 생성 헬퍼
-  const statusKey = (point: { address: string; complaint: string; originalId?: number | null }) =>
-    `${point.address}:${point.complaint}:${point.originalId ?? 'none'}`;
+  const statusKey = (point: { address: string; complaint: string; originalId?: number | null; destination?: string | null }) => {
+    // address가 비어있으면 destination을 대신 사용
+    const addrPart = point.address?.trim() || point.destination?.trim() || '';
+    return `${addrPart}:${point.complaint}:${point.originalId ?? 'none'}`;
+  };
 
   // 완료상태 저장
   const handleSaveStatus = async (status: string, memo: string) => {
@@ -194,6 +197,7 @@ export default function Home() {
         body: JSON.stringify({
           date: currentRoute.date,
           address: selectedPoint.address,
+          destination: selectedPoint.destination,
           complaint: selectedPoint.complaint,
           originalId: selectedPoint.originalId ?? null,
           status,
@@ -880,71 +884,95 @@ export default function Home() {
                         <div className="mx-2 rounded px-3 py-3"
                           style={{ background: cardBg, cursor: point.source !== 'fixed' ? 'pointer' : 'default' }}
                           onClick={() => { if (point.source !== 'fixed') { setSelectedPoint(point); setShowDetailModal(true); document.body.style.overflow = 'hidden'; } }}>
-                          <div className="flex justify-between items-start gap-2">
-                            <div className="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-white font-bold text-sm"
-                              style={{ background: point.source === 'fixed' ? (firstDone ? '#1565c0' : '#f57f17') : 'rgba(0,0,0,0.35)' }}>
-                              {point.source === 'fixed' ? '🏛' : point.order}
+                          <div style={{ display: 'flex', alignItems: point.source === 'fixed' ? 'center' : 'flex-start', gap: '8px' }}>
+                            <div style={{
+                              flexShrink: 0, width: '32px', height: '32px', borderRadius: '50%',
+                              background: point.source === 'fixed' ? (firstDone ? '#1565c0' : '#f57f17') : 'rgba(0,0,0,0.35)',
+                              display: 'flex', alignItems: 'center', justifyContent: 'center',
+                              color: 'white', fontWeight: 'bold', fontSize: '13px',
+                            }}>
+                              {point.source === 'fixed'
+                                ? <svg width="16" height="16" viewBox="0 0 24 24" fill="white"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/></svg>
+                                : point.order}
                             </div>
-                            <div className="flex-1">
-                              <p className="text-sm leading-snug font-medium">
-                                {point.source === 'place_single' || point.source === 'place_nearest' ? (
-                                  <span style={{ color: '#a5d6a7' }}>{point.address}{point.destination ? ` (${point.destination})` : ''}</span>
-                                ) : point.source === 'address' ? (
-                                  <><span style={{ color: '#a5d6a7' }}>{point.address}</span>{point.destination ? <span className="text-white"> ({point.destination})</span> : ''}</>
-                                ) : point.source === 'fixed' ? (
-                                  <span style={{ color: firstDone ? '#a5d6a7' : '#ffcc80' }}>{point.destination || point.address}</span>
-                                ) : (
-                                  <span className="text-white">{point.address}{point.destination ? ` (${point.destination})` : ''}</span>
-                                )}
-                              </p>
-                              {point.placeName && point.source !== 'address' && point.source !== 'fixed' && (
-                                <p className="text-xs mt-0.5" style={{ color: '#a5d6a7' }}>
-                                  <span style={{ display: 'inline-block', width: '4.5rem' }}>🔍</span>{point.placeName}
-                                </p>
-                              )}
-                              {(!point.placeName || point.source === 'address') && point.source && point.source !== 'fixed' && (
-                                <p className="text-xs mt-0.5" style={{ color: '#fff176' }}>
-                                  <span style={{ display: 'inline-block', width: '4.5rem' }}>📍</span>주소로 위치 확인
-                                </p>
-                              )}
-                              {point.source !== 'fixed' && (
-                                <p className="text-xs mt-0.5">
-                                  <span style={{ color: 'rgba(255,255,255,0.6)', display: 'inline-block', width: '4.5rem' }}>민원내용:</span>
-                                  <span style={{ color: '#a5d6a7' }}>{point.complaint}</span>
-                                </p>
-                              )}
-                              {point.source !== 'fixed' && point.photoDescription && (
-                                <p className="text-xs mt-0.5">
-                                  <span style={{ color: 'rgba(255,255,255,0.6)', display: 'inline-block', width: '4.5rem' }}>사진설명:</span>
-                                  <span style={{ color: '#a5d6a7' }}>{point.photoDescription}</span>
-                                </p>
-                              )}
-                              {point.source !== 'fixed' && st?.status && (
-                                <>
-                                  <div style={{ borderTop: '1px solid rgba(255,255,255,0.2)', marginTop: 6, marginBottom: 4 }} />
-                                  <p className="text-xs mt-0.5">
-                                    <span style={{ color: 'rgba(255,255,255,0.6)', display: 'inline-block', width: '4.5rem' }}>작업상태:</span>
-                                    <span style={{ color: '#80cbc4', fontWeight: 'bold' }}>{st.status}</span>
-                                  </p>
-                                  {st.memo && (
-                                    <p className="text-xs mt-0.5">
-                                      <span style={{ color: 'rgba(255,255,255,0.6)', display: 'inline-block', width: '4.5rem' }}>메모:</span>
-                                      <span style={{ color: '#e0f2f1' }}>{st.memo}</span>
-                                    </p>
+                            {/* 정보 영역 + 버튼 */}
+                            <div style={{ flex: 1, display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
+                              {/* 정보 영역 */}
+                              <div className="flex-1">
+                                <p className="text-sm leading-snug font-medium">
+                                  {point.source === 'place_single' || point.source === 'place_nearest' ? (
+                                    <span style={{ color: '#a5d6a7' }}>{point.address}{point.destination ? ` (${point.destination})` : ''}</span>
+                                  ) : point.source === 'address' ? (
+                                    <><span style={{ color: '#a5d6a7' }}>{point.address}</span>{point.destination ? <span className="text-white"> ({point.destination})</span> : ''}</>
+                                  ) : point.source === 'fixed' ? (
+                                    <span style={{ color: firstDone ? '#a5d6a7' : '#ffcc80' }}>{point.destination || point.address}</span>
+                                  ) : (
+                                    <span className="text-white">{point.address}{point.destination ? ` (${point.destination})` : ''}</span>
                                   )}
-                                </>
+                                </p>
+                                {point.placeName && point.source !== 'address' && point.source !== 'fixed' && (
+                                  <div style={{ display: 'flex', gap: '6px', marginTop: '2px', color: '#a5d6a7', fontSize: '12px' }}>
+                                    <span style={{ width: '3.2rem', flexShrink: 0 }}></span>
+                                    <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                      <span>🔍</span><span>{point.placeName}</span>
+                                    </span>
+                                  </div>
+                                )}
+                                {(!point.placeName || point.source === 'address') && point.source && point.source !== 'fixed' && (
+                                  <div style={{ display: 'flex', gap: '6px', marginTop: '2px', color: '#fff176', fontSize: '12px' }}>
+                                    <span style={{ width: '3.2rem', flexShrink: 0 }}></span>
+                                    <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                      <span>📍</span><span>주소로 위치 확인</span>
+                                    </span>
+                                  </div>
+                                )}
+                                {point.source !== 'fixed' && (
+                                  <div style={{ borderTop: '1px solid rgba(255,255,255,0.15)', marginTop: 5, marginBottom: 4 }} />
+                                )}
+                                {point.source !== 'fixed' && (
+                                  <div style={{ display: 'flex', gap: '6px', marginTop: '2px' }}>
+                                    <span style={{ color: 'rgba(255,255,255,0.6)', fontSize: '12px', width: '3.2rem', flexShrink: 0 }}>민원번호:</span>
+                                    <span style={{ color: '#a5d6a7', fontSize: '12px' }}>{point.originalId ? `${point.originalId} 번` : ''}</span>
+                                  </div>
+                                )}
+                                {point.source !== 'fixed' && (
+                                  <div style={{ display: 'flex', gap: '6px', marginTop: '2px' }}>
+                                    <span style={{ color: 'rgba(255,255,255,0.6)', fontSize: '12px', width: '3.2rem', flexShrink: 0 }}>민원내용:</span>
+                                    <span style={{ color: '#a5d6a7', fontSize: '12px' }}>{point.complaint || ''}</span>
+                                  </div>
+                                )}
+                                {point.source !== 'fixed' && (
+                                  <div style={{ display: 'flex', gap: '6px', marginTop: '2px' }}>
+                                    <span style={{ color: 'rgba(255,255,255,0.6)', fontSize: '12px', width: '3.2rem', flexShrink: 0 }}>사진설명:</span>
+                                    <span style={{ color: '#a5d6a7', fontSize: '12px' }}>{point.photoDescription || ''}</span>
+                                  </div>
+                                )}
+                                {point.source !== 'fixed' && (
+                                  <>
+                                    <div style={{ borderTop: '1px solid rgba(255,255,255,0.2)', marginTop: 6, marginBottom: 4 }} />
+                                    <div style={{ display: 'flex', gap: '6px', marginTop: '2px' }}>
+                                      <span style={{ color: 'rgba(255,255,255,0.6)', fontSize: '12px', width: '3.2rem', flexShrink: 0 }}>작업상태:</span>
+                                      <span style={{ color: '#80cbc4', fontWeight: 'bold', fontSize: '12px' }}>{st?.status || ''}</span>
+                                    </div>
+                                    <div style={{ display: 'flex', gap: '6px', marginTop: '2px' }}>
+                                      <span style={{ color: 'rgba(255,255,255,0.6)', fontSize: '12px', width: '3.2rem', flexShrink: 0 }}>작업메모:</span>
+                                      <span style={{ color: '#a5d6a7', fontSize: '12px' }}>{st?.memo || ''}</span>
+                                    </div>
+                                  </>
+                                )}
+                              </div>
+                              {/* 버튼 영역 - 우측 하단 정렬 */}
+                              {point.source !== 'fixed' && (
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', flexShrink: 0, justifyContent: 'flex-end', alignSelf: 'flex-end' }}>
+                                  <button
+                                    onClick={(e) => { e.stopPropagation(); window.open(`tmap://route?goalname=${encodeURIComponent(point.destination || point.address)}&goaly=${point.lat}&goalx=${point.lng}`); }}
+                                    className="text-xs text-white px-3 py-1.5 rounded font-bold" style={{ background: '#0a3d8f' }}>티맵</button>
+                                  <button
+                                    onClick={(e) => { e.stopPropagation(); window.open(`nmap://navigation?dlat=${point.lat}&dlng=${point.lng}&dname=${encodeURIComponent(point.destination || point.address)}&appname=patrol-optimizer`); }}
+                                    className="text-xs text-white px-3 py-1.5 rounded font-bold" style={{ background: '#1b5e20' }}>네이버</button>
+                                </div>
                               )}
                             </div>
-                            {point.source !== 'fixed' && (
-                              <div className="flex flex-col gap-1 flex-shrink-0">
-                                <button
-                                  onClick={(e) => { e.stopPropagation(); window.open(`tmap://route?goalname=${encodeURIComponent(point.destination || point.address)}&goaly=${point.lat}&goalx=${point.lng}`); }}
-                                  className="text-xs text-white px-2 py-1 rounded font-bold" style={{ background: '#0a3d8f' }}>티맵</button>
-                                <button
-                                  onClick={(e) => { e.stopPropagation(); window.open(`nmap://navigation?dlat=${point.lat}&dlng=${point.lng}&dname=${encodeURIComponent(point.destination || point.address)}&appname=patrol-optimizer`); }}
-                                  className="text-xs text-white px-2 py-1 rounded font-bold" style={{ background: '#1b5e20' }}>네이버</button>
-                              </div>
-                            )}
                           </div>
                         </div>
                           );
@@ -1089,11 +1117,11 @@ export default function Home() {
                                 </p>
                               )}
                               <p className="text-xs mt-0.5" style={{ color: '#a5d6a7' }}>
-                                <span style={{ color: 'rgba(255,255,255,0.6)', display: 'inline-block', width: '4.5rem' }}>민원내용:</span><span style={{ color: '#a5d6a7' }}>{point.complaint}</span>
+                                <span style={{ color: 'rgba(255,255,255,0.6)', display: 'inline-block', width: '3.2rem' }}>민원내용:</span><span style={{ color: '#a5d6a7' }}>{point.complaint}</span>
                               </p>
                               {point.photoDescription && (
                                 <p className="text-xs mt-0.5" style={{ color: '#a5d6a7' }}>
-                                  <span style={{ color: 'rgba(255,255,255,0.6)', display: 'inline-block', width: '4.5rem' }}>사진설명:</span>{point.photoDescription}
+                                  <span style={{ color: 'rgba(255,255,255,0.6)', display: 'inline-block', width: '3.2rem' }}>사진설명:</span>{point.photoDescription}
                                 </p>
                               )}
                             </div>
@@ -1162,7 +1190,7 @@ export default function Home() {
                             </p>
                           )}
                           <p className="text-xs mt-0.5" style={{ color: 'rgba(255,255,255,0.7)' }}>
-                            <span style={{ color: 'rgba(255,255,255,0.6)', display: 'inline-block', width: '4.5rem' }}>민원내용:</span><span style={{ color: '#a5d6a7' }}>{point.complaint}</span>
+                            <span style={{ color: 'rgba(255,255,255,0.6)', display: 'inline-block', width: '3.2rem' }}>민원내용:</span><span style={{ color: '#a5d6a7' }}>{point.complaint}</span>
                           </p>
                         </div>
                         <button

@@ -84,8 +84,10 @@ export default function MapPage() {
   const [selectedPoint, setSelectedPoint] = useState<RoutePoint | null>(null);
   const [showDetailModal, setShowDetailModal] = useState(false);
 
-  const statusKey = (point: RoutePoint) =>
-    `${point.address}:${point.complaint}:${point.originalId ?? 'none'}`;
+  const statusKey = (point: RoutePoint) => {
+    const addrPart = point.address?.trim() || point.destination?.trim() || '';
+    return `${addrPart}:${point.complaint}:${point.originalId ?? 'none'}`;
+  };
 
   // ★ 펄스 CSS 삽입
   useEffect(() => {
@@ -837,6 +839,7 @@ export default function MapPage() {
         body: JSON.stringify({
           date: route.date,
           address: selectedPoint.address,
+          destination: selectedPoint.destination,
           complaint: selectedPoint.complaint,
           originalId: selectedPoint.originalId ?? null,
           status: editStatus,
