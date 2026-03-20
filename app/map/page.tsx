@@ -86,7 +86,8 @@ export default function MapPage() {
 
   const statusKey = (point: RoutePoint) => {
     const addrPart = point.address?.trim() || point.destination?.trim() || '';
-    return `${addrPart}:${point.complaint}:${point.originalId ?? 'none'}`;
+    const complaintPart = point.complaint?.trim() ?? '';
+    return `${addrPart}:${complaintPart}:${point.originalId ?? 'none'}`;
   };
 
   // ★ 펄스 CSS 삽입
@@ -840,7 +841,7 @@ export default function MapPage() {
           date: route.date,
           address: selectedPoint.address,
           destination: selectedPoint.destination,
-          complaint: selectedPoint.complaint,
+          complaint: selectedPoint.complaint?.trim() ?? '',
           originalId: selectedPoint.originalId ?? null,
           status: editStatus,
           memo: editMemo,

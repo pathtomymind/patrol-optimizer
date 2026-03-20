@@ -8,13 +8,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   const { date, address, complaint, originalId, status, memo, destination } = req.body;
 
-  // date는 필수, address 또는 destination 중 하나는 있어야 함
   if (!date) return res.status(400).json({ message: '필수 파라미터 누락 (date)' });
+
+  // address가 비어있으면 destination 사용
   const addrPart = (address?.trim() || destination?.trim() || '');
   if (!addrPart) return res.status(400).json({ message: '필수 파라미터 누락 (address/destination)' });
 
-  // 키: status:날짜:주소(없으면destination):민원내용:originalId(없으면 'none')
-  const key = `status:${date}:${addrPart}:${complaint ?? ''}:${originalId ?? 'none'}`;
+  // complaint null/undefined → 빈 문자열로 통일
+  const complaintPart = complaint?.trim() ?? '';
+
+  const key = `status:${date}:${addrPart}:${complaintPart}:${originalId ?? 'none'}`;
 
   await redis.set(key, JSON.stringify({
     status: status || '',

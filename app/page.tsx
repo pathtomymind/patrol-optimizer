@@ -183,7 +183,9 @@ export default function Home() {
   const statusKey = (point: { address: string; complaint: string; originalId?: number | null; destination?: string | null }) => {
     // address가 비어있으면 destination을 대신 사용
     const addrPart = point.address?.trim() || point.destination?.trim() || '';
-    return `${addrPart}:${point.complaint}:${point.originalId ?? 'none'}`;
+    // complaint가 null/undefined이면 빈 문자열로 통일
+    const complaintPart = point.complaint?.trim() ?? '';
+    return `${addrPart}:${complaintPart}:${point.originalId ?? 'none'}`;
   };
 
   // 완료상태 저장
@@ -198,7 +200,7 @@ export default function Home() {
           date: currentRoute.date,
           address: selectedPoint.address,
           destination: selectedPoint.destination,
-          complaint: selectedPoint.complaint,
+          complaint: selectedPoint.complaint?.trim() ?? '',
           originalId: selectedPoint.originalId ?? null,
           status,
           memo,
