@@ -1033,7 +1033,7 @@ export default function MapPage() {
 
       {/* ★ 지점 상세정보 팝업 */}
       {showDetailModal && selectedPoint && (() => {
-        const { curStatus, isDone } = getSelectedStatus();
+        const { curStatus, curMemo, isDone } = getSelectedStatus();
         const popupBg = curStatus && DONE_STATUSES.includes(curStatus) ? '#1a3a6e' : '#7a2800';
         return (
           <div
