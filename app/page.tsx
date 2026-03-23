@@ -1647,52 +1647,115 @@ export default function Home() {
             </div>
 
             {/* 정보 목록 */}
-            <div className="space-y-2">
-              {[
-                { label: '주소', value: selectedPoint.address },
-                { label: '목적지', value: selectedPoint.destination || '-' },
-                { label: '좌표확인', value:
-                  selectedPoint.source === 'place_single' || selectedPoint.source === 'place_nearest'
-                    ? '✅ 목적지로 위치 확인'
-                    : selectedPoint.source === 'address'
-                    ? '📍 주소로 위치 확인'
-                    : '❌ 위치 미확인' },
-                { label: '원래순번', value: selectedPoint.originalId ? `${selectedPoint.originalId}번` : '-' },
-                { label: '민원내용', value: selectedPoint.complaint || '-' },
-                { label: '담당자', value: selectedPoint.manager || '-' },
-              ].map(({ label, value }) => (
-                <div key={label} className="flex gap-3 items-start">
-                  <span className="text-blue-300 text-xs w-16 flex-shrink-0 pt-0.5">{label}</span>
-                  <span className="text-white text-xs flex-1">{value}</span>
-                </div>
-              ))}
+            {(() => {
+              const st = pointStatuses[statusKey(selectedPoint)];
+              const curStatus = st?.status || '';
+              const curMemo = st?.memo || '';
+              const isDone = ['민원처리완료','기처리','확인불가'].includes(curStatus);
+              return (
+                <div className="space-y-2">
+                  {[
+                    { label: '주소', value: selectedPoint.address || '' },
+                    { label: '목적지', value: selectedPoint.destination || '' },
+                    { label: '좌표확인', value:
+                      selectedPoint.source === 'place_single' || selectedPoint.source === 'place_nearest'
+                        ? '✅ 목적지로 위치 확인'
+                        : selectedPoint.source === 'address'
+                        ? '📍 주소로 위치 확인'
+                        : '❌ 위치 미확인' },
+                  ].map(({ label, value }) => (
+                    <div key={label} className="flex gap-3 items-start">
+                      <span className="text-blue-300 text-xs w-16 flex-shrink-0 pt-0.5">{label}</span>
+                      <span className="text-white text-xs flex-1">{value}</span>
+                    </div>
+                  ))}
 
-              {/* 현장사진 */}
-              <div className="flex gap-3 items-start">
-                <span className="text-blue-300 text-xs w-16 flex-shrink-0 pt-0.5">현장사진</span>
-                <div className="flex-1">
-                  {selectedPoint.photoUrl ? (
-                    <img src={selectedPoint.photoUrl} alt="현장사진" className="w-full rounded" />
-                  ) : (
-                    <div className="rounded h-20 flex items-center justify-center"
-                      style={{ background: 'rgba(255,255,255,0.1)', border: '1px dashed rgba(255,255,255,0.3)' }}>
-                      <span className="text-blue-300 text-xs">사진 없음</span>
+                  {/* 좌표확인 아래 수평선 */}
+                  <div style={{ borderTop: '1px solid rgba(255,255,255,0.2)', marginTop: '4px', marginBottom: '4px' }} />
+
+                  {[
+                    { label: '민원번호', value: selectedPoint.originalId ? `${selectedPoint.originalId}번` : '' },
+                    { label: '민원내용', value: selectedPoint.complaint || '' },
+                    { label: '담당자', value: selectedPoint.manager || '' },
+                  ].map(({ label, value }) => (
+                    <div key={label} className="flex gap-3 items-start">
+                      <span className="text-blue-300 text-xs w-16 flex-shrink-0 pt-0.5">{label}</span>
+                      <span className="text-white text-xs flex-1">{value}</span>
+                    </div>
+                  ))}
+
+                  {/* 현장사진 */}
+                  <div className="flex gap-3 items-start">
+                    <span className="text-blue-300 text-xs w-16 flex-shrink-0 pt-0.5">현장사진</span>
+                    <div className="flex-1">
+                      {selectedPoint.photoUrl ? (
+                        <img src={selectedPoint.photoUrl} alt="현장사진" className="w-full rounded" />
+                      ) : (
+                        <div className="rounded h-20 flex items-center justify-center"
+                          style={{ background: 'rgba(255,255,255,0.1)', border: '1px dashed rgba(255,255,255,0.3)' }}>
+                          <span className="text-blue-300 text-xs">사진 없음</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* 사진설명 - 레이블 없이 값만 표시 */}
+                  {selectedPoint.photoDescription && (
+                    <div className="flex gap-3 items-start">
+                      <span className="w-16 flex-shrink-0" />
+                      <span className="text-xs flex-1" style={{ color: 'rgba(255,255,255,0.65)' }}>{selectedPoint.photoDescription}</span>
                     </div>
                   )}
-                </div>
-              </div>
 
-              {/* 사진설명 */}
-              {selectedPoint.photoDescription && (
-                <div className="flex gap-3 items-start">
-                  <span className="text-blue-300 text-xs w-16 flex-shrink-0 pt-0.5">사진설명</span>
-                  <span className="text-white text-xs flex-1">{selectedPoint.photoDescription}</span>
+                  {/* 작업상태 */}
+                  <div className="mt-1 pt-3" style={{ borderTop: '1px solid rgba(255,255,255,0.2)' }}>
+                    {isAuthenticated ? (
+                      <div className="space-y-2">
+                        <div className="flex gap-2 items-center">
+                          <span className="text-blue-300 text-xs w-16 flex-shrink-0">작업상태</span>
+                          <select
+                            className="flex-1 rounded px-2 py-1.5 text-xs text-white font-bold"
+                            style={{ background: isDone ? 'rgba(255,255,255,0.15)' : 'rgba(235,100,0,0.65)', border: '1px solid rgba(255,255,255,0.3)' }}
+                            value={curStatus}
+                            onChange={(e) => handleSaveStatus(e.target.value, curMemo)}
+                            disabled={savingStatus}>
+                            <option value="" style={{ background: '#1a3a6e' }}></option>
+                            <option value="민원처리완료" style={{ background: '#7a2800' }}>민원처리완료</option>
+                            <option value="기처리" style={{ background: '#7a2800' }}>기처리</option>
+                            <option value="확인불가" style={{ background: '#7a2800' }}>확인불가</option>
+                          </select>
+                        </div>
+                        <div className="flex gap-2 items-start">
+                          <span className="text-blue-300 text-xs w-16 flex-shrink-0 pt-1">작업메모</span>
+                          <textarea
+                            className="flex-1 rounded px-2 py-1.5 text-xs text-white resize-none"
+                            style={{ background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.3)' }}
+                            rows={2}
+                            placeholder="메모 입력..."
+                            defaultValue={curMemo}
+                            onBlur={(e) => { if (e.target.value !== curMemo) handleSaveStatus(curStatus, e.target.value); }}
+                          />
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="space-y-1">
+                        <div className="flex gap-3 items-start">
+                          <span className="text-blue-300 text-xs w-16 flex-shrink-0">작업상태</span>
+                          <span className="text-xs font-bold" style={{ color: '#80cbc4' }}>{curStatus}</span>
+                        </div>
+                        <div className="flex gap-3 items-start">
+                          <span className="text-blue-300 text-xs w-16 flex-shrink-0">작업메모</span>
+                          <span className="text-xs text-white flex-1">{curMemo}</span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 </div>
-              )}
-            </div>
+              );
+            })()}
 
-            {/* 버튼 */}
-            <div className="flex gap-2 mt-5">
+            {/* 티맵 / 네이버지도 버튼 - 맨 아래 */}
+            <div className="flex gap-2 mt-5 pt-4" style={{ borderTop: '1px solid rgba(255,255,255,0.15)' }}>
               <button
                 onClick={() => window.open(`tmap://route?goalname=${encodeURIComponent(selectedPoint.destination || selectedPoint.address)}&goaly=${selectedPoint.lat}&goalx=${selectedPoint.lng}`)}
                 className="flex-1 py-2 rounded text-sm text-white font-bold"
@@ -1702,61 +1765,6 @@ export default function Home() {
                 className="flex-1 py-2 rounded text-sm text-white font-bold"
                 style={{ background: '#1b5e20' }}>네이버지도</button>
             </div>
-
-            {/* 완료상태 입력/표시 */}
-            {(() => {
-              const st = pointStatuses[statusKey(selectedPoint)];
-              const curStatus = st?.status || '';
-              const curMemo = st?.memo || '';
-              const isDone = ['민원처리완료','기처리','확인불가'].includes(curStatus);
-              if (isAuthenticated) {
-                return (
-                  <div className="mt-4 pt-4" style={{ borderTop: '1px solid rgba(255,255,255,0.2)' }}>
-                    <div className="flex gap-2 items-center mb-2">
-                      <span className="text-blue-300 text-xs w-16 flex-shrink-0">작업상태</span>
-                      <select
-                        className="flex-1 rounded px-2 py-1.5 text-xs text-white font-bold"
-                        style={{ background: isDone ? 'rgba(255,255,255,0.15)' : 'rgba(235,100,0,0.65)', border: '1px solid rgba(255,255,255,0.3)' }}
-                        value={curStatus}
-                        onChange={(e) => handleSaveStatus(e.target.value, curMemo)}
-                        disabled={savingStatus}>
-                        <option value="" style={{ background: '#1a3a6e' }}></option>
-                        <option value="민원처리완료" style={{ background: '#7a2800' }}>민원처리완료</option>
-                        <option value="기처리" style={{ background: '#7a2800' }}>기처리</option>
-                        <option value="확인불가" style={{ background: '#7a2800' }}>확인불가</option>
-                      </select>
-                    </div>
-                    <div className="flex gap-2 items-start">
-                      <span className="text-blue-300 text-xs w-16 flex-shrink-0 pt-1">메모</span>
-                      <textarea
-                        className="flex-1 rounded px-2 py-1.5 text-xs text-white resize-none"
-                        style={{ background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.3)' }}
-                        rows={2}
-                        placeholder="메모 입력..."
-                        defaultValue={curMemo}
-                        onBlur={(e) => { if (e.target.value !== curMemo) handleSaveStatus(curStatus, e.target.value); }}
-                      />
-                    </div>
-                  </div>
-                );
-              } else if (curStatus) {
-                return (
-                  <div className="mt-4 pt-4" style={{ borderTop: '1px solid rgba(255,255,255,0.2)' }}>
-                    <div className="flex gap-3 items-start mb-1">
-                      <span className="text-blue-300 text-xs w-16 flex-shrink-0">작업상태</span>
-                      <span className="text-xs font-bold" style={{ color: '#80cbc4' }}>{curStatus}</span>
-                    </div>
-                    {curMemo && (
-                      <div className="flex gap-3 items-start">
-                        <span className="text-blue-300 text-xs w-16 flex-shrink-0">메모</span>
-                        <span className="text-xs text-white">{curMemo}</span>
-                      </div>
-                    )}
-                  </div>
-                );
-              }
-              return null;
-            })()}
           </div>
         </div>
       )}

@@ -102,13 +102,10 @@ export default function MapPage() {
     document.head.appendChild(style);
   }, []);
 
-  // 0. /map 직접 접근 방지 - referrer가 없으면(직접 URL 입력) 메인으로 리다이렉트
+  // 0. /map 직접 접근 방지 - sessionStorage 플래그 없으면 메인으로 리다이렉트
   useEffect(() => {
-    const referrer = document.referrer;
-    const isDirectAccess = !referrer || (!referrer.includes(window.location.hostname) && !referrer.includes('patrol-optimizer'));
-    // localStorage에 지도뷰 진입 플래그가 없으면 직접 접근으로 판단
     const mapEntryFlag = sessionStorage.getItem('map-entry');
-    if (!mapEntryFlag && isDirectAccess) {
+    if (!mapEntryFlag) {
       router.replace('/');
       return;
     }
