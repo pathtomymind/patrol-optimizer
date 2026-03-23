@@ -382,19 +382,65 @@ export default function Home() {
         batches.push(compressedImages.slice(i, i + BATCH_SIZE));
       }
 
-      // 배치 병렬 호출 (배치 시작 인덱스 함께 기록)
-      const batchResults = await Promise.all(
-        batches.map((batch, batchIdx) =>
-          fetch('/api/extract-points', {
+      // 배치 1회 호출 함수 (에러 시 상세 정보 반환)
+      const fetchBatch = async (batch: string[], batchIdx: number, attempt: number) => {
+        const batchStart = performance.now();
+        try {
+          const r = await fetch('/api/extract-points', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ images: batch }),
-          }).then((r) => r.json()).then((data) => ({
-            points: data.points || [],
-            startIdx: batchIdx * BATCH_SIZE,
-          }))
-        )
+          });
+          const data = await r.json();
+          const batchElapsed = Math.round(performance.now() - batchStart);
+          if (!r.ok) {
+            console.error(`❌ 배치 ${batchIdx + 1} 실패 (시도${attempt}, ${batchElapsed}ms) | HTTP ${r.status} | errorType: ${data.errorType} | ${data.message}`);
+            return { points: [], startIdx: batchIdx * BATCH_SIZE, failed: true, errorType: data.errorType, httpStatus: r.status, elapsed: batchElapsed, attempt };
+          }
+          console.log(`✅ 배치 ${batchIdx + 1} 완료 (시도${attempt}, ${batchElapsed}ms) | ${batch.length}장 → ${data.points?.length ?? 0}개 추출`);
+          return { points: data.points || [], startIdx: batchIdx * BATCH_SIZE, failed: false, elapsed: batchElapsed, attempt };
+        } catch (e: any) {
+          const batchElapsed = Math.round(performance.now() - batchStart);
+          console.error(`❌ 배치 ${batchIdx + 1} 예외 (시도${attempt}, ${batchElapsed}ms) | ${e?.message || e}`);
+          return { points: [], startIdx: batchIdx * BATCH_SIZE, failed: true, errorType: 'NETWORK_ERROR', elapsed: batchElapsed, attempt };
+        }
+      };
+
+      // 배치 병렬 호출 + 실패 시 1회 재시도
+      const batchResults = await Promise.all(
+        batches.map(async (batch, batchIdx) => {
+          const result = await fetchBatch(batch, batchIdx, 1);
+          if (result.failed) {
+            console.warn(`🔄 배치 ${batchIdx + 1} 재시도 중... (errorType: ${result.errorType})`);
+            await new Promise(resolve => setTimeout(resolve, 2000));
+            return fetchBatch(batch, batchIdx, 2);
+          }
+          return result;
+        })
       );
+
+      // 실패한 배치 집계 → 사용자에게 경고
+      const failedBatches = batchResults.filter(r => r.failed);
+      if (failedBatches.length > 0) {
+        const failedImageRanges = failedBatches.map(r => {
+          const start = batchResults.indexOf(r) * BATCH_SIZE + 1;
+          const end = Math.min(start + BATCH_SIZE - 1, compressedImages.length);
+          return `${start}~${end}번`;
+        }).join(', ');
+        const errorTypes = [...new Set(failedBatches.map(r => r.errorType))].join(', ');
+        alert(`⚠️ 일부 이미지 추출 실패
+
+실패 범위: ${failedImageRanges} 이미지
+원인: ${
+          errorTypes === 'TIMEOUT' ? '응답 시간 초과 (네트워크 불안정 또는 AI 서버 과부하)' :
+          errorTypes === 'RATE_LIMIT' ? 'AI API 요청 한도 초과' :
+          errorTypes === 'API_OVERLOAD' ? 'AI 서버 일시적 과부하' :
+          errorTypes === 'NETWORK_ERROR' ? '네트워크 연결 오류' :
+          `오류 코드: ${errorTypes}`
+        }
+
+추출된 지점만 표시됩니다. 잠시 후 다시 시도해보세요.`);
+      }
 
       // 결과 합치기 (각 지점에 원본 이미지 인덱스 포함)
       const allPoints = batchResults.flatMap(({ points, startIdx }) =>

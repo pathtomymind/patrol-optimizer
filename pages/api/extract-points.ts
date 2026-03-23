@@ -21,6 +21,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
 
+  // ── 진단용 메타 정보 ──────────────────────────────────────
+  const requestId = `req-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+  const imageCount = images.length;
+  const totalImageBytes = images.reduce((sum: number, img: string) => sum + img.length, 0);
+  const startTime = Date.now();
+
+  console.log(`[extract-points][${requestId}] 시작 | 이미지 수: ${imageCount}장 | 총 크기: ${(totalImageBytes / 1024).toFixed(0)}KB`);
+
   const imageContents = images.map((image: string) => {
     const base64Data = image.replace(/^data:image\/\w+;base64,/, '');
     const mediaType = image.match(/^data:(image\/\w+);base64,/)?.[1] || 'image/jpeg';
@@ -57,47 +65,131 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 ]`;
 
+  // ── Claude API 호출 (타임아웃 55초) ───────────────────────
+  const TIMEOUT_MS = 55000;
+  const controller = new AbortController();
+  const timeoutTimer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+
   try {
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': ANTHROPIC_API_KEY!,
-        'anthropic-version': '2023-06-01',
-      },
-      body: JSON.stringify({
-        model: 'claude-sonnet-4-6',  /* model: 'claude-haiku-4-5-20251001', */  /* model: 'claude-opus-4-5', */
-        max_tokens: 4096,
-        temperature: 0,
-        messages: [
-          {
-            role: 'user',
-            content: [
-              ...imageContents,
-              { type: 'text', text: prompt },
-            ],
-          },
-        ],
-      }),
-    });
+    console.log(`[extract-points][${requestId}] Claude API 호출 시작`);
+
+    let response: Response;
+    try {
+      response = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': ANTHROPIC_API_KEY!,
+          'anthropic-version': '2023-06-01',
+        },
+        body: JSON.stringify({
+          model: 'claude-sonnet-4-6',
+          max_tokens: 4096,
+          temperature: 0,
+          messages: [
+            {
+              role: 'user',
+              content: [
+                ...imageContents,
+                { type: 'text', text: prompt },
+              ],
+            },
+          ],
+        }),
+        signal: controller.signal,
+      });
+    } catch (fetchErr: any) {
+      const elapsed = Date.now() - startTime;
+      // 타임아웃 vs 네트워크 오류 구분
+      if (fetchErr?.name === 'AbortError') {
+        console.error(`[extract-points][${requestId}] ⏱️ 타임아웃 (${elapsed}ms) | 이미지 ${imageCount}장 | Claude API 응답 없음`);
+        return res.status(504).json({
+          message: `AI 응답 시간 초과 (${Math.round(elapsed/1000)}초). 네트워크가 불안정하거나 Claude API가 과부하 상태일 수 있습니다.`,
+          errorType: 'TIMEOUT',
+          elapsed,
+          imageCount,
+        });
+      }
+      console.error(`[extract-points][${requestId}] 🔴 네트워크 오류 (${elapsed}ms) | ${fetchErr?.message || fetchErr}`);
+      return res.status(503).json({
+        message: '네트워크 오류로 AI 서버에 연결할 수 없습니다.',
+        errorType: 'NETWORK_ERROR',
+        elapsed,
+        imageCount,
+      });
+    } finally {
+      clearTimeout(timeoutTimer);
+    }
+
+    const elapsed = Date.now() - startTime;
+
+    // HTTP 상태 코드 로깅
+    if (!response.ok) {
+      const errBody = await response.text().catch(() => '(본문 없음)');
+      console.error(`[extract-points][${requestId}] 🔴 Claude API HTTP ${response.status} (${elapsed}ms) | 이미지 ${imageCount}장 | 응답: ${errBody.slice(0, 300)}`);
+
+      // 429: 과부하/속도제한
+      if (response.status === 429) {
+        return res.status(429).json({
+          message: 'Claude API 요청 한도 초과 (과부하). 잠시 후 다시 시도해주세요.',
+          errorType: 'RATE_LIMIT',
+          elapsed,
+          imageCount,
+        });
+      }
+      // 529: Anthropic 서버 과부하
+      if (response.status === 529) {
+        return res.status(503).json({
+          message: 'Claude API 서버가 일시적으로 과부하 상태입니다. 잠시 후 다시 시도해주세요.',
+          errorType: 'API_OVERLOAD',
+          elapsed,
+          imageCount,
+        });
+      }
+      return res.status(502).json({
+        message: `AI 서버 오류 (HTTP ${response.status})`,
+        errorType: 'API_ERROR',
+        httpStatus: response.status,
+        elapsed,
+        imageCount,
+      });
+    }
 
     const data = await response.json();
-    console.log('Claude 응답:', JSON.stringify(data, null, 2));
-
     const text = data.content?.[0]?.text || '';
 
     // JSON 배열 부분만 추출
     const jsonMatch = text.match(/\[[\s\S]*\]/);
     if (!jsonMatch) {
-      console.error('JSON 배열을 찾을 수 없음:', text);
-      return res.status(500).json({ message: 'AI 응답에서 지점정보를 찾을 수 없습니다.' });
+      console.error(`[extract-points][${requestId}] ⚠️ JSON 파싱 실패 (${elapsed}ms) | 이미지 ${imageCount}장 | 응답 앞부분: ${text.slice(0, 200)}`);
+      return res.status(500).json({
+        message: 'AI 응답에서 지점정보를 찾을 수 없습니다.',
+        errorType: 'PARSE_ERROR',
+        elapsed,
+        imageCount,
+      });
     }
 
     const points = JSON.parse(jsonMatch[0]);
-    return res.status(200).json({ points });
 
-  } catch (error) {
-    console.error('Claude API error:', error);
-    return res.status(500).json({ message: 'AI 추출 중 오류가 발생했습니다.' });
+    console.log(`[extract-points][${requestId}] ✅ 완료 | 소요: ${elapsed}ms | 이미지 ${imageCount}장 → 지점 ${points.length}개 추출`);
+
+    // 이미지 대비 추출 지점 수가 비정상적으로 적으면 경고 로그
+    if (points.length < imageCount * 2) {
+      console.warn(`[extract-points][${requestId}] ⚠️ 추출 지점 수 적음 | 이미지 ${imageCount}장 → 지점 ${points.length}개 (기대: ${imageCount * 2}개 이상)`);
+    }
+
+    return res.status(200).json({ points, elapsed, imageCount });
+
+  } catch (error: any) {
+    clearTimeout(timeoutTimer);
+    const elapsed = Date.now() - startTime;
+    console.error(`[extract-points][${requestId}] 🔴 예외 발생 (${elapsed}ms) | ${error?.message || error}`);
+    return res.status(500).json({
+      message: 'AI 추출 중 오류가 발생했습니다.',
+      errorType: 'UNKNOWN',
+      elapsed,
+      imageCount,
+    });
   }
 }
