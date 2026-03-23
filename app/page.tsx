@@ -1,131 +1,304 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState, useEffect } from 'react';
 
-type RoutePoint = {
-  order: number;
-  address: string;
-  destination: string | null;
-  complaint: string;
-  lat: number;
-  lng: number;
-  placeName: string | null;
-  source: string | null;
-  originalId?: number | null;
-  photoDescription?: string | null;
-  photoUrl?: string | null;
-  manager?: string | null;
+const dummyRoute = {
+  version: '2026-03-01 버전1',
+  points: [
+    { id: 1, address: '녹양동 산104 (가금교 삼거리)', complaint: '분양 현수막' },
+    { id: 2, address: '가능동 663-9 (백정밥상)', complaint: '푸르넷 광고 벽보' },
+    { id: 3, address: '가능동 663-21 (세븐일레븐 의정부)', complaint: '광고 벽보' },
+    { id: 4, address: '태평로 132 (화순식당)', complaint: '에어라이트' },
+    { id: 5, address: '산곡동 730 (고산수자인 정문)', complaint: '광고 현수막' },
+  ],
 };
 
-type PointStatus = {
-  status: string;
-  memo: string;
-  updatedAt: number;
-};
-
-const DONE_STATUSES = ['민원처리완료', '기처리', '확인불가'];
-const ZOOM_THRESHOLD = 14;
-const PULSE_THRESHOLD = 14; // 롱프레스 깜박임과 동일한 레벨 // 이 줌 이상부터 펄스 + 클릭 팝업 활성화 (휠 약 2번)
-
-// ★ 펄스 애니메이션 CSS (전역 style 태그로 삽입)
-const PULSE_STYLE = `
-@keyframes marker-pulse {
-  0%   { transform: scale(1);   opacity: 0.8; }
-  70%  { transform: scale(2.2); opacity: 0; }
-  100% { transform: scale(2.2); opacity: 0; }
-}
-.pulse-ring {
-  position: absolute;
-  top: 50%; left: 50%;
-  width: 28px; height: 28px;
-  margin-left: -14px; margin-top: -14px;
-  border-radius: 50%;
-  animation: marker-pulse 1.8s ease-out infinite;
-  pointer-events: none;
-}
-`;
-
-export default function MapPage() {
-  const router = useRouter();
-  const mapRef = useRef<HTMLDivElement>(null);
-  const naverMapRef = useRef<naver.maps.Map | null>(null);
-  const markersRef = useRef<naver.maps.Marker[]>([]);
-  const polylinesRef = useRef<naver.maps.Polyline[]>([]);
-  const arrowMarkersRef = useRef<naver.maps.Marker[]>([]);
-  const polygonsRef = useRef<naver.maps.Polygon[]>([]);
-  const labelsRef = useRef<naver.maps.Marker[]>([]);
-  const currentZoomRef = useRef<number>(13);
-
-  const [route, setRoute] = useState<{ date: string; version: number; points: RoutePoint[] } | null>(null);
-  const routeRef = useRef<{ date: string; version: number; points: RoutePoint[] } | null>(null);
-  const [statuses, setStatuses] = useState<Record<string, PointStatus>>({});
-  const statusesRef = useRef<Record<string, PointStatus>>({});
-  const [isLoading, setIsLoading] = useState(true);
-  const [mapReady, setMapReady] = useState(false);
-  const [routeDrawn, setRouteDrawn] = useState(false);
-  const [lineMode, setLineMode] = useState<'straight' | 'road'>('straight');
-  const lineModeRef = useRef<'straight' | 'road'>('straight');
-  const [osrmError, setOsrmError] = useState(false);
-  const [roadLoading, setRoadLoading] = useState(false);
-  const [newRouteAvailable, setNewRouteAvailable] = useState(false);
-  const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const blinkIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const blinkRestoreRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const blinkPolylineRef = useRef<any>(null);
-  const blinkArrowsRef = useRef<any[]>([]);
-  const blinkOriginalPolylineRef = useRef<any>(null);
-  const [isAdmin, setIsAdmin] = useState(false);
-  const [editStatus, setEditStatus] = useState('');
-  const [editMemo, setEditMemo] = useState('');
+export default function Home() {
+  const [activeTab, setActiveTab] = useState<'view' | 'input'>('view');
+  const [cardListOpen, setCardListOpen] = useState(true);
+  const [uploadOpen, setUploadOpen] = useState(true);
+  const [directOpen, setDirectOpen] = useState(false);
+  // 직접 입력 지점
+  const [directPoints, setDirectPoints] = useState<{
+    id: number; address: string; destination: string; complaint: string; manager: string; photoUrl: string;
+    lat?: number | null; lng?: number | null; placeName?: string | null; source?: string | null;
+  }[]>([]);
+  const [showDirectModal, setShowDirectModal] = useState(false);
+  const [editingPoint, setEditingPoint] = useState<{
+    id: number; address: string; destination: string; complaint: string; manager: string; photoUrl: string;
+  } | null>(null);
+  const [directForm, setDirectForm] = useState({ address: '', destination: '', complaint: '', manager: '', photoUrl: '' });
+  const [directCoordStatus, setDirectCoordStatus] = useState<'idle' | 'loading' | 'success' | 'fail'>('idle');
+  const [directCoord, setDirectCoord] = useState<{ lat: number | null; lng: number | null; placeName: string | null; source: string | null }>({ lat: null, lng: null, placeName: null, source: null });
+  // 지점 상세정보 팝업
+  const [showDetailModal, setShowDetailModal] = useState(false);
+  const [selectedPoint, setSelectedPoint] = useState<{
+    order: number; originalId?: number | null; address: string; destination: string | null; complaint: string;
+    lat: number; lng: number; placeName: string | null; source: string | null;
+    photoDescription?: string | null; photoUrl?: string | null; manager?: string | null;
+  } | null>(null);
+  // 완료상태
+  const [pointStatuses, setPointStatuses] = useState<Record<string, { status: string; memo: string; updatedAt: number }>>({});
   const [savingStatus, setSavingStatus] = useState(false);
 
-  // ★ 팝업 상태
-  const [selectedPoint, setSelectedPoint] = useState<RoutePoint | null>(null);
-  const [showDetailModal, setShowDetailModal] = useState(false);
+  // 추출지점 수정 모달
+  const [showExtractEditModal, setShowExtractEditModal] = useState(false);
+  const [extractEditTarget, setExtractEditTarget] = useState<{
+    id: number; address: string; destination?: string | null; complaint: string;
+    lat?: number | null; lng?: number | null; placeName?: string | null;
+    source?: string | null; photoUrl?: string | null; photoDescription?: string | null;
+  } | null>(null);
+  const [extractEditForm, setExtractEditForm] = useState({
+    address: '', destination: '', complaint: '', manager: '', photoUrl: '',
+  });
+  const [extractEditCoordStatus, setExtractEditCoordStatus] = useState<'idle' | 'loading' | 'success' | 'fail'>('idle');
+  const [extractEditCoord, setExtractEditCoord] = useState<{
+    lat: number | null; lng: number | null; placeName: string | null; source: string | null;
+  }>({ lat: null, lng: null, placeName: null, source: null });
 
-  const statusKey = (point: RoutePoint) => {
+  const handleDirectAdd = () => {
+    setEditingPoint(null);
+    setDirectForm({ address: '', destination: '', complaint: '', manager: '', photoUrl: '' });
+    setDirectCoordStatus('idle');
+    setDirectCoord({ lat: null, lng: null, placeName: null, source: null });
+    setShowDirectModal(true);
+  };
+
+  const handleDirectEdit = (point: { id: number; address: string; destination: string; complaint: string; manager: string; photoUrl: string; lat?: number | null; lng?: number | null; placeName?: string | null; source?: string | null }) => {
+    setEditingPoint(point);
+    setDirectForm({ address: point.address, destination: point.destination, complaint: point.complaint, manager: point.manager, photoUrl: point.photoUrl || '' });
+    setDirectCoordStatus(point.lat ? 'success' : 'idle');
+    setDirectCoord({ lat: point.lat || null, lng: point.lng || null, placeName: point.placeName || null, source: point.source || null });
+    setShowDirectModal(true);
+  };
+
+  const handleDirectDelete = async (id: number) => {
+    if (deletingId !== null) return;
+    setDeletingId(id);
+    const point = directPoints.find((p) => p.id === id);
+    if (point?.photoUrl && point.photoUrl.startsWith('https://')) {
+      try { await fetch('/api/delete-blob', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url: point.photoUrl }) }); } catch (e) { console.error('Blob 삭제 오류:', e); }
+    }
+    const updated = directPoints.filter((p) => p.id !== id);
+    setDirectPoints(updated);
+    const draft = JSON.parse(localStorage.getItem('draft-route') || '{}');
+    draft.directPoints = updated;
+    draft.lastModified = Date.now();
+    localStorage.setItem('draft-route', JSON.stringify(draft));
+    setDeletingId(null);
+  };
+
+  const handleDirectSave = async () => {
+    if (isSaving) return;
+    setIsSaving(true);
+    const coordData = directCoordStatus === 'success' ? { lat: directCoord.lat, lng: directCoord.lng, placeName: directCoord.placeName, source: directCoord.source } : { lat: null, lng: null, placeName: null, source: null };
+
+    // 현장사진 Blob 업로드 (로컬 URL인 경우만)
+    let photoUrl = directForm.photoUrl;
+    if (photoUrl && photoUrl.startsWith('blob:')) {
+      try {
+        const res = await fetch(photoUrl);
+        const blob = await res.blob();
+        const reader = new FileReader();
+        const base64 = await new Promise<string>((resolve) => {
+          reader.onload = () => resolve((reader.result as string));
+          reader.readAsDataURL(blob);
+        });
+        const uploadRes = await fetch('/api/upload-photo', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            imageData: base64,
+            filename: `direct-${Date.now()}.jpg`,
+          }),
+        });
+        if (uploadRes.ok) {
+          const uploadData = await uploadRes.json();
+          photoUrl = uploadData.url;
+        }
+      } catch (e) {
+        console.error('직접입력 사진 업로드 오류:', e);
+      }
+    }
+
+    let updatedPoints;
+    if (editingPoint) {
+      updatedPoints = directPoints.map((p) =>
+        p.id === editingPoint.id ? { ...p, ...directForm, photoUrl, ...coordData } : p
+      );
+    } else {
+      updatedPoints = [...directPoints, { id: Date.now(), ...directForm, photoUrl, ...coordData }];
+    }
+    setDirectPoints(updatedPoints);
+    const draft = JSON.parse(localStorage.getItem('draft-route') || '{}');
+    draft.directPoints = updatedPoints;
+    draft.lastModified = Date.now();
+    localStorage.setItem('draft-route', JSON.stringify(draft));
+    setIsSaving(false);
+    setShowDirectModal(false);
+  };
+
+  // 관리자 인증
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [showAuthModal, setShowAuthModal] = useState(false);
+  const [password, setPassword] = useState('');
+  const [authError, setAuthError] = useState('');
+
+  // 이미지 업로드
+  const [uploadedImages, setUploadedImages] = useState<{ id: number; url: string; name: string }[]>([]);
+  const [extractedPoints, setExtractedPoints] = useState<{ 
+    id: number; address: string; destination?: string | null; complaint: string;
+    lat?: number | null; lng?: number | null; placeName?: string | null;
+    source?: string | null; photoDescription?: string | null; photoUrl?: string | null;
+    photoCrop?: { x: number; y: number; w: number; h: number } | null;
+  }[]>([]);
+
+  const handleInputTabClick = () => {
+    if (isAuthenticated) {
+      setActiveTab('input');
+    } else {
+      setShowAuthModal(true);
+    }
+  };
+
+  const handleViewTabClick = () => {
+    setActiveTab('view');
+    loadCurrentRoute();
+  };
+
+  useEffect(() => { loadCurrentRoute(); }, []);
+
+  // 완료상태 로드
+  const loadStatuses = async (date: string) => {
+    try {
+      const res = await fetch(`/api/get-status?date=${date}`);
+      if (res.ok) {
+        const data = await res.json();
+        setPointStatuses(data.statuses || {});
+      }
+    } catch {}
+  };
+
+  // 완료상태 키 생성 헬퍼
+  const statusKey = (point: { address: string; complaint: string; originalId?: number | null; destination?: string | null }) => {
+    // address가 비어있으면 destination을 대신 사용
     const addrPart = point.address?.trim() || point.destination?.trim() || '';
+    // complaint가 null/undefined이면 빈 문자열로 통일
     const complaintPart = point.complaint?.trim() ?? '';
     return `${addrPart}:${complaintPart}:${point.originalId ?? 'none'}`;
   };
 
-  // ★ 펄스 CSS 삽입
-  useEffect(() => {
-    if (document.getElementById('pulse-style')) return;
-    const style = document.createElement('style');
-    style.id = 'pulse-style';
-    style.textContent = PULSE_STYLE;
-    document.head.appendChild(style);
-  }, []);
+  // 완료상태 저장
+  const handleSaveStatus = async (status: string, memo: string) => {
+    if (!selectedPoint || !currentRoute) return;
+    setSavingStatus(true);
+    try {
+      await fetch('/api/save-status', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          date: currentRoute.date,
+          address: selectedPoint.address,
+          destination: selectedPoint.destination,
+          complaint: selectedPoint.complaint?.trim() ?? '',
+          originalId: selectedPoint.originalId ?? null,
+          status,
+          memo,
+        }),
+      });
+      // 로컬 state 즉시 반영
+      setPointStatuses((prev) => ({
+        ...prev,
+        [statusKey(selectedPoint)]: { status, memo, updatedAt: Date.now() },
+      }));
+    } catch {}
+    setSavingStatus(false);
+  };
 
-  // 1. 경로 + 상태 로드
-  useEffect(() => {
-    const load = async () => {
-      try {
-        const today = new Date().toLocaleDateString('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/\. /g, '-').replace('.', '');
-        const routeRes = await fetch(`/api/get-route?date=${today}`);
-        if (!routeRes.ok) return;
-        const routeData = await routeRes.json();
-        routeRef.current = routeData;
-        setRoute(routeData);
-
-        const statusRes = await fetch(`/api/get-status?date=${routeData.date}`);
-        if (statusRes.ok) {
-          const statusData = await statusRes.json();
-          statusesRef.current = statusData.statuses || {};
-          setStatuses(statusData.statuses || {});
+  const handleAuth = async () => {
+    try {
+      const res = await fetch('/api/auth', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password }),
+      });
+      if (res.ok) {
+        setIsAuthenticated(true);
+        localStorage.setItem('patrol-admin-auth', 'true');
+        setShowAuthModal(false);
+        setPassword('');
+        setAuthError('');
+        // draft-route 복원 확인
+        try {
+          const draft = JSON.parse(localStorage.getItem('draft-route') || '{}');
+          const today = new Date().toLocaleDateString('ko-KR');
+          const draftDate = draft.lastModified ? new Date(draft.lastModified).toLocaleDateString('ko-KR') : null;
+          const hasData = (draft.extractedPoints?.length > 0) || (draft.directPoints?.length > 0);
+          if (hasData && draftDate === today) {
+            setPendingDraft(draft);
+            setShowDraftRestoreModal(true);
+          } else {
+            if (draftDate !== today) {
+              localStorage.removeItem('draft-route');
+              setExtractedPoints([]);
+              setDirectPoints([]);
+            }
+            setActiveTab('input');
+          }
+        } catch {
+          setActiveTab('input');
         }
-      } catch (e) {
-        console.error(e);
-      } finally {
-        setIsLoading(false);
+      } else {
+        setAuthError('비밀번호가 올바르지 않습니다.');
       }
-    };
-    load();
-  }, []);
+    } catch {
+      setAuthError('서버 오류가 발생했습니다.');
+    }
+  };
 
-  // 1-1. 경로 버전 폴링 (30초마다 새 버전 체크)
+  const handleAuthClose = () => {
+    setShowAuthModal(false);
+    setPassword('');
+    setAuthError('');
+  };
+
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files) return;
+    const newImages = Array.from(files).map((file, idx) => ({
+      id: Date.now() + idx,
+      url: URL.createObjectURL(file),
+      name: file.name,
+    }));
+    setUploadedImages((prev) => [...prev, ...newImages]);
+    e.target.value = '';
+  };
+
+  const handleImageDelete = (id: number) => {
+    setUploadedImages((prev) => prev.filter((img) => img.id !== id));
+  };
+
+  const [isExtracting, setIsExtracting] = useState(false);
+  const [deletingId, setDeletingId] = useState<number | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
+  const [isResetting, setIsResetting] = useState(false);
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [currentRoute, setCurrentRoute] = useState<{
+    date: string; version: number; createdAt: number;
+    points: { order: number; originalId?: number | null; address: string; destination: string | null; complaint: string; lat: number; lng: number; placeName: string | null; source: string | null; photoDescription?: string | null; photoUrl?: string | null; manager?: string | null; }[];
+  } | null>(null);
+  const [isLoadingRoute, setIsLoadingRoute] = useState(false);
+  const [showDraftRestoreModal, setShowDraftRestoreModal] = useState(false);
+  const [pendingDraft, setPendingDraft] = useState<{ extractedPoints: any[]; directPoints: any[]; lastModified: number } | null>(null);
+  // 완료상태 폴링 (18초)
+  useEffect(() => {
+    if (!currentRoute) return;
+    loadStatuses(currentRoute.date);
+    const timer = setInterval(() => loadStatuses(currentRoute.date), 18000);
+    return () => clearInterval(timer);
+  }, [currentRoute?.date]);
+
+  // 경로 버전 폴링 (30초마다 새 버전 자동 반영)
   useEffect(() => {
     const checkNewRoute = async () => {
       try {
@@ -133,1084 +306,1460 @@ export default function MapPage() {
         const res = await fetch(`/api/get-route?date=${today}`);
         if (!res.ok) return;
         const data = await res.json();
-        const currentVersion = routeRef.current?.version ?? -1;
+        const currentVersion = currentRoute?.version ?? -1;
         if (data.version > currentVersion) {
-          setNewRouteAvailable(true);
+          setCurrentRoute(data);
+          loadStatuses(data.date);
         }
       } catch {}
     };
     const timer = setInterval(checkNewRoute, 30000);
     return () => clearInterval(timer);
-  }, []);
+  }, [currentRoute?.version]);
 
-  // 2. 네이버 지도 SDK 로드
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    if ((window as any).naver?.maps) {
-      setMapReady(true);
+  const cropImage = (dataUrl: string, x: number, y: number, w: number, h: number): Promise<string> => {
+    return new Promise((resolve) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        const sw = img.width * w;
+        const sh = img.height * h;
+        canvas.width = sw;
+        canvas.height = sh;
+        const ctx = canvas.getContext('2d')!;
+        ctx.drawImage(img, img.width * x, img.height * y, sw, sh, 0, 0, sw, sh);
+        resolve(canvas.toDataURL('image/jpeg', 0.85));
+      };
+      img.src = dataUrl;
+    });
+  };
+
+  const handleExtract = async () => {
+    if (uploadedImages.length === 0) {
+      alert('이미지를 먼저 업로드해주세요.');
       return;
     }
-    const script = document.createElement('script');
-    const clientId = process.env.NEXT_PUBLIC_NAVER_CLIENT_ID;
-    script.src = `https://oapi.map.naver.com/openapi/v3/maps.js?ncpKeyId=${clientId}&submodules=geocoder`;
-    script.async = true;
-    script.onload = () => setMapReady(true);
-    document.head.appendChild(script);
-  }, []);
 
-  // 3. 지도 초기화
-  useEffect(() => {
-    if (!mapReady || !mapRef.current || naverMapRef.current) return;
-    const map = new (window as any).naver.maps.Map(mapRef.current, {
-      center: new (window as any).naver.maps.LatLng(37.7381, 127.0338),
-      zoom: 13,
-      mapTypeId: (window as any).naver.maps.MapTypeId.NORMAL,
-    });
-    naverMapRef.current = map;
-
-    loadGeoJson(map);
-
-    (window as any).naver.maps.Event.addListener(map, 'zoom_changed', (zoom: number) => {
-      currentZoomRef.current = zoom;
-      applyZoomVisibility(zoom);
-    });
-  }, [mapReady]);
-
-  // 4. 경로 + 지도 모두 준비되면 그리기
-  useEffect(() => {
-    if (!naverMapRef.current || !route || routeDrawn) return;
-    drawRoute();
-    setRouteDrawn(true);
-  }, [naverMapRef.current, route, mapReady]);
-
-  // 5. 상태 변경시 마커 색상 업데이트
-  useEffect(() => {
-    if (!routeDrawn) return;
-    updateMarkerColors();
-  }, [statuses, routeDrawn]);
-
-  // 5-2. 마운트 시 admin 인증 상태 확인
-  useEffect(() => {
-    const adminAuth = localStorage.getItem('patrol-admin-auth');
-    if (adminAuth === 'true') setIsAdmin(true);
-  }, []);
-
-  // 6. lineMode 변경시 경로선 재그리기 + localStorage 저장
-  useEffect(() => {
-    localStorage.setItem('patrol-linemode', lineMode);
-    if (!routeDrawn) return;
-    lineModeRef.current = lineMode;
-    redrawLines();
-  }, [lineMode]);
-
-  const applyZoomVisibility = (zoom: number) => {
-    const showMarkers = zoom >= ZOOM_THRESHOLD;
-    const showPulse = zoom >= PULSE_THRESHOLD;
-    const showLabels = zoom < ZOOM_THRESHOLD;
-
-    // 마커 표시/숨김 + 펄스 ON/OFF 재렌더링 (routeRef로 클로저 문제 회피)
-    const currentRoute = routeRef.current;
-    if (currentRoute) {
-      currentRoute.points.forEach((point, idx) => {
-        const marker = markersRef.current[idx];
-        if (!marker) return;
-        const color = getMarkerColor(point);
-        marker.setIcon({
-          content: makeMarkerContent(point, color, showPulse),
-          anchor: (window as any).naver.maps.Point ? new (window as any).naver.maps.Point(14, 14) : undefined,
-        });
-        marker.setMap(showMarkers ? naverMapRef.current : null);
-      });
-    } else {
-      markersRef.current.forEach(marker => {
-        marker.setMap(showMarkers ? naverMapRef.current : null);
-      });
-    }
-
-    labelsRef.current.forEach(label => {
-      label.setMap(showLabels ? naverMapRef.current : null);
-    });
-
-    // 펄스 활성화 시 DOM 반영 후 애니메이션 시작
-    if (showPulse) {
-      setTimeout(() => startPulseAnimations(), 300);
-    }
-  };
-
-  const loadGeoJson = async (map: naver.maps.Map) => {
+    setIsExtracting(true);
+    const startTime = performance.now();
     try {
-      const res = await fetch('/uijeongbu.geojson');
-      const geoJson = await res.json();
-      const naver = (window as any).naver;
-
-      geoJson.features.forEach((feature: any) => {
-        const coords = feature.geometry.type === 'MultiPolygon'
-          ? feature.geometry.coordinates
-          : [feature.geometry.coordinates];
-
-        coords.forEach((polygon: any) => {
-          polygon.forEach((ring: any) => {
-            const path = ring.map((c: number[]) =>
-              new naver.maps.LatLng(c[1], c[0])
-            );
-            new naver.maps.Polygon({
-              map,
-              paths: [path],
-              fillColor: 'rgba(100,180,255,0.05)',
-              fillOpacity: 1,
-              strokeColor: 'rgba(100,180,255,0.5)',
-              strokeWeight: 1.5,
-              strokeOpacity: 1,
-            });
-          });
+      // 이미지 압축 함수
+      const compressImage = (blob: Blob): Promise<string> => {
+        return new Promise((resolve) => {
+          const img = new Image();
+          const url = URL.createObjectURL(blob);
+          img.onload = () => {
+            const canvas = document.createElement('canvas');
+            const maxSize = 1024;
+            let w = img.width;
+            let h = img.height;
+            if (w > maxSize || h > maxSize) {
+              if (w > h) { h = Math.round(h * maxSize / w); w = maxSize; }
+              else { w = Math.round(w * maxSize / h); h = maxSize; }
+            }
+            canvas.width = w;
+            canvas.height = h;
+            const ctx = canvas.getContext('2d')!;
+            ctx.drawImage(img, 0, 0, w, h);
+            URL.revokeObjectURL(url);
+            resolve(canvas.toDataURL('image/jpeg', 0.7));
+          };
+          img.src = url;
         });
-
-        if (feature.geometry.type === 'Polygon' || feature.geometry.type === 'MultiPolygon') {
-          const nm: string = feature.properties.adm_nm || '';
-          const shortNm = nm.replace('경기도 의정부시 ', '');
-          const coords0 = feature.geometry.type === 'MultiPolygon'
-            ? feature.geometry.coordinates[0][0]
-            : feature.geometry.coordinates[0];
-          let sumLat = 0, sumLng = 0;
-          coords0.forEach((c: number[]) => { sumLng += c[0]; sumLat += c[1]; });
-          const centerLat = sumLat / coords0.length;
-          const centerLng = sumLng / coords0.length;
-
-          const label = new naver.maps.Marker({
-            map,
-            position: new naver.maps.LatLng(centerLat, centerLng),
-            icon: {
-              content: `<div style="color:rgba(180,220,255,0.9);font-size:13px;font-weight:bold;white-space:nowrap;text-shadow:0 1px 3px #000,0 0 8px rgba(0,0,0,0.8);">${shortNm}</div>`,
-              anchor: new naver.maps.Point(0, 0),
-            },
-            zIndex: 1,
-          });
-          labelsRef.current.push(label);
-        }
-      });
-    } catch (e) {
-      console.error('GeoJSON 로드 실패:', e);
-    }
-  };
-
-  const getMarkerColor = (point: RoutePoint) => {
-    if (point.source === 'fixed') return '#f57f17';
-    const st = statusesRef.current[statusKey(point)];
-    if (st && DONE_STATUSES.includes(st.status)) return '#1565c0';
-    return '#FF6B35';
-  };
-
-  const getLineColor = (_fromPoint: RoutePoint, toPoint: RoutePoint) => {
-    const toSt = statusesRef.current[statusKey(toPoint)];
-    return toSt && DONE_STATUSES.includes(toSt.status) ? '#1565c0' : '#FF6B35';
-  };
-
-  // ★ 마커 콘텐츠 - showPulse: JS 인라인 애니메이션으로 펄스 구현
-  const makeMarkerContent = (point: RoutePoint, color: string, showPulse = false) => {
-    const label = point.source === 'fixed' ? '🏛' : String(point.order);
-    const isFixed = point.source === 'fixed';
-    const pulseColor = color === '#1565c0'
-      ? 'rgba(21,101,192,0.6)'
-      : color === '#f57f17'
-      ? 'rgba(245,127,23,0.6)'
-      : 'rgba(255,107,53,0.6)';
-    // data-pulse 속성으로 마커 식별 후 외부에서 JS 애니메이션 적용
-    const pulseId = `pulse-${point.order}-${point.lat}`.replace(/\./g, '_');
-    const pulseDiv = showPulse ? `
-      <div data-pulse="${pulseId}-0" data-delay="0" style="position:absolute;top:50%;left:50%;width:28px;height:28px;margin-left:-14px;margin-top:-14px;border-radius:50%;border:2px solid ${pulseColor};background:transparent;pointer-events:none;will-change:transform,opacity;transform-origin:center center;"></div>
-      <div data-pulse="${pulseId}-1" data-delay="333" style="position:absolute;top:50%;left:50%;width:28px;height:28px;margin-left:-14px;margin-top:-14px;border-radius:50%;border:2px solid ${pulseColor};background:transparent;pointer-events:none;will-change:transform,opacity;transform-origin:center center;"></div>
-      <div data-pulse="${pulseId}-2" data-delay="666" style="position:absolute;top:50%;left:50%;width:28px;height:28px;margin-left:-14px;margin-top:-14px;border-radius:50%;border:2px solid ${pulseColor};background:transparent;pointer-events:none;will-change:transform,opacity;transform-origin:center center;"></div>
-      <div data-pulse="${pulseId}-3" data-delay="999" style="position:absolute;top:50%;left:50%;width:28px;height:28px;margin-left:-14px;margin-top:-14px;border-radius:50%;border:2px solid ${pulseColor};background:transparent;pointer-events:none;will-change:transform,opacity;transform-origin:center center;"></div>
-      <div data-pulse="${pulseId}-4" data-delay="1332" style="position:absolute;top:50%;left:50%;width:28px;height:28px;margin-left:-14px;margin-top:-14px;border-radius:50%;border:2px solid ${pulseColor};background:transparent;pointer-events:none;will-change:transform,opacity;transform-origin:center center;"></div>
-      <div data-pulse="${pulseId}-5" data-delay="1665" style="position:absolute;top:50%;left:50%;width:28px;height:28px;margin-left:-14px;margin-top:-14px;border-radius:50%;border:2px solid ${pulseColor};background:transparent;pointer-events:none;will-change:transform,opacity;transform-origin:center center;"></div>
-      <div data-pulse="${pulseId}-6" data-delay="1998" style="position:absolute;top:50%;left:50%;width:28px;height:28px;margin-left:-14px;margin-top:-14px;border-radius:50%;border:2px solid ${pulseColor};background:transparent;pointer-events:none;will-change:transform,opacity;transform-origin:center center;"></div>
-      <div data-pulse="${pulseId}-7" data-delay="2331" style="position:absolute;top:50%;left:50%;width:28px;height:28px;margin-left:-14px;margin-top:-14px;border-radius:50%;border:2px solid ${pulseColor};background:transparent;pointer-events:none;will-change:transform,opacity;transform-origin:center center;"></div>
-      <div data-pulse="${pulseId}-8" data-delay="2664" style="position:absolute;top:50%;left:50%;width:28px;height:28px;margin-left:-14px;margin-top:-14px;border-radius:50%;border:2px solid ${pulseColor};background:transparent;pointer-events:none;will-change:transform,opacity;transform-origin:center center;"></div>
-      <div data-pulse="${pulseId}-9" data-delay="2997" style="position:absolute;top:50%;left:50%;width:28px;height:28px;margin-left:-14px;margin-top:-14px;border-radius:50%;border:2px solid ${pulseColor};background:transparent;pointer-events:none;will-change:transform,opacity;transform-origin:center center;"></div>
-      <div data-pulse="${pulseId}-10" data-delay="3330" style="position:absolute;top:50%;left:50%;width:28px;height:28px;margin-left:-14px;margin-top:-14px;border-radius:50%;border:2px solid ${pulseColor};background:transparent;pointer-events:none;will-change:transform,opacity;transform-origin:center center;"></div>
-      <div data-pulse="${pulseId}-11" data-delay="3663" style="position:absolute;top:50%;left:50%;width:28px;height:28px;margin-left:-14px;margin-top:-14px;border-radius:50%;border:2px solid ${pulseColor};background:transparent;pointer-events:none;will-change:transform,opacity;transform-origin:center center;"></div>` : '';
-    const cursorStyle = (showPulse && !isFixed) ? 'cursor:pointer;' : 'cursor:default;';
-    return `
-      <div style="position:relative;display:flex;flex-direction:column;align-items:center;overflow:visible;user-select:none;-webkit-user-select:none;${cursorStyle}">
-        ${pulseDiv}
-        <div style="
-          position:relative;z-index:1;
-          width:28px;height:28px;border-radius:50%;
-          background:${color};
-          border:2px solid white;
-          display:flex;align-items:center;justify-content:center;
-          font-size:${isFixed ? '14px' : '11px'};
-          font-weight:bold;color:white;
-          box-shadow:0 2px 6px rgba(0,0,0,0.5);
-        ">${label}</div>
-        <div style="
-          position:absolute;z-index:2;
-          bottom:32px;left:50%;
-          transform:translateX(-50%);
-          background:rgba(0,0,0,0.38);
-          color:rgba(255,255,255,0.95);font-size:9px;
-          padding:2px 5px;border-radius:4px;
-          white-space:nowrap;max-width:80px;
-          overflow:hidden;text-overflow:ellipsis;
-          pointer-events:none;
-        ">${point.destination || point.address.slice(0, 10)}</div>
-      </div>
-    `;
-  };
-
-  // ★ mapRef 컨테이너 내부에서 data-pulse 요소 찾아 rAF 애니메이션 적용
-  const startPulseAnimations = () => {
-    // 네이버 지도 마커는 mapRef.current 내부 div에 렌더링됨
-    const container = mapRef.current;
-    if (!container) return;
-    // 디버그: 전체 document와 container 양쪽 모두 탐색
-    const pulseEls1 = document.querySelectorAll('[data-pulse]');
-    const pulseEls2 = container.querySelectorAll('[data-pulse]');
-    console.log('[pulse] document 탐색:', pulseEls1.length, '/ container 탐색:', pulseEls2.length);
-    // 둘 다 합쳐서 처리
-    const allPulse = new Set([...Array.from(pulseEls1), ...Array.from(pulseEls2)]);
-    allPulse.forEach((el) => {
-      const div = el as HTMLElement;
-      if (div.dataset.animated) return;
-      div.dataset.animated = '1';
-      const duration = 4000;          // 동심원 1개의 퍼지는 시간
-      const delay = parseInt(div.dataset.delay || '0', 10);
-      const step = (ts: number) => {
-        // delay만큼 위상 이동 → 3개가 순서대로 퍼짐
-        const progress = ((ts - delay) % duration + duration) % duration / duration;
-        let scale: number, opacity: number;
-        if (progress < 0.15) {
-          // 빠르게 나타남
-          scale = 1 + (progress / 0.15) * 0.2;
-          opacity = (progress / 0.15) * 0.7;
-        } else if (progress < 0.75) {
-          // 천천히 퍼지면서 사라짐
-          const p = (progress - 0.15) / 0.60;
-          scale = 1.2 + p * 0.8;
-          opacity = 0.7 * (1 - p);
-        } else {
-          scale = 2.0; opacity = 0;
-        }
-        if (div.isConnected) {
-          div.style.transform = `scale(${scale.toFixed(3)})`;
-          div.style.opacity = opacity.toFixed(3);
-          requestAnimationFrame(step);
-        }
       };
-      requestAnimationFrame(step);
-    });
-  };
 
-  const calcBearing = (from: { lat: number; lng: number }, to: { lat: number; lng: number }) => {
-    const toRad = (d: number) => (d * Math.PI) / 180;
-    const dLng = toRad(to.lng - from.lng);
-    const lat1 = toRad(from.lat);
-    const lat2 = toRad(to.lat);
-    const y = Math.sin(dLng) * Math.cos(lat2);
-    const x = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLng);
-    return (Math.atan2(y, x) * 180) / Math.PI;
-  };
-
-  const makeArrowIcon = (bearing: number) => {
-    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="-5 -5 10 10">
-      <polygon points="0,-4 3,2 0,0 -3,2" fill="white" opacity="0.9" transform="rotate(${bearing})"/>
-    </svg>`;
-    return {
-      content: svg,
-      anchor: new (window as any).naver.maps.Point(5, 5),
-    };
-  };
-
-  const latLngDistanceM = (lat1: number, lng1: number, lat2: number, lng2: number) => {
-    const R = 6371000;
-    const toRad = (d: number) => (d * Math.PI) / 180;
-    const dLat = toRad(lat2 - lat1);
-    const dLng = toRad(lng2 - lng1);
-    const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
-    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  };
-
-  const placeArrows = (
-    coordPairs: { lat: number; lng: number }[],
-    bearing: number | null,
-    map: any,
-    naver: any,
-    intervalM = 80
-  ) => {
-    if (coordPairs.length < 2) return;
-    let accumulated = 0;
-    for (let i = 0; i < coordPairs.length - 1; i++) {
-      const from = coordPairs[i];
-      const to = coordPairs[i + 1];
-      const segDist = latLngDistanceM(from.lat, from.lng, to.lat, to.lng);
-      const segBearing = bearing ?? calcBearing(from, to);
-      let d = (accumulated === 0 ? intervalM / 2 : intervalM - (accumulated % intervalM));
-      while (d <= segDist) {
-        const t = d / segDist;
-        const lat = from.lat + (to.lat - from.lat) * t;
-        const lng = from.lng + (to.lng - from.lng) * t;
-        const arrow = new naver.maps.Marker({
-          map,
-          position: new naver.maps.LatLng(lat, lng),
-          icon: makeArrowIcon(segBearing),
-          zIndex: 5,
-          clickable: false,
-        });
-        arrowMarkersRef.current.push(arrow);
-        d += intervalM;
-      }
-      accumulated = (accumulated + segDist) % intervalM;
-    }
-  };
-
-  const drawStraightLines = (points: RoutePoint[], map: any, naver: any) => {
-    for (let i = 0; i < points.length - 1; i++) {
-      const from = points[i];
-      const to = points[i + 1];
-      const color = getLineColor(from, to);
-      const polyline = new naver.maps.Polyline({
-        map,
-        path: [
-          new naver.maps.LatLng(from.lat, from.lng),
-          new naver.maps.LatLng(to.lat, to.lng),
-        ],
-        strokeColor: color,
-        strokeWeight: 6,
-        strokeOpacity: 1,
-      });
-      polylinesRef.current.push(polyline);
-      const bearing = calcBearing(from, to);
-      placeArrows(
-        [{ lat: from.lat, lng: from.lng }, { lat: to.lat, lng: to.lng }],
-        bearing,
-        map,
-        naver
-      );
-    }
-  };
-
-  const drawRoadLines = async (points: RoutePoint[], map: any, naver: any) => {
-    const TIMEOUT = 8000;
-    const fetchWithTimeout = (url: string) => {
-      const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), TIMEOUT);
-      return fetch(url, { signal: controller.signal }).finally(() => clearTimeout(timer));
-    };
-
-    const segments = points.slice(0, -1).map((from, i) => ({
-      from, to: points[i + 1], color: getLineColor(from, points[i + 1]),
-    }));
-
-    // 공통 렌더링 함수
-    const renderResults = (results: { coords: { lat: number; lng: number }[]; color: string }[]) => {
-      results.forEach(({ coords, color }) => {
-        const path = coords.map((c: { lat: number; lng: number }) => new naver.maps.LatLng(c.lat, c.lng));
-        const polyline = new naver.maps.Polyline({
-          map, path, strokeColor: color, strokeWeight: 6, strokeOpacity: 1,
-        });
-        polylinesRef.current.push(polyline);
-        placeArrows(coords, null, map, naver);
-      });
-    };
-
-    // 직선 fallback 렌더링
-    const renderStraight = () => {
-      segments.forEach(({ from, to, color }) => {
-        const polyline = new naver.maps.Polyline({
-          map,
-          path: [new naver.maps.LatLng(from.lat, from.lng), new naver.maps.LatLng(to.lat, to.lng)],
-          strokeColor: color, strokeWeight: 6, strokeOpacity: 1,
-        });
-        polylinesRef.current.push(polyline);
-      });
-    };
-
-    // ① ORS 시도 (주 서비스 - 안정적)
-    setRoadLoading(true);
-    try {
-      console.log('[road] ORS 요청 시작...');
-      const orsRes = await fetch('/api/ors-route', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          date: routeRef.current?.date ?? '',
-          version: routeRef.current?.version ?? 0,
-          segments: segments.map(({ from, to }) => ({
-            fromLng: from.lng, fromLat: from.lat, toLng: to.lng, toLat: to.lat,
-          })),
-        }),
-      });
-      console.log('[road] ORS 응답 상태:', orsRes.status);
-      if (!orsRes.ok) throw new Error(`ORS HTTP ${orsRes.status}`);
-      const orsData = await orsRes.json();
-      if (orsData.fromCache) setRoadLoading(false); // 캐시 히트면 즉시 숨김
-      console.log('[road] ORS 결과 수:', orsData.results?.length, '/ 성공:', orsData.results?.filter((r: {ok: boolean}) => r.ok).length, orsData.fromCache ? '(캐시)' : '(신규)');
-      if (orsData.results?.length) {
-        const results = orsData.results.map((r: { ok: boolean; coords?: { lat: number; lng: number }[] }, i: number) => ({
-          coords: r.ok && r.coords ? r.coords : [
-            { lat: segments[i].from.lat, lng: segments[i].from.lng },
-            { lat: segments[i].to.lat, lng: segments[i].to.lng },
-          ],
-          color: segments[i].color,
-        }));
-        setOsrmError(false);
-        setRoadLoading(false);
-        renderResults(results);
-        return;
-      }
-    } catch (e) {
-      console.warn('[road] ORS 실패:', e);
-    }
-
-    // ② ORS 실패 → OSRM 폴백
-    try {
-      console.log('[road] OSRM 폴백 시도...');
-      const probeCount = Math.min(3, segments.length);
-      const probes = await Promise.all(
-        segments.slice(0, probeCount).map(({ from, to }) =>
-          fetchWithTimeout(
-            `https://router.project-osrm.org/route/v1/driving/${from.lng},${from.lat};${to.lng},${to.lat}?overview=false`
-          ).then(r => { console.log('[road] OSRM probe:', r.status); return r.ok; }).catch(() => false)
+      // 이미지 압축
+      const compressedImages = await Promise.all(
+        uploadedImages.map((img) =>
+          fetch(img.url).then((r) => r.blob()).then(compressImage)
         )
       );
-      if (probes.every(ok => ok)) {
-        const results = await Promise.all(
-          segments.map(async ({ from, to, color }) => {
-            try {
-              const res = await fetchWithTimeout(
-                `https://router.project-osrm.org/route/v1/driving/${from.lng},${from.lat};${to.lng},${to.lat}?overview=full&geometries=geojson`
-              );
-              if (!res.ok) throw new Error();
-              const data = await res.json();
-              if (data.routes?.[0]?.geometry?.coordinates) {
-                return { coords: data.routes[0].geometry.coordinates.map((c: number[]) => ({ lat: c[1], lng: c[0] })), color };
-              }
-            } catch {}
-            return { coords: [{ lat: from.lat, lng: from.lng }, { lat: to.lat, lng: to.lng }], color };
-          })
-        );
-        setOsrmError(false);
-        renderResults(results);
-        return;
+
+      // 5장씩 배치 분할
+      const BATCH_SIZE = 5;
+      const batches: string[][] = [];
+      for (let i = 0; i < compressedImages.length; i += BATCH_SIZE) {
+        batches.push(compressedImages.slice(i, i + BATCH_SIZE));
       }
-    } catch (e) {
-      console.warn('[road] OSRM 폴백 실패:', e);
-    }
 
-    // ③ 둘 다 실패 → 직선 + 에러 배너
-    console.error('[road] ORS·OSRM 모두 실패 → 직선 표시');
-    setRoadLoading(false);
-    setOsrmError(true);
-    renderStraight();
-  };
-
-  const redrawLines = () => {
-    if (!route || !naverMapRef.current) return;
-    const naver = (window as any).naver;
-    const map = naverMapRef.current;
-
-    // 진행 중인 blink 정리
-    if (blinkIntervalRef.current) { clearInterval(blinkIntervalRef.current); blinkIntervalRef.current = null; }
-    if (blinkRestoreRef.current) { clearTimeout(blinkRestoreRef.current); blinkRestoreRef.current = null; }
-    if (blinkPolylineRef.current) { blinkPolylineRef.current.setMap(null); blinkPolylineRef.current = null; }
-    blinkArrowsRef.current = [];
-    blinkOriginalPolylineRef.current = null;
-
-    polylinesRef.current.forEach(p => p.setMap(null));
-    arrowMarkersRef.current.forEach(m => m.setMap(null));
-    polylinesRef.current = [];
-    arrowMarkersRef.current = [];
-
-    const points = route.points;
-    if (lineModeRef.current === 'road') {
-      drawRoadLines(points, map, naver);
-    } else {
-      drawStraightLines(points, map, naver);
-    }
-  };
-
-  const drawRoute = () => {
-    if (!route || !naverMapRef.current) return;
-    const naver = (window as any).naver;
-    const map = naverMapRef.current;
-
-    markersRef.current.forEach(m => m.setMap(null));
-    polylinesRef.current.forEach(p => p.setMap(null));
-    arrowMarkersRef.current.forEach(m => m.setMap(null));
-    markersRef.current = [];
-    polylinesRef.current = [];
-    arrowMarkersRef.current = [];
-
-    const points = route.points;
-    // 저장된 lineMode로 시작 (직선/도로 기억)
-    if (lineModeRef.current === 'road') {
-      drawRoadLines(points, map, naver);
-    } else {
-      drawStraightLines(points, map, naver);
-    }
-
-    const showMarkers = currentZoomRef.current >= ZOOM_THRESHOLD;
-    const showPulse = currentZoomRef.current >= PULSE_THRESHOLD;
-
-    // ★ 마커 생성 + 클릭 이벤트 연결
-    points.forEach((point, pointArrayIdx) => {
-      const color = getMarkerColor(point);
-      // 기점(첫 번째 fixed)은 zIndex를 높여서 종점(마지막 fixed) 위에 표시
-      const isFirstFixed = point.source === 'fixed' && pointArrayIdx === 0;
-      const marker = new naver.maps.Marker({
-        map: showMarkers ? map : null,
-        position: new naver.maps.LatLng(point.lat, point.lng),
-        icon: {
-          content: makeMarkerContent(point, color, showPulse),
-          anchor: new naver.maps.Point(14, 14),
-        },
-        zIndex: isFirstFixed ? 20 : 10,
-      });
-
-      // ★ 마커 클릭 → 줌 PULSE_THRESHOLD 이상일 때만 팝업 (fixed 제외)
-      if (point.source !== 'fixed') {
-        naver.maps.Event.addListener(marker, 'click', () => {
-          if (currentZoomRef.current >= PULSE_THRESHOLD) {
-            setSelectedPoint(point);
-            setShowDetailModal(true);
+      // 배치 1회 호출 함수 (에러 시 상세 정보 반환)
+      const fetchBatch = async (batch: string[], batchIdx: number, attempt: number) => {
+        const batchStart = performance.now();
+        try {
+          const r = await fetch('/api/extract-points', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ images: batch }),
+          });
+          const data = await r.json();
+          const batchElapsed = Math.round(performance.now() - batchStart);
+          if (!r.ok) {
+            console.error(`❌ 배치 ${batchIdx + 1} 실패 (시도${attempt}, ${batchElapsed}ms) | HTTP ${r.status} | errorType: ${data.errorType} | ${data.message}`);
+            return { points: [], startIdx: batchIdx * BATCH_SIZE, failed: true, errorType: data.errorType, httpStatus: r.status, elapsed: batchElapsed, attempt };
           }
-        });
-      }
-
-      // ★ 롱프레스 → 해당 구간 초록 깜박임 (fixed 포함 전체 마커)
-      const startLongPress = () => {
-        longPressTimerRef.current = setTimeout(() => {
-          blinkSegment(pointArrayIdx);
-        }, 700);
-      };
-      const cancelLongPress = () => {
-        if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current);
-      };
-      naver.maps.Event.addListener(marker, 'mousedown', startLongPress);
-      naver.maps.Event.addListener(marker, 'mouseup', cancelLongPress);
-      naver.maps.Event.addListener(marker, 'touchstart', startLongPress);
-      naver.maps.Event.addListener(marker, 'touchend', cancelLongPress);
-
-      markersRef.current.push(marker);
-    });
-
-    // 초기 줌이 이미 PULSE_THRESHOLD 이상이면 바로 펄스 시작
-    if (showPulse) {
-      setTimeout(() => startPulseAnimations(), 300);
-    }
-  };
-
-  const updateMarkerColors = () => {
-    if (!route || !naverMapRef.current) return;
-    const naver = (window as any).naver;
-    const showMarkers = currentZoomRef.current >= ZOOM_THRESHOLD;
-    const showPulse = currentZoomRef.current >= PULSE_THRESHOLD;
-
-    route.points.forEach((point, idx) => {
-      const marker = markersRef.current[idx];
-      if (!marker) return;
-      const color = getMarkerColor(point);
-      marker.setIcon({
-        content: makeMarkerContent(point, color, showPulse),
-        anchor: new naver.maps.Point(14, 14),
-      });
-      marker.setMap(showMarkers ? naverMapRef.current : null);
-    });
-
-    route.points.forEach((point, idx) => {
-      if (idx === 0) return;
-      const polyline = polylinesRef.current[idx - 1];
-      if (!polyline) return;
-      const from = route.points[idx - 1];
-      const to = point;
-      polyline.setOptions({ strokeColor: getLineColor(from, to) });
-    });
-  };
-
-  // ★ 특정 구간 폴리라인 초록 깜박임 (롱프레스)
-  // markerIdx: markersRef 배열 인덱스 (= route.points 인덱스)
-  const blinkSegment = (markerIdx: number) => {
-    if (!route || polylinesRef.current.length === 0) return;
-    const naver = (window as any).naver;
-    const map = naverMapRef.current;
-
-    const segIdx = markerIdx;
-    const polyline = polylinesRef.current[segIdx];
-    if (!polyline) return;
-
-    const from = route.points[segIdx];
-    const to = route.points[segIdx + 1];
-    if (!from || !to) return;
-    const originalColor = getLineColor(from, to);
-
-    // 기존 깜박임 완전 정리 (ref로 추적)
-    const cleanupBlink = () => {
-      if (blinkIntervalRef.current) { clearInterval(blinkIntervalRef.current); blinkIntervalRef.current = null; }
-      if (blinkRestoreRef.current) { clearTimeout(blinkRestoreRef.current); blinkRestoreRef.current = null; }
-      if (blinkPolylineRef.current) { blinkPolylineRef.current.setMap(null); blinkPolylineRef.current = null; }
-      blinkArrowsRef.current.forEach(a => {
-        a.setMap(null);
-        const idx = arrowMarkersRef.current.indexOf(a);
-        if (idx !== -1) arrowMarkersRef.current.splice(idx, 1);
-      });
-      blinkArrowsRef.current = [];
-      // 이전 원래 폴리라인 복원
-      if (blinkOriginalPolylineRef.current) {
-        const { polyline: prevPl, color: prevColor } = blinkOriginalPolylineRef.current;
-        prevPl.setOptions({ strokeColor: prevColor, strokeWeight: 6, strokeOpacity: 1, zIndex: 0 });
-        blinkOriginalPolylineRef.current = null;
-      }
-    };
-    cleanupBlink();
-
-    // 초록 깜박임용 임시 폴리라인 별도 생성
-    const coords: { lat: number; lng: number }[] = [];
-    try {
-      const path = (polyline as any).getPath();
-      if (path && path.getLength) {
-        for (let i = 0; i < path.getLength(); i++) {
-          const pt = path.getAt(i);
-          coords.push({ lat: pt.lat(), lng: pt.lng() });
+          console.log(`✅ 배치 ${batchIdx + 1} 완료 (시도${attempt}, ${batchElapsed}ms) | ${batch.length}장 → ${data.points?.length ?? 0}개 추출`);
+          return { points: data.points || [], startIdx: batchIdx * BATCH_SIZE, failed: false, elapsed: batchElapsed, attempt };
+        } catch (e: any) {
+          const batchElapsed = Math.round(performance.now() - batchStart);
+          console.error(`❌ 배치 ${batchIdx + 1} 예외 (시도${attempt}, ${batchElapsed}ms) | ${e?.message || e}`);
+          return { points: [], startIdx: batchIdx * BATCH_SIZE, failed: true, errorType: 'NETWORK_ERROR', elapsed: batchElapsed, attempt };
         }
+      };
+
+      // 배치 병렬 호출 + 실패 시 1회 재시도
+      const batchResults = await Promise.all(
+        batches.map(async (batch, batchIdx) => {
+          const result = await fetchBatch(batch, batchIdx, 1);
+          if (result.failed) {
+            console.warn(`🔄 배치 ${batchIdx + 1} 재시도 중... (errorType: ${result.errorType})`);
+            await new Promise(resolve => setTimeout(resolve, 2000));
+            return fetchBatch(batch, batchIdx, 2);
+          }
+          return result;
+        })
+      );
+
+      // 실패한 배치 집계 → 사용자에게 경고
+      const failedBatches = batchResults.filter(r => r.failed);
+      if (failedBatches.length > 0) {
+        const failedImageRanges = failedBatches.map(r => {
+          const start = batchResults.indexOf(r) * BATCH_SIZE + 1;
+          const end = Math.min(start + BATCH_SIZE - 1, compressedImages.length);
+          return `${start}~${end}번`;
+        }).join(', ');
+        const errorTypes = [...new Set(failedBatches.map(r => r.errorType))].join(', ');
+        alert(`⚠️ 일부 이미지 추출 실패
+
+실패 범위: ${failedImageRanges} 이미지
+원인: ${
+          errorTypes === 'TIMEOUT' ? '응답 시간 초과 (네트워크 불안정 또는 AI 서버 과부하)' :
+          errorTypes === 'RATE_LIMIT' ? 'AI API 요청 한도 초과' :
+          errorTypes === 'API_OVERLOAD' ? 'AI 서버 일시적 과부하' :
+          errorTypes === 'NETWORK_ERROR' ? '네트워크 연결 오류' :
+          `오류 코드: ${errorTypes}`
+        }
+
+추출된 지점만 표시됩니다. 잠시 후 다시 시도해보세요.`);
       }
-    } catch {}
-    if (coords.length < 2) {
-      coords.push({ lat: from.lat, lng: from.lng }, { lat: to.lat, lng: to.lng });
+
+      // 결과 합치기 (각 지점에 원본 이미지 인덱스 포함)
+      const allPoints = batchResults.flatMap(({ points, startIdx }) =>
+        points.map((p: { address: string; destination: string; complaint: string; photoDescription?: string | null; photoCrop?: { x: number; y: number; w: number; h: number } | null; imageIndex?: number }) => ({
+          ...p,
+          imageIdx: startIdx + (p.imageIndex ?? 0),
+        }))
+      );
+
+      if (allPoints.length > 0) {
+        // 각 지점마다 좌표 검색
+        // 각 지점마다 좌표 검색
+      const pointsWithCoords = await Promise.all(
+        allPoints.map(async (p: { address: string; destination: string; complaint: string; manager?: string | null; photoDescription?: string | null; photoCrop?: { x: number; y: number; w: number; h: number } | null; imageIdx: number }, idx: number) => {
+          let lat = null;
+          let lng = null;
+          let placeName = null;
+
+          let source = null;
+            try {
+              const geoRes = await fetch('/api/geocode', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ destination: p.destination, address: p.address }),
+              });
+              if (geoRes.ok) {
+                const geoData = await geoRes.json();
+                lat = geoData.lat;
+                lng = geoData.lng;
+                placeName = geoData.placeName;
+                source = geoData.source;
+              }
+            } catch (e) {
+              console.error('geocode 오류:', e);
+            }
+
+            // 현장사진 크롭 + Blob 업로드
+            let photoUrl: string | null = null;
+            if (p.photoCrop && compressedImages[p.imageIdx]) {
+              try {
+                const crop = p.photoCrop;
+                const pad = 0.03;
+                const cx = Math.max(0, crop.x - pad);
+                const cy = Math.max(0, crop.y - pad);
+                const cw = Math.min(1 - cx, crop.w + pad * 2);
+                const ch = Math.min(1 - cy, crop.h + pad * 2);
+                const croppedDataUrl = await cropImage(compressedImages[p.imageIdx], cx, cy, cw, ch);
+                const uploadRes = await fetch('/api/upload-photo', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    imageData: croppedDataUrl,
+                    filename: `point-${Date.now()}-${idx}.jpg`,
+                  }),
+                });
+                if (uploadRes.ok) {
+                  const uploadData = await uploadRes.json();
+                  photoUrl = uploadData.url;
+                }
+              } catch (e) {
+                console.error('사진 크롭/업로드 오류:', e);
+              }
+            }
+
+            return {
+              id: idx + 1,
+              address: p.address,
+              destination: p.destination || null,
+              complaint: p.complaint,
+              manager: p.manager || null,
+              photoDescription: p.photoDescription || null,
+              photoUrl,
+              lat,
+              lng,
+              placeName,
+              source,
+            };
+        })
+      );
+
+        const endTime = performance.now();
+        console.log(`✅ 총 소요시간: ${((endTime - startTime) / 1000).toFixed(1)}초`);
+        console.log(`📍 추출 지점 수: ${pointsWithCoords.length}개`);
+        console.log('추출된 지점들:', JSON.stringify(pointsWithCoords, null, 2));
+        setExtractedPoints(pointsWithCoords);
+        const draft = JSON.parse(localStorage.getItem('draft-route') || '{}');
+        draft.extractedPoints = pointsWithCoords;
+        draft.lastModified = Date.now();
+        localStorage.setItem('draft-route', JSON.stringify(draft));
+      } else {
+        alert('추출된 지점이 없습니다.');
+      }
+    } catch (error) {
+      alert('네트워크 오류가 발생했습니다.');
+    } finally {
+      setIsExtracting(false);
     }
-
-    // 원래 폴리라인 숨기고 ref로 추적
-    polyline.setOptions({ strokeOpacity: 0 });
-    blinkOriginalPolylineRef.current = { polyline, color: originalColor };
-
-    // 임시 초록 폴리라인 생성 후 ref로 추적
-    blinkPolylineRef.current = new naver.maps.Polyline({
-      map,
-      path: coords.map(c => new naver.maps.LatLng(c.lat, c.lng)),
-      strokeColor: '#1b5e20',
-      strokeWeight: 8,
-      strokeOpacity: 1,
-      zIndex: 100,
-    });
-
-    // 깜박임 화살표 ref로 추적
-    const countBefore = arrowMarkersRef.current.length;
-    placeArrows(coords, null, map, naver);
-    blinkArrowsRef.current = arrowMarkersRef.current.slice(countBefore);
-
-    let visible = true;
-    blinkIntervalRef.current = setInterval(() => {
-      visible = !visible;
-      if (blinkPolylineRef.current) blinkPolylineRef.current.setOptions({ strokeOpacity: visible ? 1 : 0 });
-      blinkArrowsRef.current.forEach(a => a.setMap(visible ? map : null));
-    }, 300);
-
-    // 5초 후 원래대로
-    blinkRestoreRef.current = setTimeout(() => {
-      cleanupBlink();
-    }, 5000);
   };
 
-  // ★ 팝업에서 사용할 완료 상태 정보
-  const getSelectedStatus = () => {
-    if (!selectedPoint) return { curStatus: '', curMemo: '', isDone: false };
-    const st = statuses[statusKey(selectedPoint)];
-    const curStatus = st?.status || '';
-    const curMemo = st?.memo || '';
-    const isDone = DONE_STATUSES.includes(curStatus);
-    return { curStatus, curMemo, isDone };
+  const handleExtractedDelete = async (id: number) => {
+    if (deletingId !== null) return;
+    setDeletingId(id);
+    const point = extractedPoints.find((p) => p.id === id);
+    if (point?.photoUrl && point.photoUrl.startsWith('https://')) {
+      try { await fetch('/api/delete-blob', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url: point.photoUrl }) }); } catch (e) { console.error('Blob 삭제 오류:', e); }
+    }
+    const updated = extractedPoints.filter((p) => p.id !== id);
+    setExtractedPoints(updated);
+    const draft = JSON.parse(localStorage.getItem('draft-route') || '{}');
+    draft.extractedPoints = updated;
+    draft.lastModified = Date.now();
+    localStorage.setItem('draft-route', JSON.stringify(draft));
+    setDeletingId(null);
   };
 
-  // 팝업 열릴 때 edit 상태 초기화
-  useEffect(() => {
-    if (showDetailModal && selectedPoint) {
-      const st = statuses[statusKey(selectedPoint)];
-      setEditStatus(st?.status || '');
-      setEditMemo(st?.memo || '');
-    }
-  }, [showDetailModal, selectedPoint]);
+  const handleExtractedEdit = (point: typeof extractedPoints[0]) => {
+  setExtractEditTarget(point);
+  setExtractEditForm({
+    address: point.address || '',
+    destination: point.destination || '',
+    complaint: point.complaint || '',
+    manager: '',
+    photoUrl: '',
+  });
+  if (point.lat && point.lng) {
+    setExtractEditCoordStatus('success');
+    setExtractEditCoord({ lat: point.lat ?? null, lng: point.lng ?? null, placeName: point.placeName ?? null, source: point.source ?? null });
+  } else {
+    setExtractEditCoordStatus('fail');
+    setExtractEditCoord({ lat: null, lng: null, placeName: null, source: null });
+  }
+  setShowExtractEditModal(true);
+};
 
-  // 작업상태 저장
-  const handleSaveStatus = async () => {
-    if (!selectedPoint || !route) return;
-    setSavingStatus(true);
+  const handleExtractEditCheckCoord = async () => {
+    setExtractEditCoordStatus('loading');
     try {
-      await fetch('/api/save-status', {
+      const res = await fetch('/api/geocode', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          date: route.date,
-          address: selectedPoint.address,
-          destination: selectedPoint.destination,
-          complaint: selectedPoint.complaint?.trim() ?? '',
-          originalId: selectedPoint.originalId ?? null,
-          status: editStatus,
-          memo: editMemo,
-        }),
+        body: JSON.stringify({ destination: extractEditForm.destination, address: extractEditForm.address }),
       });
-      // 로컬 반영
-      const key = statusKey(selectedPoint);
-      setStatuses(prev => ({
-        ...prev,
-        [key]: { status: editStatus, memo: editMemo, updatedAt: Date.now() },
-      }));
-      statusesRef.current = {
-        ...statusesRef.current,
-        [key]: { status: editStatus, memo: editMemo, updatedAt: Date.now() },
-      };
-    } catch {}
-    setSavingStatus(false);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.lat && data.lng) {
+          setExtractEditCoord({ lat: data.lat, lng: data.lng, placeName: data.placeName, source: data.source });
+          setExtractEditCoordStatus('success');
+        } else {
+          setExtractEditCoordStatus('fail');
+        }
+      } else {
+        setExtractEditCoordStatus('fail');
+      }
+    } catch {
+      setExtractEditCoordStatus('fail');
+    }
+  };
+
+  const handleExtractEditSave = () => {
+  if (!extractEditTarget) return;
+  const updatedPoint = {
+    ...extractEditTarget,
+    address: extractEditForm.address,
+    destination: extractEditForm.destination || null,
+    complaint: extractEditForm.complaint,
+    lat: extractEditCoord.lat,
+    lng: extractEditCoord.lng,
+    placeName: extractEditCoord.placeName,
+    source: extractEditCoord.source,
+  };
+  const updatedPoints = extractedPoints.map((p) =>
+    p.id === extractEditTarget.id ? updatedPoint : p
+  );
+  setExtractedPoints(updatedPoints);
+
+  // draft-route localStorage 저장
+  const draft = JSON.parse(localStorage.getItem('draft-route') || '{}');
+  draft.extractedPoints = updatedPoints;
+  draft.lastModified = Date.now();
+  localStorage.setItem('draft-route', JSON.stringify(draft));
+
+  setShowExtractEditModal(false);
+  console.log('💾 지점 수정 저장:', updatedPoint);
+};
+
+  const loadCurrentRoute = async () => {
+    setIsLoadingRoute(true);
+    try {
+      const today = new Date().toLocaleDateString('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/\. /g, '-').replace('.', '');
+      const res = await fetch(`/api/get-route?date=${today}`);
+      if (res.ok) {
+        const data = await res.json();
+        setCurrentRoute(data);
+      } else {
+        setCurrentRoute(null);
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setIsLoadingRoute(false);
+    }
+  };
+
+  const handleGenerateRoute = async () => {
+    if (isGenerating) return;
+
+    const allPoints = [
+      ...extractedPoints.filter(p => p.lat && p.lng),
+      ...directPoints.filter(p => p.lat && p.lng),
+    ];
+
+    if (allPoints.length === 0) {
+      alert('좌표가 확인된 지점이 없습니다.');
+      return;
+    }
+
+    if (!window.confirm(`좌표 확인된 지점 ${allPoints.length}개로 최적화 경로를 생성합니다. 계속하시겠습니까?`)) return;
+
+    setIsGenerating(true);
+    try {
+      // ① ORS Matrix API로 도로 거리 행렬 계산 시도
+      let ordered: typeof allPoints = [];
+      let usedORS = false;
+
+      const cityHallCoord = { lat: 37.7381, lng: 127.0338 };
+      const matrixLocations = [cityHallCoord, ...allPoints.map(p => ({ lat: p.lat!, lng: p.lng! }))];
+
+      try {
+        const matrixRes = await fetch('/api/ors-matrix', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ locations: matrixLocations }),
+        });
+        const matrixData = await matrixRes.json();
+
+        if (matrixData.ok && matrixData.matrix) {
+          const matrix: number[][] = matrixData.matrix;
+          const n = allPoints.length;
+
+          // ── Step 1: 최근접 이웃 알고리즘 (시청=0번 고정 출발)
+          const visited = new Array(n + 1).fill(false);
+          visited[0] = true;
+          const orderIdxs: number[] = []; // matrix 인덱스 (1~n)
+          let current = 0;
+
+          while (orderIdxs.length < n) {
+            let nearestIdx = -1;
+            let nearestDist = Infinity;
+            for (let i = 1; i <= n; i++) {
+              if (!visited[i] && matrix[current][i] < nearestDist) {
+                nearestDist = matrix[current][i];
+                nearestIdx = i;
+              }
+            }
+            if (nearestIdx === -1) break;
+            visited[nearestIdx] = true;
+            orderIdxs.push(nearestIdx);
+            current = nearestIdx;
+          }
+
+          // ── Step 2: 2-opt 개선 (교차 구간 제거)
+          // 전체 경로: [0(시청), ...orderIdxs, 0(시청 복귀)]
+          // orderIdxs만 개선 대상 (시청 위치 고정)
+          const routeCost = (idxs: number[]) => {
+            let cost = matrix[0][idxs[0]]; // 시청 → 첫 지점
+            for (let i = 0; i < idxs.length - 1; i++) cost += matrix[idxs[i]][idxs[i + 1]];
+            cost += matrix[idxs[idxs.length - 1]][0]; // 마지막 지점 → 시청
+            return cost;
+          };
+
+          let improved = true;
+          let route2opt = [...orderIdxs];
+          let iterations = 0;
+          const beforeCost = routeCost(route2opt);
+
+          while (improved && iterations < 100) {
+            improved = false;
+            iterations++;
+            const len = route2opt.length;
+            // 전체 경로 노드: [0(시청), r[0], r[1], ..., r[n-1], 0(시청복귀)]
+            // 노드 인덱스 0~n+1, 실제값: node(k) = k===0||k===len+1 ? 0 : route2opt[k-1]
+            const node = (k: number) => k === 0 || k === len + 1 ? 0 : route2opt[k - 1];
+            outer:
+            for (let i = 1; i <= len - 1; i++) {
+              for (let j = i + 1; j <= len; j++) {
+                // 엣지 i-1→i 와 j→j+1 을 교체
+                const a = node(i - 1);
+                const b = node(i);
+                const c = node(j);
+                const d = node(j + 1);
+                const before = matrix[a][b] + matrix[c][d];
+                const after  = matrix[a][c] + matrix[b][d];
+                if (after < before - 0.1) {
+                  // i~j 구간 역순
+                  route2opt = [
+                    ...route2opt.slice(0, i - 1),
+                    ...route2opt.slice(i - 1, j).reverse(),
+                    ...route2opt.slice(j),
+                  ];
+                  improved = true;
+                  break outer;
+                }
+              }
+            }
+          }
+
+          const afterCost = routeCost(route2opt);
+          const improvement = Math.round((beforeCost - afterCost) / 10) / 100; // km
+          console.log(`✅ 2-opt 완료: ${iterations}회 반복, ${improvement}km 단축`);
+
+          ordered = route2opt.map(i => allPoints[i - 1]); // matrix 인덱스 → allPoints 0-based
+          usedORS = true;
+        }
+      } catch (matrixErr) {
+        console.warn('⚠️ ORS Matrix 실패, 직선거리 fallback:', matrixErr);
+      }
+
+      // ② ORS 실패 시 직선거리 최근접 이웃 알고리즘 (기존 방식)
+      if (!usedORS) {
+        const unvisited = [...allPoints];
+        const orderedFallback = [unvisited.splice(0, 1)[0]];
+        while (unvisited.length > 0) {
+          const last = orderedFallback[orderedFallback.length - 1];
+          let nearestIdx = 0;
+          let nearestDist = Infinity;
+          unvisited.forEach((p, i) => {
+            const dist = Math.pow((p.lat! - last.lat!), 2) + Math.pow((p.lng! - last.lng!), 2);
+            if (dist < nearestDist) { nearestDist = dist; nearestIdx = i; }
+          });
+          orderedFallback.push(unvisited.splice(nearestIdx, 1)[0]);
+        }
+        ordered = orderedFallback;
+        console.log('⚠️ 직선거리 알고리즘 사용');
+      }
+
+      const today = new Date().toLocaleDateString('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/\. /g, '-').replace('.', '');
+      const cityHall = { order: 0, address: '의정부시 의정부동 358-1', destination: '의정부시청', complaint: '출발/복귀', lat: 37.7381, lng: 127.0338, placeName: '의정부시청', source: 'fixed' };
+      const routePoints = [
+        { ...cityHall, order: 0 },
+        ...ordered.map((p, i) => ({
+          order: i + 1,
+          originalId: ('id' in p && typeof p.id === 'number' && p.id < 10000 ? p.id : null),
+          address: p.address,
+          destination: ('destination' in p ? p.destination : null) || null,
+          complaint: p.complaint,
+          lat: p.lat,
+          lng: p.lng,
+          placeName: p.placeName || null,
+          source: p.source || null,
+          photoDescription: ('photoDescription' in p ? p.photoDescription : null) || null,
+          photoUrl: ('photoUrl' in p ? p.photoUrl : null) || null,
+          manager: ('manager' in p ? p.manager : null) || null,
+        })),
+        { ...cityHall, order: ordered.length + 1 },
+      ];
+
+      const res = await fetch('/api/save-route', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ date: today, points: routePoints }),
+      });
+
+      if (!res.ok) throw new Error('저장 실패');
+      const data = await res.json();
+      console.log('✅ 경로 저장 완료:', JSON.stringify(data, null, 2));
+      alert(`최적화 경로 생성 완료! (${today} 버전${data.version}, ${routePoints.length}개 지점)\n경로 계산: ${usedORS ? '도로 거리 기반 + 2-opt 개선 (ORS)' : '직선 거리 기반 (fallback)'}`);
+    } catch (e) {
+      console.error(e);
+      alert('경로 생성 중 오류가 발생했습니다.');
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
+  const handleUploadReset = async () => {
+    if (isResetting) return;
+    if (!window.confirm('추출된 지점 전체와 업로드 이미지를 모두 삭제합니다. 계속하시겠습니까?')) return;
+    setIsResetting(true);
+    // 병렬 삭제로 변경 (순차 → 동시)
+    await Promise.all(
+      extractedPoints
+        .filter(p => p.photoUrl && p.photoUrl.startsWith('https://'))
+        .map(p => fetch('/api/delete-blob', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url: p.photoUrl }),
+        }).catch(e => console.error('Blob 삭제 오류:', e)))
+    );
+    setUploadedImages([]);
+    setExtractedPoints([]);
+    const draft = JSON.parse(localStorage.getItem('draft-route') || '{}');
+    delete draft.extractedPoints;
+    draft.lastModified = Date.now();
+    localStorage.setItem('draft-route', JSON.stringify(draft));
+    setIsResetting(false);
+  };
+
+  const handleDirectReset = async () => {
+    if (!window.confirm('직접입력 지점 전체를 삭제합니다. 계속하시겠습니까?')) return;
+    setIsResetting(true);
+    await Promise.all(
+      directPoints
+        .filter(p => p.photoUrl && p.photoUrl.startsWith('https://'))
+        .map(p => fetch('/api/delete-blob', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url: p.photoUrl }),
+        }).catch(e => console.error('Blob 삭제 오류:', e)))
+    );
+    setDirectPoints([]);
+    const draft = JSON.parse(localStorage.getItem('draft-route') || '{}');
+    delete draft.directPoints;
+    draft.lastModified = Date.now();
+    localStorage.setItem('draft-route', JSON.stringify(draft));
+    setIsResetting(false);
   };
 
   return (
-    <div style={{ width: '100vw', height: '100vh', background: '#0d1b2e', display: 'flex', flexDirection: 'column' }}>
-      {/* 상단 헤더 */}
-      <div
-        style={{
-          background: 'linear-gradient(180deg, #1a3a6e 0%, #0d2444 100%)',
-          padding: '8px 12px',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: '5px',
-          flexShrink: 0,
-          borderBottom: '1px solid rgba(100,180,255,0.3)',
-          touchAction: 'none',
-          userSelect: 'none',
-          WebkitUserSelect: 'none',
-        }}
-        onTouchStart={e => e.stopPropagation()}
-        onTouchMove={e => e.stopPropagation()}
-        onTouchEnd={e => e.stopPropagation()}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <button
-            onClick={() => router.back()}
-            style={{
-              background: 'rgba(255,255,255,0.1)',
-              border: '1px solid rgba(255,255,255,0.2)',
-              color: 'white',
-              borderRadius: '6px',
-              padding: '5px 10px',
-              fontSize: '12px',
-              cursor: 'pointer',
-              flexShrink: 0,
-            }}>
-            ← 카드 리스트
-          </button>
-          <div style={{ color: 'white', fontWeight: 'bold', fontSize: '15px' }}>순회 경로 지도</div>
-        </div>
-        {route && (
-          <div style={{ color: 'rgba(150,200,255,0.85)', fontSize: '11px', paddingLeft: '108px' }}>
-            {route.date} · 버전{route.version} · {route.points.filter(p => p.source !== 'fixed').length}개 지점
-          </div>
-        )}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', paddingLeft: '108px' }}>
-          <div style={{ display: 'flex', borderRadius: '6px', overflow: 'hidden', border: '1px solid rgba(255,255,255,0.25)' }}>
-            <button
-              onClick={() => setLineMode('straight')}
-              style={{
-                padding: '4px 10px',
-                fontSize: '11px',
-                fontWeight: 'bold',
-                cursor: 'pointer',
-                border: 'none',
-                background: lineMode === 'straight' ? 'rgba(100,180,255,0.4)' : 'rgba(255,255,255,0.08)',
-                color: lineMode === 'straight' ? 'white' : 'rgba(255,255,255,0.5)',
-              }}>직선</button>
-            <button
-              onClick={() => setLineMode('road')}
-              style={{
-                padding: '4px 10px',
-                fontSize: '11px',
-                fontWeight: 'bold',
-                cursor: 'pointer',
-                border: 'none',
-                borderLeft: '1px solid rgba(255,255,255,0.25)',
-                background: lineMode === 'road' ? 'rgba(100,180,255,0.4)' : 'rgba(255,255,255,0.08)',
-                color: lineMode === 'road' ? 'white' : 'rgba(255,255,255,0.5)',
-              }}>도로</button>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-              <div style={{ width: 9, height: 9, borderRadius: '50%', background: '#FF6B35', border: '1px solid white' }} />
-              <span style={{ color: 'rgba(255,255,255,0.7)', fontSize: '10px' }}>미완료</span>
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-              <div style={{ width: 9, height: 9, borderRadius: '50%', background: '#1565c0', border: '1px solid white' }} />
-              <span style={{ color: 'rgba(255,255,255,0.7)', fontSize: '10px' }}>완료</span>
-            </div>
-          </div>
-        </div>
+    <div className="min-h-screen" style={{ background: 'linear-gradient(180deg, #1a3a6e 0%, #1565c0 40%, #1976d2 100%)' }}>
+      {/* 헤더 */}
+      <header className="px-4 py-3 text-white" style={{ background: 'linear-gradient(180deg, #0d2444 0%, #1a3a6e 100%)' }}>
+        <h1 className="text-lg font-bold text-center">패트롤 옵티마이저</h1>
+        <p className="text-xs text-blue-200 mt-1 text-center leading-relaxed">
+          최적화 순회 경로는 인공지능 클로드가 네이버 클라우드의 지리정보를 기반으로 동선 낭비 없는 루프형 동선으로 설계한 것입니다.
+        </p>
+      </header>
+
+      {/* 탭바 */}
+      <div className="flex" style={{ background: '#1a3a6e' }}>
+        <button
+          onClick={handleViewTabClick}
+          className={`py-3 text-sm font-medium transition-all ${activeTab === 'view' ? 'w-2/3 text-white font-bold' : 'w-1/3 text-blue-300'}`}
+          style={activeTab === 'view' ? { background: 'linear-gradient(180deg, #2196f3 0%, #1565c0 100%)' } : { background: '#2a4a7e' }}
+        >
+          최적화 경로 확인
+        </button>
+        <button
+          onClick={handleInputTabClick}
+          className={`py-3 text-sm font-medium transition-all ${activeTab === 'input' ? 'w-2/3 text-white font-bold' : 'w-1/3 text-blue-300'}`}
+          style={activeTab === 'input' ? { background: 'linear-gradient(180deg, #b0bec5 0%, #78909c 100%)' } : { background: '#2a4a7e' }}
+        >
+          지점 정보 입력
+        </button>
       </div>
 
-      {isLoading && (
-        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'rgba(150,200,255,0.8)', fontSize: '14px' }}>
-          경로 불러오는 중...
-        </div>
-      )}
+      {/* 탭 콘텐츠 */}
+      <style>{`
+        @keyframes pulse-btn {
+          0%, 100% { background-color: #16a34a; }
+          50% { background-color: #f97316; }
+        }
+      `}</style>
+      <main className="px-3 py-3 max-w-lg mx-auto space-y-2">
 
-      {!isLoading && !route && (
-        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'rgba(150,200,255,0.8)', fontSize: '14px' }}>
-          오늘 생성된 경로가 없습니다.
-        </div>
-      )}
+        {/* ── 최적화 경로 확인 탭 ── */}
+        {activeTab === 'view' && (
+          <>
+            {isLoadingRoute && (
+              <div className="text-center py-8 text-blue-200 text-sm">경로 불러오는 중...</div>
+            )}
+            {!isLoadingRoute && !currentRoute && (
+              <div className="text-center py-8 text-blue-200 text-sm">오늘 생성된 경로가 없습니다.</div>
+            )}
+            {!isLoadingRoute && currentRoute && (
+              <>
+                {/* 카드 리스트 */}
+                <div className="rounded overflow-hidden">
+                  <button
+                    onClick={() => setCardListOpen(!cardListOpen)}
+                    className="w-full flex justify-between items-center px-4 py-3 text-white font-medium text-sm"
+                    style={{ background: 'linear-gradient(180deg, #4a90d9 0%, #1a5fb4 100%)' }}
+                  >
+                    <span>카드 리스트</span>
+                    <span className="flex items-center gap-2">
+                      <span className="text-xs text-blue-200">{currentRoute.date} 버전{currentRoute.version}</span>
+                      <span>{cardListOpen ? '▲' : '▼'}</span>
+                    </span>
+                  </button>
+                  {cardListOpen && (
+                    <div className="pt-0 pb-2">
+                      {currentRoute.points.map((point, idx) => (
+                        <div key={point.order} style={idx === 0 ? { marginTop: '28px' } : {}}>
+                        {(() => {
+                          const st = pointStatuses[statusKey(point)];
+                          const isDone = st && ['민원처리완료','기처리','확인불가'].includes(st.status);
+                          // 의정부시청(fixed) 카드는 1번 지점 완료 여부로 색상 결정
+                          const firstPoint = currentRoute?.points.find(p => p.source !== 'fixed');
+                          const firstDone = firstPoint && (() => { const fst = pointStatuses[statusKey(firstPoint)]; return fst && ['민원처리완료','기처리','확인불가'].includes(fst.status); })();
+                          const cardBg = point.source === 'fixed'
+                            ? (firstDone ? 'rgba(255,255,255,0.12)' : 'rgba(235,100,0,0.55)')
+                            : (isDone ? 'rgba(255,255,255,0.12)' : 'rgba(235,100,0,0.55)');
+                          return (
+                        <div className="mx-2 rounded px-3 py-3"
+                          style={{ background: cardBg, cursor: point.source !== 'fixed' ? 'pointer' : 'default' }}
+                          onClick={() => { if (point.source !== 'fixed') { setSelectedPoint(point); setShowDetailModal(true); document.body.style.overflow = 'hidden'; } }}>
+                          <div style={{ display: 'flex', alignItems: point.source === 'fixed' ? 'center' : 'flex-start', gap: '8px' }}>
+                            <div style={{
+                              flexShrink: 0, width: '32px', height: '32px', borderRadius: '50%',
+                              background: point.source === 'fixed' ? (firstDone ? '#1565c0' : '#f57f17') : 'rgba(0,0,0,0.35)',
+                              display: 'flex', alignItems: 'center', justifyContent: 'center',
+                              color: 'white', fontWeight: 'bold', fontSize: '13px',
+                            }}>
+                              {point.source === 'fixed'
+                                ? <svg width="16" height="16" viewBox="0 0 24 24" fill="white"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/></svg>
+                                : point.order}
+                            </div>
+                            {/* 정보 영역 + 버튼 */}
+                            <div style={{ flex: 1, display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
+                              {/* 정보 영역 */}
+                              <div className="flex-1">
+                                <p className="text-sm leading-snug font-medium">
+                                  {point.source === 'place_single' || point.source === 'place_nearest' ? (
+                                    <span style={{ color: '#a5d6a7' }}>{point.address}{point.destination ? ` (${point.destination})` : ''}</span>
+                                  ) : point.source === 'address' ? (
+                                    <><span style={{ color: '#a5d6a7' }}>{point.address}</span>{point.destination ? <span className="text-white"> ({point.destination})</span> : ''}</>
+                                  ) : point.source === 'fixed' ? (
+                                    <span style={{ color: firstDone ? '#a5d6a7' : '#ffcc80' }}>{point.destination || point.address}</span>
+                                  ) : (
+                                    <span className="text-white">{point.address}{point.destination ? ` (${point.destination})` : ''}</span>
+                                  )}
+                                </p>
+                                {point.placeName && point.source !== 'address' && point.source !== 'fixed' && (
+                                  <div style={{ display: 'flex', gap: '6px', marginTop: '2px', color: '#a5d6a7', fontSize: '12px' }}>
+                                    <span style={{ width: '3.2rem', flexShrink: 0 }}></span>
+                                    <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                      <span>🔍</span><span>{point.placeName}</span>
+                                    </span>
+                                  </div>
+                                )}
+                                {(!point.placeName || point.source === 'address') && point.source && point.source !== 'fixed' && (
+                                  <div style={{ display: 'flex', gap: '6px', marginTop: '2px', color: '#fff176', fontSize: '12px' }}>
+                                    <span style={{ width: '3.2rem', flexShrink: 0 }}></span>
+                                    <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                      <span>📍</span><span>주소로 위치 확인</span>
+                                    </span>
+                                  </div>
+                                )}
+                                {point.source !== 'fixed' && (
+                                  <div style={{ borderTop: '1px solid rgba(255,255,255,0.15)', marginTop: 5, marginBottom: 4 }} />
+                                )}
+                                {point.source !== 'fixed' && (
+                                  <div style={{ display: 'flex', gap: '6px', marginTop: '2px' }}>
+                                    <span style={{ color: 'rgba(255,255,255,0.6)', fontSize: '12px', width: '3.2rem', flexShrink: 0 }}>민원번호:</span>
+                                    <span style={{ color: '#a5d6a7', fontSize: '12px' }}>{point.originalId ? `${point.originalId} 번` : ''}</span>
+                                  </div>
+                                )}
+                                {point.source !== 'fixed' && (
+                                  <div style={{ display: 'flex', gap: '6px', marginTop: '2px' }}>
+                                    <span style={{ color: 'rgba(255,255,255,0.6)', fontSize: '12px', width: '3.2rem', flexShrink: 0 }}>민원내용:</span>
+                                    <span style={{ color: '#a5d6a7', fontSize: '12px' }}>{point.complaint || ''}</span>
+                                  </div>
+                                )}
+                                {point.source !== 'fixed' && (
+                                  <div style={{ display: 'flex', gap: '6px', marginTop: '2px' }}>
+                                    <span style={{ color: 'rgba(255,255,255,0.6)', fontSize: '12px', width: '3.2rem', flexShrink: 0 }}>사진설명:</span>
+                                    <span style={{ color: '#a5d6a7', fontSize: '12px' }}>{point.photoDescription || ''}</span>
+                                  </div>
+                                )}
+                                {point.source !== 'fixed' && (
+                                  <>
+                                    <div style={{ borderTop: '1px solid rgba(255,255,255,0.2)', marginTop: 6, marginBottom: 4 }} />
+                                    <div style={{ display: 'flex', gap: '6px', marginTop: '2px' }}>
+                                      <span style={{ color: 'rgba(255,255,255,0.6)', fontSize: '12px', width: '3.2rem', flexShrink: 0 }}>작업상태:</span>
+                                      <span style={{ color: '#80cbc4', fontWeight: 'bold', fontSize: '12px' }}>{st?.status || ''}</span>
+                                    </div>
+                                    <div style={{ display: 'flex', gap: '6px', marginTop: '2px' }}>
+                                      <span style={{ color: 'rgba(255,255,255,0.6)', fontSize: '12px', width: '3.2rem', flexShrink: 0 }}>작업메모:</span>
+                                      <span style={{ color: '#a5d6a7', fontSize: '12px' }}>{st?.memo || ''}</span>
+                                    </div>
+                                  </>
+                                )}
+                              </div>
+                              {/* 버튼 영역 - 우측 하단 정렬 */}
+                              {point.source !== 'fixed' && (
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', flexShrink: 0, justifyContent: 'flex-end', alignSelf: 'flex-end' }}>
+                                  <button
+                                    onClick={(e) => { e.stopPropagation(); window.open(`tmap://route?goalname=${encodeURIComponent(point.destination || point.address)}&goaly=${point.lat}&goalx=${point.lng}`); }}
+                                    className="text-xs text-white px-3 py-1.5 rounded font-bold" style={{ background: '#0a3d8f' }}>티맵</button>
+                                  <button
+                                    onClick={(e) => { e.stopPropagation(); window.open(`nmap://navigation?dlat=${point.lat}&dlng=${point.lng}&dname=${encodeURIComponent(point.destination || point.address)}&appname=patrol-optimizer`); }}
+                                    className="text-xs text-white px-3 py-1.5 rounded font-bold" style={{ background: '#1b5e20' }}>네이버</button>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                          );
+                        })()}
+                          <div className="flex justify-center py-1.5">
+                            <div className="flex flex-col items-center">
+                              {idx < currentRoute.points.length - 1 && (
+                                <div style={{ width: 6, height: 10, background: 'rgba(100,180,255,0.6)', borderRadius: 3 }} />
+                              )}
+                              {idx < currentRoute.points.length - 1 && (
+                                <svg width="20" height="12" viewBox="0 0 20 12" fill="none">
+                                  <path d="M10 12C9.6 12 9.2 11.8 9 11.5L0.5 1.5C0.1 1 0.4 0 1 0H19C19.6 0 19.9 1 19.5 1.5L11 11.5C10.8 11.8 10.4 12 10 12Z" fill="rgba(100,180,255,0.8)" />
+                                </svg>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
 
-      {/* 지도 */}
-      <div ref={mapRef} style={{ flex: 1, width: '100%' }} />
+                {/* 지도 뷰 */}
+                <div className="rounded overflow-hidden mt-2">
+                  <button
+                    onClick={() => { sessionStorage.setItem('map-entry', '1'); window.location.href = '/map'; }}
+                    className="w-full flex justify-between items-center px-4 py-3 text-white font-medium text-sm"
+                    style={{ background: 'linear-gradient(180deg, #4a90d9 0%, #1a5fb4 100%)' }}
+                  >
+                    <span>지도 뷰</span>
+                    <span className="flex items-center gap-2">
+                      <span className="text-xs text-blue-200">{currentRoute.date} 버전{currentRoute.version}</span>
+                      <span>▶</span>
+                    </span>
+                  </button>
+                </div>
+              </>
+            )}
 
-      {/* 도로 모드 로딩 안내 */}
-      {lineMode === 'road' && routeDrawn === false && route && mapReady && !osrmError && (
-        <div style={{
-          position: 'absolute', bottom: 16, left: '50%', transform: 'translateX(-50%)',
-          background: 'rgba(0,0,0,0.7)', color: 'white', fontSize: '12px',
-          padding: '6px 14px', borderRadius: '20px',
-        }}>
-          도로 경로 계산 중...
-        </div>
-      )}
+            <div className="rounded mt-2" style={{ background: '#0d2444' }}>
+              <button
+                onClick={loadCurrentRoute}
+                className="w-full py-3 text-white text-sm font-medium"
+              >최신 정보로 가져오기</button>
+            </div>
+          </>
+        )}
 
-      {/* ORS 도로 경로 로딩 메시지 - 초록색, 화면 중앙 */}
-      {roadLoading && (
-        <div style={{
-          position: 'absolute',
-          top: '50%', left: '50%',
-          transform: 'translate(-50%, -50%)',
-          background: 'rgba(27,94,32,0.92)',
-          color: 'white', fontSize: '13px', fontWeight: 'bold',
-          padding: '12px 24px', borderRadius: '12px',
-          display: 'flex', alignItems: 'center', gap: '10px',
-          boxShadow: '0 4px 16px rgba(0,0,0,0.4)',
-          whiteSpace: 'nowrap', zIndex: 300,
-        }}>
-          <span style={{ fontSize: '16px' }}>🛣️</span>
-          <span>도로 경로를 불러오는 중...</span>
-        </div>
-      )}
+        {/* ── 지점 정보 입력 탭 ── */}
+        {activeTab === 'input' && (
+          <>
+            {/* 이미지 업로드 아코디언 */}
+            <div className="rounded overflow-hidden">
+              <button
+                onClick={() => setUploadOpen(!uploadOpen)}
+                className="w-full flex justify-between items-center px-4 py-3 text-white font-medium text-sm"
+                style={{ background: 'linear-gradient(180deg, #b0bec5 0%, #78909c 100%)' }}
+              >
+                <span>이미지를 업로드하여 지점정보 추출하기</span>
+                <span className="flex items-center gap-2">
+                  <div
+                    onClick={(e) => { e.stopPropagation(); handleUploadReset(); }}
+                    className="text-white text-xs px-2 py-1 rounded cursor-pointer"
+                    style={{ background: isResetting ? '#888' : '#2e7d32', cursor: isResetting ? 'not-allowed' : 'pointer' }}
+                  >{isResetting ? '초기화 중...' : '초기화'}</div>
+                  <span>{uploadOpen ? '▲' : '▼'}</span>
+                </span>
+              </button>
 
-      {/* OSRM 서버 오류 배너 - 하단 표시, 직선 모드 선택시 숨김 */}
-      {lineMode === 'road' && osrmError && (
-        <div style={{
-          position: 'absolute', bottom: 40, left: '50%', transform: 'translateX(-50%)',
-          background: 'rgba(160,30,10,0.92)', color: 'white',
-          fontSize: '12px', padding: '7px 14px', borderRadius: '20px',
-          display: 'flex', alignItems: 'center', gap: '6px',
-          boxShadow: '0 2px 8px rgba(0,0,0,0.4)', whiteSpace: 'nowrap',
-          zIndex: 200,
-        }}>
-          <span>⚠️</span>
-          <span>도로 경로 서버(OSRM·ORS) 모두 응답 없음 — 직선으로 표시합니다</span>
-        </div>
-      )}
+              {uploadOpen && (
+                <div className="px-3 py-3 space-y-3" style={{ background: 'rgba(255,255,255,0.08)' }}>
 
-      {/* 새 경로 알림 배너 */}
-      {newRouteAvailable && (
-        <div
-          onClick={() => window.location.reload()}
-          style={{
-            position: 'absolute', top: 56, left: '50%', transform: 'translateX(-50%)',
-            background: 'rgba(21,101,192,0.95)', color: 'white',
-            fontSize: '12px', fontWeight: 'bold',
-            padding: '8px 18px', borderRadius: '20px',
-            display: 'flex', alignItems: 'center', gap: '8px',
-            boxShadow: '0 2px 8px rgba(0,0,0,0.4)',
-            whiteSpace: 'nowrap', zIndex: 300, cursor: 'pointer',
-          }}>
-          <span>🔄</span>
-          <span>새 경로가 생성되었습니다 — 탭하여 갱신</span>
-        </div>
-      )}
+                  {/* 이미지 불러오기 */}
+                  <div>
+                    <label className="inline-block text-white text-xs font-bold px-4 py-2 rounded cursor-pointer w-32 text-center"
+                      style={{ background: '#0a3d8f' }}>
+                      이미지 불러오기
+                      <input type="file" accept="image/*" multiple className="hidden" onChange={handleImageUpload} />
+                    </label>
 
-      {/* 줌 안내 토스트 - 팝업 없을 때만 표시 */}
-      {routeDrawn && !showDetailModal && (
-        <div style={{
-          position: 'absolute', bottom: 16, left: '50%', transform: 'translateX(-50%)',
-          background: 'rgba(0,0,0,0.55)', color: 'rgba(200,230,255,0.85)',
-          fontSize: '11px', padding: '5px 12px', borderRadius: '20px',
-          pointerEvents: 'none', whiteSpace: 'nowrap',
-        }}>
-          확대하면 지점 마커 표시 · 더 확대하면 마커 클릭으로 상세정보 확인
-        </div>
-      )}
-
-      {/* ★ 지점 상세정보 팝업 */}
-      {showDetailModal && selectedPoint && (() => {
-        const { curStatus, curMemo, isDone } = getSelectedStatus();
-        const popupBg = curStatus && DONE_STATUSES.includes(curStatus) ? '#1a3a6e' : '#7a2800';
-        return (
-          <div
-            style={{
-              position: 'fixed', inset: 0, display: 'flex', alignItems: 'center',
-              justifyContent: 'center', zIndex: 50, background: 'rgba(0,0,0,0.6)',
-            }}
-            onClick={() => setShowDetailModal(false)}>
-            <div
-              style={{
-                background: popupBg, borderRadius: '12px', padding: '20px',
-                width: '88%', maxWidth: '400px', maxHeight: '90vh',
-                overflowY: 'auto', boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
-              }}
-              onClick={(e) => e.stopPropagation()}>
-
-              {/* 헤더 */}
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-                <h2 style={{ color: 'white', fontWeight: 'bold', fontSize: '15px', display: 'flex', alignItems: 'center', gap: '8px', margin: 0, minWidth: 0 }}>
-                  <span style={{
-                    width: '28px', height: '28px', borderRadius: '50%',
-                    background: 'white', color: '#1a3a6e',
-                    fontSize: '13px', fontWeight: 'bold',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-                  }}>
-                    {selectedPoint.order}
-                  </span>
-                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {selectedPoint.destination
-                      ? `${selectedPoint.address} (${selectedPoint.destination})`
-                      : selectedPoint.address}
-                  </span>
-                </h2>
-                <span
-                  style={{ color: 'white', cursor: 'pointer', fontSize: '18px', flexShrink: 0, marginLeft: '8px' }}
-                  onClick={() => setShowDetailModal(false)}>✕</span>
-              </div>
-
-              {/* 정보 목록 */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                {[
-                  { label: '주소', value: selectedPoint.address || '' },
-                  { label: '목적지', value: selectedPoint.destination || '' },
-                  { label: '좌표확인', value:
-                    selectedPoint.source === 'place_single' || selectedPoint.source === 'place_nearest'
-                      ? '✅ 목적지로 위치 확인'
-                      : selectedPoint.source === 'address'
-                      ? '📍 주소로 위치 확인'
-                      : '❌ 위치 미확인' },
-                ].map(({ label, value }) => (
-                  <div key={label} style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
-                    <span style={{ color: '#90caf9', fontSize: '11px', width: '60px', flexShrink: 0, paddingTop: '2px' }}>{label}</span>
-                    <span style={{ color: 'white', fontSize: '11px', flex: 1 }}>{value}</span>
-                  </div>
-                ))}
-
-                {/* 좌표확인 아래 수평선 */}
-                <div style={{ borderTop: '1px solid rgba(255,255,255,0.2)', marginTop: '2px', marginBottom: '2px' }} />
-
-                {[
-                  { label: '민원번호', value: selectedPoint.originalId ? `${selectedPoint.originalId}번` : '' },
-                  { label: '민원내용', value: selectedPoint.complaint || '' },
-                  { label: '담당자', value: selectedPoint.manager || '' },
-                ].map(({ label, value }) => (
-                  <div key={label} style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
-                    <span style={{ color: '#90caf9', fontSize: '11px', width: '60px', flexShrink: 0, paddingTop: '2px' }}>{label}</span>
-                    <span style={{ color: 'white', fontSize: '11px', flex: 1 }}>{value}</span>
-                  </div>
-                ))}
-
-                {/* 현장사진 */}
-                <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
-                  <span style={{ color: '#90caf9', fontSize: '11px', width: '60px', flexShrink: 0, paddingTop: '2px' }}>현장사진</span>
-                  <div style={{ flex: 1 }}>
-                    {selectedPoint.photoUrl ? (
-                      <img src={selectedPoint.photoUrl} alt="현장사진" style={{ width: '100%', borderRadius: '6px' }} />
-                    ) : (
-                      <div style={{
-                        borderRadius: '6px', height: '80px',
-                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        background: 'rgba(255,255,255,0.1)', border: '1px dashed rgba(255,255,255,0.3)',
-                      }}>
-                        <span style={{ color: '#90caf9', fontSize: '11px' }}>사진 없음</span>
+                    {/* 썸네일 목록 */}
+                    {uploadedImages.length > 0 && (
+                      <div className="flex flex-wrap gap-2 mt-2">
+                        {uploadedImages.map((img) => (
+                          <div key={img.id} className="relative w-16 h-16">
+                            <img src={img.url} alt={img.name} className="w-16 h-16 object-cover rounded" />
+                            <button
+                              onClick={() => handleImageDelete(img.id)}
+                              className="absolute -top-1 -right-1 w-5 h-5 rounded-full text-white text-xs flex items-center justify-center font-bold"
+                              style={{ background: '#c62828' }}
+                            >✕</button>
+                          </div>
+                        ))}
                       </div>
                     )}
                   </div>
-                </div>
 
-                {/* 사진설명 - 레이블 없이 값만 표시 */}
-                {selectedPoint.photoDescription && (
-                  <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
-                    <span style={{ width: '60px', flexShrink: 0 }} />
-                    <span style={{ color: 'rgba(255,255,255,0.7)', fontSize: '11px', flex: 1 }}>{selectedPoint.photoDescription}</span>
-                  </div>
-                )}
+                  {/* 지점 추출하기 버튼 */}
+                  <button
+                    onClick={isExtracting ? undefined : handleExtract}
+                    disabled={isExtracting}
+                    className="py-2 rounded text-white text-xs font-bold w-32"
+                    style={{ background: isExtracting ? '#f97316' : '#0a3d8f', animation: isExtracting ? 'pulse-btn 1s ease-in-out infinite' : 'none' }}
+                  >
+                    {isExtracting ? '추출 중...' : '지점 추출하기'}
+                  </button>
 
-                {/* 작업상태 - 관리자: 편집 가능 / 일반: 읽기전용 */}
-                <div style={{ marginTop: '4px', paddingTop: '12px', borderTop: '1px solid rgba(255,255,255,0.2)' }}>
-                  {isAdmin ? (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                      <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
-                        <span style={{ color: '#90caf9', fontSize: '11px', width: '60px', flexShrink: 0 }}>작업상태</span>
-                        <select
-                          value={editStatus}
-                          onChange={e => setEditStatus(e.target.value)}
-                          style={{
-                            flex: 1, background: '#1a3a6e', color: 'white',
-                            border: '1px solid rgba(100,180,255,0.4)', borderRadius: '6px',
-                            padding: '4px 8px', fontSize: '12px',
-                          }}>
-                          <option value="" style={{ background: '#1a3a6e', color: 'white' }}>선택 (미완료)</option>
-                          <option value="민원처리완료" style={{ background: '#1a3a6e', color: 'white' }}>민원처리완료</option>
-                          <option value="기처리" style={{ background: '#1a3a6e', color: 'white' }}>기처리</option>
-                          <option value="확인불가" style={{ background: '#1a3a6e', color: 'white' }}>확인불가</option>
-                        </select>
-                      </div>
-                      <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
-                        <span style={{ color: '#90caf9', fontSize: '11px', width: '60px', flexShrink: 0 }}>작업메모</span>
-                        <input
-                          type="text"
-                          value={editMemo}
-                          onChange={e => setEditMemo(e.target.value)}
-                          placeholder="메모 입력"
-                          style={{
-                            flex: 1, background: 'rgba(255,255,255,0.1)', color: 'white',
-                            border: '1px solid rgba(100,180,255,0.4)', borderRadius: '6px',
-                            padding: '4px 8px', fontSize: '12px',
-                          }} />
-                      </div>
-                      <button
-                        onClick={handleSaveStatus}
-                        disabled={savingStatus}
-                        style={{
-                          marginTop: '2px', padding: '7px', borderRadius: '6px',
-                          background: savingStatus ? 'rgba(100,100,100,0.5)' : 'rgba(21,101,192,0.8)',
-                          color: 'white', fontSize: '12px', fontWeight: 'bold',
-                          border: 'none', cursor: savingStatus ? 'default' : 'pointer',
-                        }}>
-                        {savingStatus ? '저장 중...' : '저장'}
-                      </button>
+                  {/* 추출된 지점카드 */}
+                  {extractedPoints.length > 0 && (
+                    <div className="space-y-2">
+                      {extractedPoints.map((point) => (
+                        <div key={point.id} className="rounded px-3 py-2"
+                          style={{ background: 'rgba(255,255,255,0.12)' }}>
+                          <div className="flex justify-between items-start gap-2">
+                            <div className="flex-shrink-0 w-7 h-7 rounded-full flex items-center justify-center text-white font-bold text-sm"
+                              style={{ background: 'rgba(0,0,0,0.35)' }}>
+                              {point.id}
+                            </div>
+                            <div className="flex-1 cursor-pointer" onClick={() => handleExtractedEdit(point)}>
+                              <p className="text-sm leading-snug font-medium">
+                                {point.source === 'place_single' || point.source === 'place_nearest' ? (
+                                  <span style={{ color: '#a5d6a7' }}>{point.address}{point.destination ? ` (${point.destination})` : ''}</span>
+                                ) : point.source === 'address' ? (
+                                  <><span style={{ color: '#a5d6a7' }}>{point.address}</span>{point.destination ? <span className="text-white"> ({point.destination})</span> : ''}</>
+                                ) : (
+                                  <span className="text-white">{point.address}{point.destination ? ` (${point.destination})` : ''}</span>
+                                )}
+                              </p>
+                              {point.placeName && point.source !== 'address' && (
+                                <p className="text-xs mt-0.5" style={{ color: '#a5d6a7' }}>
+                                  <span style={{ display: 'inline-block', width: '4.5rem' }}>🔍</span>{point.placeName}
+                                </p>
+                              )}
+                              {(!point.placeName || point.source === 'address') && point.source && (
+                                <p className="text-xs mt-0.5" style={{ color: '#fff176' }}>
+                                  <span style={{ display: 'inline-block', width: '4.5rem' }}>📍</span>주소로 위치 확인
+                                </p>
+                              )}
+                              {!point.source && (
+                                <p className="text-xs mt-0.5" style={{ color: 'rgba(255,255,255,0.5)' }}>
+                                  <span style={{ display: 'inline-block', width: '4.5rem' }}>❓</span>위치를 찾지 못했습니다
+                                </p>
+                              )}
+                              <p className="text-xs mt-0.5" style={{ color: '#a5d6a7' }}>
+                                <span style={{ color: 'rgba(255,255,255,0.6)', display: 'inline-block', width: '3.2rem' }}>민원내용:</span><span style={{ color: '#a5d6a7' }}>{point.complaint}</span>
+                              </p>
+                              {point.photoDescription && (
+                                <p className="text-xs mt-0.5" style={{ color: '#a5d6a7' }}>
+                                  <span style={{ color: 'rgba(255,255,255,0.6)', display: 'inline-block', width: '3.2rem' }}>사진설명:</span>{point.photoDescription}
+                                </p>
+                              )}
+                            </div>
+                            <button
+                              onClick={() => handleExtractedDelete(point.id)}
+                              disabled={deletingId !== null}
+                              className="text-xs text-white px-2 py-1 rounded flex-shrink-0"
+                              style={{ background: deletingId === point.id ? '#888' : '#c62828', cursor: deletingId !== null ? 'not-allowed' : 'pointer' }}>
+                              {deletingId === point.id ? '삭제 중' : '삭제'}
+                            </button>
+                          </div>
+                        </div>
+                      ))}
                     </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* 직접 입력 아코디언 */}
+            <div className="rounded overflow-hidden">
+              <button
+                onClick={() => setDirectOpen(!directOpen)}
+                className="w-full flex justify-between items-center px-4 py-3 text-white font-medium text-sm"
+                style={{ background: 'linear-gradient(180deg, #b0bec5 0%, #78909c 100%)' }}
+              >
+                <span>지점정보 직접 입력하기</span>
+                <span className="flex items-center gap-2">
+                  <div
+                    onClick={(e) => { e.stopPropagation(); handleDirectReset(); }}
+                    className="text-white text-xs px-2 py-1 rounded cursor-pointer"
+                    style={{ background: '#2e7d32' }}
+                  >초기화</div>
+                  <span>{directOpen ? '▲' : '▼'}</span>
+                </span>
+              </button>
+              {directOpen && (
+                <div className="px-3 py-3 space-y-2" style={{ background: 'rgba(255,255,255,0.08)' }}>
+                  {/* 직접입력 지점카드 목록 */}
+                  {directPoints.map((point, index) => (
+                    <div key={point.id} className="rounded px-3 py-2"
+                      style={{ background: 'rgba(255,255,255,0.12)' }}>
+                      <div className="flex justify-between items-start gap-2">
+                        <div className="flex-shrink-0 w-7 h-7 rounded-full flex items-center justify-center text-white font-bold text-xs"
+                          style={{ background: 'rgba(0,0,0,0.35)' }}>
+                          D{index + 1}
+                        </div>
+                        <div className="flex-1 cursor-pointer" onClick={() => handleDirectEdit(point)}>
+                          <p className="text-sm font-medium leading-snug"
+                            style={{ color: point.source ? '#a5d6a7' : 'white' }}>
+                            {point.address || '주소 없음'}{point.destination ? ` (${point.destination})` : ''}
+                          </p>
+                          {(point.source === 'place_single' || point.source === 'place_nearest') && (
+                            <p className="text-xs mt-0.5" style={{ color: '#a5d6a7' }}>
+                              <span style={{ display: 'inline-block', width: '4.5rem' }}>🔍</span>{point.placeName}
+                            </p>
+                          )}
+                          {point.source === 'address' && (
+                            <p className="text-xs mt-0.5" style={{ color: '#fff176' }}>
+                              <span style={{ display: 'inline-block', width: '4.5rem' }}>📍</span>주소로 위치 확인
+                            </p>
+                          )}
+                          {!point.source && (
+                            <p className="text-xs mt-0.5" style={{ color: 'rgba(255,255,255,0.5)' }}>
+                              <span style={{ display: 'inline-block', width: '4.5rem' }}>❓</span>위치를 찾지 못했습니다
+                            </p>
+                          )}
+                          <p className="text-xs mt-0.5" style={{ color: 'rgba(255,255,255,0.7)' }}>
+                            <span style={{ color: 'rgba(255,255,255,0.6)', display: 'inline-block', width: '3.2rem' }}>민원내용:</span><span style={{ color: '#a5d6a7' }}>{point.complaint}</span>
+                          </p>
+                        </div>
+                        <button
+                          onClick={() => handleDirectDelete(point.id)}
+                          disabled={deletingId !== null}
+                          className="text-xs text-white px-2 py-1 rounded flex-shrink-0"
+                          style={{ background: deletingId === point.id ? '#888' : '#c62828', cursor: deletingId !== null ? 'not-allowed' : 'pointer' }}>
+                          {deletingId === point.id ? '삭제 중' : '삭제'}
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+
+                  {/* 지점 추가 아이콘 */}
+                  <div
+                    onClick={() => handleDirectAdd()}
+                    className="flex items-center justify-center w-10 h-10 rounded-full cursor-pointer mx-auto mt-1"
+                    style={{ background: 'rgba(255,255,255,0.2)', border: '2px dashed rgba(255,255,255,0.5)' }}
+                  >
+                    <span className="text-white text-xl font-bold">+</span>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* 최적화 경로 생성하기 */}
+            <div className="rounded mt-2" style={{ background: '#0d2444' }}>
+              <button
+                onClick={handleGenerateRoute}
+                className="w-full py-3 text-white text-sm font-medium"
+                style={{ opacity: isGenerating ? 0.6 : 1, cursor: isGenerating ? 'not-allowed' : 'pointer' }}
+              >{isGenerating ? '경로 생성 중...' : '최적화 경로 생성하기'}</button>
+            </div>
+          </>
+        )}
+      </main>
+
+      {/* 관리자 인증 모달 */}
+      {showAuthModal && (
+        <div className="fixed inset-0 flex items-center justify-center z-50"
+          style={{ background: 'rgba(0,0,0,0.6)' }}>
+          <div className="rounded-lg px-6 py-6 w-72" style={{ background: '#1a3a6e' }}>
+            <h2 className="text-white font-bold text-base text-center mb-4">관리자 인증</h2>
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleAuth()}
+              placeholder="비밀번호"
+              className="w-full px-3 py-2 rounded text-sm mb-2 outline-none"
+              style={{ background: 'rgba(255,255,255,0.15)', color: 'white' }}
+            />
+            {authError && (
+              <p className="text-red-300 text-xs text-center mb-2">{authError}</p>
+            )}
+            <div className="flex gap-2 mt-3">
+              <button onClick={handleAuthClose}
+                className="flex-1 py-2 rounded text-sm text-white font-medium"
+                style={{ background: '#455a64' }}>닫기</button>
+              <button onClick={handleAuth}
+                className="flex-1 py-2 rounded text-sm text-white font-bold"
+                style={{ background: '#0a3d8f' }}>인증</button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* 직접 입력 지점정보 모달 */}
+      {showDirectModal && (
+        <div className="fixed inset-0 flex items-center justify-center z-50"
+          style={{ background: 'rgba(0,0,0,0.6)' }}>
+          <div className="rounded-lg px-5 py-5 w-80 max-h-screen overflow-y-auto" style={{ background: '#1a3a6e' }}>
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-white font-bold text-base flex items-center gap-2">
+                <span className="w-7 h-7 rounded-full bg-white text-blue-900 text-sm font-bold flex items-center justify-center flex-shrink-0">
+                  {editingPoint ? `D${directPoints.findIndex(p => p.id === editingPoint.id) + 1}` : `D${directPoints.length + 1}`}
+                </span>
+                지점정보 {editingPoint ? '수정' : '입력'}
+              </h2>
+              <span className="text-white cursor-pointer text-lg" onClick={() => setShowDirectModal(false)}>✕</span>
+            </div>
+
+            {/* 위치정보 묶음 */}
+            <div className="rounded-lg p-3 mb-3" style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.15)' }}>
+              <div className="mb-2">
+                <label className="text-blue-200 text-xs mb-1 block">주소</label>
+                <input type="text" value={directForm.address} placeholder=""
+                  onChange={(e) => { setDirectForm((prev) => ({ ...prev, address: e.target.value })); setDirectCoordStatus('idle'); }}
+                  className="w-full px-3 py-2 rounded text-sm outline-none"
+                  style={{ background: 'rgba(255,255,255,0.15)', color: directCoordStatus === 'success' ? '#a5d6a7' : 'white' }} />
+              </div>
+              <div className="mb-2">
+                <label className="text-blue-200 text-xs mb-1 block">목적지</label>
+                <input type="text" value={directForm.destination} placeholder=""
+                  onChange={(e) => { setDirectForm((prev) => ({ ...prev, destination: e.target.value })); setDirectCoordStatus('idle'); }}
+                  className="w-full px-3 py-2 rounded text-sm outline-none"
+                  style={{ background: 'rgba(255,255,255,0.15)', color: directCoordStatus === 'success' ? '#a5d6a7' : 'white' }} />
+              </div>
+              <button
+                onClick={async () => {
+                  setDirectCoordStatus('loading');
+                  try {
+                    const res = await fetch('/api/geocode', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ address: directForm.address, destination: directForm.destination }),
+                    });
+                    const data = await res.json();
+                    if (res.ok && data.lat && data.lng) {
+                      setDirectCoord({ lat: data.lat, lng: data.lng, placeName: data.placeName || null, source: data.source || null });
+                      setDirectCoordStatus('success');
+                    } else {
+                      setDirectCoordStatus('fail');
+                    }
+                  } catch (e) {
+                    console.error('geocode 오류:', e);
+                    setDirectCoordStatus('fail');
+                  }
+                }}
+                disabled={directCoordStatus === 'loading'}
+                className="w-full py-2 rounded text-sm font-bold text-white mb-2"
+                style={{ background: directCoordStatus === 'loading' ? '#555' : '#0a3d8f' }}
+              >
+                {directCoordStatus === 'loading' ? '확인 중...' : '좌표 확인하기'}
+              </button>
+              <p className="text-xs mt-1 text-left"
+                style={{ color: directCoordStatus === 'success' ? '#a5d6a7' : directCoordStatus === 'fail' ? '#ef9a9a' : 'rgba(255,255,255,0.5)' }}>
+                {directCoordStatus === 'idle' && '주소나 목적지를 입력한 후 좌표 확인 버튼을 누르세요.'}
+                {directCoordStatus === 'loading' && '좌표를 검색하는 중입니다...'}
+                {directCoordStatus === 'success' && '✅ 좌표가 확인되었습니다.'}
+                {directCoordStatus === 'fail' && '❌ 좌표를 찾지 못했습니다. 주소나 목적지를 다시 확인해주세요.'}
+              </p>
+              {directCoordStatus === 'success' && directCoord.placeName && directCoord.source !== 'address' && (
+                <p className="text-xs mt-1 text-left" style={{ color: '#a5d6a7' }}>🔍 {directCoord.placeName}</p>
+              )}
+              {directCoordStatus === 'success' && directCoord.source === 'address' && (
+                <p className="text-xs mt-1 text-left" style={{ color: '#fff176' }}>📍 주소로 좌표 확인 (목적지 미확인)</p>
+              )}
+            </div>
+
+            {/* 민원내용 */}
+            <div className="mb-3">
+              <label className="text-blue-200 text-xs mb-1 block">민원내용</label>
+              <input type="text" value={directForm.complaint} placeholder=""
+                onChange={(e) => setDirectForm((prev) => ({ ...prev, complaint: e.target.value }))}
+                className="w-full px-3 py-2 rounded text-sm outline-none"
+                style={{ background: 'rgba(255,255,255,0.15)', color: '#a5d6a7' }} />
+            </div>
+
+            {/* 담당자 */}
+            <div className="mb-3">
+              <label className="text-blue-200 text-xs mb-1 block">담당자</label>
+              <input type="text" value={directForm.manager} placeholder=""
+                onChange={(e) => setDirectForm((prev) => ({ ...prev, manager: e.target.value }))}
+                className="w-full px-3 py-2 rounded text-sm outline-none"
+                style={{ background: 'rgba(255,255,255,0.15)', color: '#a5d6a7' }} />
+            </div>
+
+            {/* 현장사진 */}
+            <div className="mb-3">
+              <label className="text-blue-200 text-xs mb-1 block">현장사진</label>
+              {directForm.photoUrl && (
+                <img src={directForm.photoUrl} alt="현장사진" className="w-full rounded mb-2" />
+              )}
+              <label className="flex items-center justify-center w-full py-2 rounded cursor-pointer text-white text-xs font-medium gap-1"
+                style={{ background: 'rgba(255,255,255,0.15)' }}>
+                📷 사진 선택
+                <input type="file" accept="image/*" className="hidden"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) {
+                      const url = URL.createObjectURL(file);
+                      setDirectForm((prev) => ({ ...prev, photoUrl: url }));
+                    }
+                    e.target.value = '';
+                  }} />
+              </label>
+            </div>
+
+            <div className="flex gap-2 mt-4">
+              <button onClick={() => setShowDirectModal(false)}
+                className="flex-1 py-2 rounded text-sm text-white font-medium"
+                style={{ background: '#455a64' }}>취소</button>
+              <button onClick={handleDirectSave}
+                disabled={isSaving}
+                className="flex-1 py-2 rounded text-sm text-white font-bold"
+                style={{ background: isSaving ? '#555' : '#0a3d8f' }}>
+                {isSaving ? '저장 중...' : '저장'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* draft-route 복원 확인 팝업 */}
+      {showDraftRestoreModal && pendingDraft && (
+        <div className="fixed inset-0 flex items-center justify-center z-50"
+          style={{ background: 'rgba(0,0,0,0.6)' }}>
+          <div className="rounded-lg px-5 py-5 w-80" style={{ background: '#1a3a6e' }}>
+            <h2 className="text-white font-bold text-base mb-3">📋 이전 작업 내역 복원</h2>
+            <p className="text-blue-200 text-sm mb-2">오늘 작업하던 내역이 있습니다.</p>
+            <div className="rounded px-3 py-2 mb-4" style={{ background: 'rgba(255,255,255,0.1)' }}>
+              <p className="text-white text-xs">📅 {new Date(pendingDraft.lastModified).toLocaleString('ko-KR')}</p>
+              {pendingDraft.extractedPoints?.length > 0 && (
+                <p className="text-xs mt-1" style={{ color: '#a5d6a7' }}>🔍 추출 지점 {pendingDraft.extractedPoints.length}건</p>
+              )}
+              {pendingDraft.directPoints?.length > 0 && (
+                <p className="text-xs mt-1" style={{ color: '#a5d6a7' }}>✏️ 직접입력 지점 {pendingDraft.directPoints.length}건</p>
+              )}
+            </div>
+            <p className="text-blue-200 text-xs mb-4">복원하시겠습니까? 취소하면 이전 내역이 삭제됩니다.</p>
+            <div className="flex gap-2">
+              <button
+                onClick={() => {
+                  localStorage.removeItem('draft-route');
+                  setPendingDraft(null);
+                  setShowDraftRestoreModal(false);
+                  setActiveTab('input');
+                }}
+                className="flex-1 py-2 rounded text-sm text-white font-medium"
+                style={{ background: '#455a64' }}>취소 (삭제)</button>
+              <button
+                onClick={() => {
+                  if (pendingDraft.extractedPoints?.length > 0) setExtractedPoints(pendingDraft.extractedPoints);
+                  if (pendingDraft.directPoints?.length > 0) setDirectPoints(pendingDraft.directPoints);
+                  setPendingDraft(null);
+                  setShowDraftRestoreModal(false);
+                  setActiveTab('input');
+                }}
+                className="flex-1 py-2 rounded text-sm text-white font-bold"
+                style={{ background: '#0a3d8f' }}>복원하기</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 전체 잠금 오버레이 */}
+      {(isExtracting || isResetting || isGenerating || deletingId !== null) && (
+        <div className="fixed inset-0 z-40" style={{ background: 'rgba(0,0,0,0.3)', cursor: 'not-allowed' }} />
+      )}
+
+      {/* 추출지점 수정 모달 */}
+      {showExtractEditModal && extractEditTarget && (
+        <div className="fixed inset-0 flex items-center justify-center z-50"
+          style={{ background: 'rgba(0,0,0,0.6)' }}>
+          <div className="rounded-lg px-5 py-5 w-80 max-h-screen overflow-y-auto" style={{ background: '#1a3a6e' }}>
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-white font-bold text-base flex items-center gap-2">
+                <span className="w-7 h-7 rounded-full bg-white text-blue-900 text-sm font-bold flex items-center justify-center flex-shrink-0">
+                  {extractEditTarget?.id}
+                </span>
+                지점정보 수정
+              </h2>
+              <span className="text-white cursor-pointer text-lg" onClick={() => setShowExtractEditModal(false)}>✕</span>
+            </div>
+
+            {/* 위치정보 묶음 */}
+            <div className="rounded-lg p-3 mb-3" style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.15)' }}>
+              <div className="mb-2">
+                <label className="text-blue-200 text-xs mb-1 block">주소</label>
+                <input
+                  type="text"
+                  placeholder=""
+                  value={extractEditForm.address}
+                  onChange={(e) => { setExtractEditForm((prev) => ({ ...prev, address: e.target.value })); setExtractEditCoordStatus('idle'); }}
+                  className="w-full px-3 py-2 rounded text-sm outline-none"
+                  style={{ background: 'rgba(255,255,255,0.15)', color: (extractEditCoordStatus === 'success' && extractEditCoord.lat) ? '#a5d6a7' : 'white' }}
+                />
+              </div>
+              <div className="mb-3">
+                <label className="text-blue-200 text-xs mb-1 block">목적지</label>
+                <input
+                  type="text"
+                  placeholder=""
+                  value={extractEditForm.destination}
+                  onChange={(e) => { setExtractEditForm((prev) => ({ ...prev, destination: e.target.value })); setExtractEditCoordStatus('idle'); }}
+                  className="w-full px-3 py-2 rounded text-sm outline-none"
+                  style={{ background: 'rgba(255,255,255,0.15)', color: (extractEditCoordStatus === 'success' && (extractEditCoord.source === 'place_single' || extractEditCoord.source === 'place_nearest')) ? '#a5d6a7' : 'white' }}
+                />
+              </div>
+
+              {/* 좌표 확인 버튼 */}
+              <button
+                onClick={handleExtractEditCheckCoord}
+                disabled={extractEditCoordStatus === 'loading'}
+                className="w-full py-2 rounded text-sm font-bold text-white"
+                style={{ background: extractEditCoordStatus === 'loading' ? '#555' : '#0a3d8f' }}
+              >
+                {extractEditCoordStatus === 'loading' ? '확인 중...' : '📍 좌표 확인하기'}
+              </button>
+
+              {/* 좌표 상태 안내 */}
+              <p className="text-xs mt-2 text-left"
+                style={{ color: extractEditCoordStatus === 'success' ? '#a5d6a7' : extractEditCoordStatus === 'fail' ? '#ef9a9a' : 'rgba(255,255,255,0.5)' }}>
+                {extractEditCoordStatus === 'idle' && '주소나 목적지를 수정한 후 좌표 확인 버튼을 누르세요.'}
+                {extractEditCoordStatus === 'loading' && '좌표를 검색하는 중입니다...'}
+                {extractEditCoordStatus === 'success' && '✅ 좌표가 확인되었습니다.'}
+                {extractEditCoordStatus === 'fail' && '❌ 좌표를 찾지 못했습니다. 주소나 목적지를 다시 확인해주세요.'}
+              </p>
+              {extractEditCoordStatus === 'success' && extractEditCoord.placeName && extractEditCoord.source !== 'address' && (
+                <p className="text-xs mt-1 text-left" style={{ color: '#a5d6a7' }}>🔍 {extractEditCoord.placeName}</p>
+              )}
+              {extractEditCoordStatus === 'success' && extractEditCoord.source === 'address' && (
+                <p className="text-xs mt-1 text-left" style={{ color: '#fff176' }}>📍 주소로 좌표 확인 (목적지 미확인)</p>
+              )}
+            </div>
+
+            {/* 민원내용 */}
+            <div className="mb-3">
+              <label className="text-blue-200 text-xs mb-1 block">민원내용</label>
+              <input
+                type="text"
+                placeholder="예) 불법 현수막"
+                value={extractEditForm.complaint}
+                onChange={(e) => setExtractEditForm((prev) => ({ ...prev, complaint: e.target.value }))}
+                className="w-full px-3 py-2 rounded text-sm outline-none"
+                style={{ background: 'rgba(255,255,255,0.15)', color: '#a5d6a7' }}
+              />
+            </div>
+
+            {/* 담당자 */}
+            <div className="mb-3">
+              <label className="text-blue-200 text-xs mb-1 block">담당자</label>
+              <input
+                type="text"
+                placeholder=""
+                value={extractEditForm.manager}
+                onChange={(e) => setExtractEditForm((prev) => ({ ...prev, manager: e.target.value }))}
+                className="w-full px-3 py-2 rounded text-sm outline-none"
+                style={{ background: 'rgba(255,255,255,0.15)', color: '#a5d6a7' }}
+              />
+            </div>
+
+            {/* 현장사진 */}
+            <div className="mb-3">
+              <label className="text-blue-200 text-xs mb-1 block">현장사진</label>
+              {extractEditTarget?.photoUrl && (
+                <img src={extractEditTarget.photoUrl} alt="현장사진"
+                  className="w-full rounded mb-2" />
+              )}
+              {extractEditTarget?.photoDescription && (
+                <p className="text-xs mb-2" style={{ color: '#a5d6a7' }}>
+                  {extractEditTarget.photoDescription}
+                </p>
+              )}
+              {extractEditForm.photoUrl ? (
+                <div className="relative w-full h-36">
+                  <img src={extractEditForm.photoUrl} alt="현장사진"
+                    className="w-full h-36 object-cover rounded" />
+                  <button
+                    onClick={() => setExtractEditForm((prev) => ({ ...prev, photoUrl: '' }))}
+                    className="absolute top-1 right-1 w-6 h-6 rounded-full text-white text-xs flex items-center justify-center font-bold"
+                    style={{ background: '#c62828' }}>✕</button>
+                </div>
+              ) : (
+                <label className="flex items-center justify-center w-full h-12 rounded cursor-pointer"
+                  style={{ background: 'rgba(255,255,255,0.1)', border: '1px dashed rgba(255,255,255,0.4)' }}>
+                  <p className="text-blue-200 text-xs">📷 사진 선택</p>
+                  <input type="file" accept="image/*" className="hidden"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) {
+                        const url = URL.createObjectURL(file);
+                        setExtractEditForm((prev) => ({ ...prev, photoUrl: url }));
+                      }
+                      e.target.value = '';
+                    }} />
+                </label>
+              )}
+            </div>
+
+            <div className="flex gap-2 mt-4">
+              <button onClick={() => setShowExtractEditModal(false)}
+                className="flex-1 py-2 rounded text-sm text-white font-medium"
+                style={{ background: '#455a64' }}>취소</button>
+              <button onClick={handleExtractEditSave}
+                className="flex-1 py-2 rounded text-sm text-white font-bold"
+                style={{ background: '#0a3d8f' }}>저장</button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* 지점 상세정보 팝업 */}
+      {showDetailModal && selectedPoint && (
+        <div className="fixed inset-0 flex items-center justify-center z-50"
+          style={{ background: 'rgba(0,0,0,0.6)' }}
+          onClick={() => { setShowDetailModal(false); document.body.style.overflow = ''; }}>
+          <div className="rounded-lg px-5 py-5 w-11/12 max-h-screen overflow-y-auto"
+            style={{ background: (() => { const st = pointStatuses[statusKey(selectedPoint)]; return st && ['민원처리완료','기처리','확인불가'].includes(st.status) ? '#1a3a6e' : '#7a2800'; })() }}
+            onClick={(e) => e.stopPropagation()}>
+            {/* 헤더 */}
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-white font-bold text-base flex items-center gap-2 min-w-0">
+                <span className="w-7 h-7 rounded-full bg-white text-blue-900 text-sm font-bold flex items-center justify-center flex-shrink-0">
+                  {selectedPoint.order}
+                </span>
+                <span className="truncate">
+                  {selectedPoint.destination
+                    ? `${selectedPoint.address} (${selectedPoint.destination})`
+                    : selectedPoint.address}
+                </span>
+              </h2>
+              <span className="text-white cursor-pointer text-lg" onClick={() => { setShowDetailModal(false); document.body.style.overflow = ''; }}>✕</span>
+            </div>
+
+            {/* 정보 목록 */}
+            <div className="space-y-2">
+              {[
+                { label: '주소', value: selectedPoint.address },
+                { label: '목적지', value: selectedPoint.destination || '-' },
+                { label: '좌표확인', value:
+                  selectedPoint.source === 'place_single' || selectedPoint.source === 'place_nearest'
+                    ? '✅ 목적지로 위치 확인'
+                    : selectedPoint.source === 'address'
+                    ? '📍 주소로 위치 확인'
+                    : '❌ 위치 미확인' },
+                { label: '원래순번', value: selectedPoint.originalId ? `${selectedPoint.originalId}번` : '-' },
+                { label: '민원내용', value: selectedPoint.complaint || '-' },
+                { label: '담당자', value: selectedPoint.manager || '-' },
+              ].map(({ label, value }) => (
+                <div key={label} className="flex gap-3 items-start">
+                  <span className="text-blue-300 text-xs w-16 flex-shrink-0 pt-0.5">{label}</span>
+                  <span className="text-white text-xs flex-1">{value}</span>
+                </div>
+              ))}
+
+              {/* 현장사진 */}
+              <div className="flex gap-3 items-start">
+                <span className="text-blue-300 text-xs w-16 flex-shrink-0 pt-0.5">현장사진</span>
+                <div className="flex-1">
+                  {selectedPoint.photoUrl ? (
+                    <img src={selectedPoint.photoUrl} alt="현장사진" className="w-full rounded" />
                   ) : (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                      <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
-                        <span style={{ color: '#90caf9', fontSize: '11px', width: '60px', flexShrink: 0, paddingTop: '2px' }}>작업상태</span>
-                        <span style={{ color: '#80cbc4', fontSize: '11px', fontWeight: 'bold' }}>{curStatus}</span>
-                      </div>
-                      <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
-                        <span style={{ color: '#90caf9', fontSize: '11px', width: '60px', flexShrink: 0, paddingTop: '2px' }}>작업메모</span>
-                        <span style={{ color: 'white', fontSize: '11px', flex: 1 }}>{curMemo}</span>
-                      </div>
+                    <div className="rounded h-20 flex items-center justify-center"
+                      style={{ background: 'rgba(255,255,255,0.1)', border: '1px dashed rgba(255,255,255,0.3)' }}>
+                      <span className="text-blue-300 text-xs">사진 없음</span>
                     </div>
                   )}
                 </div>
               </div>
 
-              {/* 티맵 / 네이버지도 버튼 - 맨 아래 */}
-              <div style={{ display: 'flex', gap: '8px', marginTop: '20px', paddingTop: '16px', borderTop: '1px solid rgba(255,255,255,0.15)' }}>
-                <button
-                  onClick={() => window.open(`tmap://route?goalname=${encodeURIComponent(selectedPoint.destination || selectedPoint.address)}&goaly=${selectedPoint.lat}&goalx=${selectedPoint.lng}`)}
-                  style={{
-                    flex: 1, padding: '10px', borderRadius: '8px',
-                    background: '#0a3d8f', color: 'white',
-                    fontSize: '14px', fontWeight: 'bold', border: 'none', cursor: 'pointer',
-                  }}>티맵</button>
-                <button
-                  onClick={() => window.open(`nmap://navigation?dlat=${selectedPoint.lat}&dlng=${selectedPoint.lng}&dname=${encodeURIComponent(selectedPoint.destination || selectedPoint.address)}&appname=patrol-optimizer`)}
-                  style={{
-                    flex: 1, padding: '10px', borderRadius: '8px',
-                    background: '#1b5e20', color: 'white',
-                    fontSize: '14px', fontWeight: 'bold', border: 'none', cursor: 'pointer',
-                  }}>네이버지도</button>
-              </div>
+              {/* 사진설명 */}
+              {selectedPoint.photoDescription && (
+                <div className="flex gap-3 items-start">
+                  <span className="text-blue-300 text-xs w-16 flex-shrink-0 pt-0.5">사진설명</span>
+                  <span className="text-white text-xs flex-1">{selectedPoint.photoDescription}</span>
+                </div>
+              )}
             </div>
+
+            {/* 버튼 */}
+            <div className="flex gap-2 mt-5">
+              <button
+                onClick={() => window.open(`tmap://route?goalname=${encodeURIComponent(selectedPoint.destination || selectedPoint.address)}&goaly=${selectedPoint.lat}&goalx=${selectedPoint.lng}`)}
+                className="flex-1 py-2 rounded text-sm text-white font-bold"
+                style={{ background: '#0a3d8f' }}>티맵</button>
+              <button
+                onClick={() => window.open(`nmap://navigation?dlat=${selectedPoint.lat}&dlng=${selectedPoint.lng}&dname=${encodeURIComponent(selectedPoint.destination || selectedPoint.address)}&appname=patrol-optimizer`)}
+                className="flex-1 py-2 rounded text-sm text-white font-bold"
+                style={{ background: '#1b5e20' }}>네이버지도</button>
+            </div>
+
+            {/* 완료상태 입력/표시 */}
+            {(() => {
+              const st = pointStatuses[statusKey(selectedPoint)];
+              const curStatus = st?.status || '';
+              const curMemo = st?.memo || '';
+              const isDone = ['민원처리완료','기처리','확인불가'].includes(curStatus);
+              if (isAuthenticated) {
+                return (
+                  <div className="mt-4 pt-4" style={{ borderTop: '1px solid rgba(255,255,255,0.2)' }}>
+                    <div className="flex gap-2 items-center mb-2">
+                      <span className="text-blue-300 text-xs w-16 flex-shrink-0">작업상태</span>
+                      <select
+                        className="flex-1 rounded px-2 py-1.5 text-xs text-white font-bold"
+                        style={{ background: isDone ? 'rgba(255,255,255,0.15)' : 'rgba(235,100,0,0.65)', border: '1px solid rgba(255,255,255,0.3)' }}
+                        value={curStatus}
+                        onChange={(e) => handleSaveStatus(e.target.value, curMemo)}
+                        disabled={savingStatus}>
+                        <option value="" style={{ background: '#1a3a6e' }}></option>
+                        <option value="민원처리완료" style={{ background: '#7a2800' }}>민원처리완료</option>
+                        <option value="기처리" style={{ background: '#7a2800' }}>기처리</option>
+                        <option value="확인불가" style={{ background: '#7a2800' }}>확인불가</option>
+                      </select>
+                    </div>
+                    <div className="flex gap-2 items-start">
+                      <span className="text-blue-300 text-xs w-16 flex-shrink-0 pt-1">메모</span>
+                      <textarea
+                        className="flex-1 rounded px-2 py-1.5 text-xs text-white resize-none"
+                        style={{ background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.3)' }}
+                        rows={2}
+                        placeholder="메모 입력..."
+                        defaultValue={curMemo}
+                        onBlur={(e) => { if (e.target.value !== curMemo) handleSaveStatus(curStatus, e.target.value); }}
+                      />
+                    </div>
+                  </div>
+                );
+              } else if (curStatus) {
+                return (
+                  <div className="mt-4 pt-4" style={{ borderTop: '1px solid rgba(255,255,255,0.2)' }}>
+                    <div className="flex gap-3 items-start mb-1">
+                      <span className="text-blue-300 text-xs w-16 flex-shrink-0">작업상태</span>
+                      <span className="text-xs font-bold" style={{ color: '#80cbc4' }}>{curStatus}</span>
+                    </div>
+                    {curMemo && (
+                      <div className="flex gap-3 items-start">
+                        <span className="text-blue-300 text-xs w-16 flex-shrink-0">메모</span>
+                        <span className="text-xs text-white">{curMemo}</span>
+                      </div>
+                    )}
+                  </div>
+                );
+              }
+              return null;
+            })()}
           </div>
-        );
-      })()}
+        </div>
+      )}
     </div>
   );
 }
