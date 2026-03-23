@@ -76,8 +76,6 @@ export default function MapPage() {
   const blinkArrowsRef = useRef<any[]>([]);
   const blinkOriginalPolylineRef = useRef<any>(null);
   const [isAdmin, setIsAdmin] = useState(false);
-  const [editStatus, setEditStatus] = useState('');
-  const [editMemo, setEditMemo] = useState('');
   const [savingStatus, setSavingStatus] = useState(false);
 
   // ★ 팝업 상태
@@ -851,17 +849,10 @@ export default function MapPage() {
     return { curStatus, curMemo, isDone };
   };
 
-  // 팝업 열릴 때 edit 상태 초기화
-  useEffect(() => {
-    if (showDetailModal && selectedPoint) {
-      const st = statuses[statusKey(selectedPoint)];
-      setEditStatus(st?.status || '');
-      setEditMemo(st?.memo || '');
-    }
-  }, [showDetailModal, selectedPoint]);
 
-  // 작업상태 저장
-  const handleSaveStatus = async () => {
+
+  // 작업상태 저장 (자동저장 - 카드리스트와 동일 방식)
+  const handleSaveStatus = async (status: string, memo: string) => {
     if (!selectedPoint || !route) return;
     setSavingStatus(true);
     try {
@@ -874,19 +865,19 @@ export default function MapPage() {
           destination: selectedPoint.destination,
           complaint: selectedPoint.complaint?.trim() ?? '',
           originalId: selectedPoint.originalId ?? null,
-          status: editStatus,
-          memo: editMemo,
+          status,
+          memo,
         }),
       });
       // 로컬 반영
       const key = statusKey(selectedPoint);
       setStatuses(prev => ({
         ...prev,
-        [key]: { status: editStatus, memo: editMemo, updatedAt: Date.now() },
+        [key]: { status, memo, updatedAt: Date.now() },
       }));
       statusesRef.current = {
         ...statusesRef.current,
-        [key]: { status: editStatus, memo: editMemo, updatedAt: Date.now() },
+        [key]: { status, memo, updatedAt: Date.now() },
       };
     } catch {}
     setSavingStatus(false);
@@ -1125,7 +1116,7 @@ export default function MapPage() {
 
       {/* ★ 지점 상세정보 팝업 */}
       {showDetailModal && selectedPoint && (() => {
-        const { curStatus, isDone } = getSelectedStatus();
+        const { curStatus, curMemo, isDone } = getSelectedStatus();
         const popupBg = curStatus && DONE_STATUSES.includes(curStatus) ? '#1a3a6e' : '#7a2800';
         return (
           <div
@@ -1167,17 +1158,28 @@ export default function MapPage() {
               {/* 정보 목록 */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                 {[
-                  { label: '주소', value: selectedPoint.address },
-                  { label: '목적지', value: selectedPoint.destination || '-' },
+                  { label: '주소', value: selectedPoint.address || '' },
+                  { label: '목적지', value: selectedPoint.destination || '' },
                   { label: '좌표확인', value:
                     selectedPoint.source === 'place_single' || selectedPoint.source === 'place_nearest'
                       ? '✅ 목적지로 위치 확인'
                       : selectedPoint.source === 'address'
                       ? '📍 주소로 위치 확인'
                       : '❌ 위치 미확인' },
-                  { label: '원래순번', value: selectedPoint.originalId ? `${selectedPoint.originalId}번` : '-' },
-                  { label: '민원내용', value: selectedPoint.complaint || '-' },
-                  { label: '담당자', value: selectedPoint.manager || '-' },
+                ].map(({ label, value }) => (
+                  <div key={label} style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
+                    <span style={{ color: '#90caf9', fontSize: '11px', width: '60px', flexShrink: 0, paddingTop: '2px' }}>{label}</span>
+                    <span style={{ color: 'white', fontSize: '11px', flex: 1 }}>{value}</span>
+                  </div>
+                ))}
+
+                {/* 좌표확인 아래 수평선 */}
+                <div style={{ borderTop: '1px solid rgba(255,255,255,0.2)', marginTop: '2px', marginBottom: '2px' }} />
+
+                {[
+                  { label: '민원번호', value: selectedPoint.originalId ? `${selectedPoint.originalId}번` : '' },
+                  { label: '민원내용', value: selectedPoint.complaint || '' },
+                  { label: '담당자', value: selectedPoint.manager || '' },
                 ].map(({ label, value }) => (
                   <div key={label} style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
                     <span style={{ color: '#90caf9', fontSize: '11px', width: '60px', flexShrink: 0, paddingTop: '2px' }}>{label}</span>
@@ -1203,27 +1205,28 @@ export default function MapPage() {
                   </div>
                 </div>
 
-                {/* 사진설명 */}
+                {/* 사진설명 - 레이블 없이 값만 표시 */}
                 {selectedPoint.photoDescription && (
                   <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
-                    <span style={{ color: '#90caf9', fontSize: '11px', width: '60px', flexShrink: 0, paddingTop: '2px' }}>사진설명</span>
-                    <span style={{ color: 'white', fontSize: '11px', flex: 1 }}>{selectedPoint.photoDescription}</span>
+                    <span style={{ width: '60px', flexShrink: 0 }} />
+                    <span style={{ color: 'rgba(255,255,255,0.65)', fontSize: '11px', flex: 1 }}>{selectedPoint.photoDescription}</span>
                   </div>
                 )}
 
-                {/* 작업상태 - 관리자: 편집 가능 / 일반: 읽기전용 */}
+                {/* 작업상태 - 관리자: 자동저장 / 일반: 읽기전용 */}
                 <div style={{ marginTop: '4px', paddingTop: '12px', borderTop: '1px solid rgba(255,255,255,0.2)' }}>
                   {isAdmin ? (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                       <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
                         <span style={{ color: '#90caf9', fontSize: '11px', width: '60px', flexShrink: 0 }}>작업상태</span>
                         <select
-                          value={editStatus}
-                          onChange={e => setEditStatus(e.target.value)}
+                          value={curStatus}
+                          onChange={e => handleSaveStatus(e.target.value, curMemo)}
+                          disabled={savingStatus}
                           style={{
-                            flex: 1, background: '#1a3a6e', color: 'white',
-                            border: '1px solid rgba(100,180,255,0.4)', borderRadius: '6px',
-                            padding: '4px 8px', fontSize: '12px',
+                            flex: 1, background: isDone ? 'rgba(255,255,255,0.15)' : 'rgba(235,100,0,0.65)', color: 'white',
+                            border: '1px solid rgba(255,255,255,0.3)', borderRadius: '6px',
+                            padding: '4px 8px', fontSize: '12px', fontWeight: 'bold',
                           }}>
                           <option value="" style={{ background: '#1a3a6e', color: 'white' }}>선택 (미완료)</option>
                           <option value="민원처리완료" style={{ background: '#1a3a6e', color: 'white' }}>민원처리완료</option>
@@ -1231,42 +1234,37 @@ export default function MapPage() {
                           <option value="확인불가" style={{ background: '#1a3a6e', color: 'white' }}>확인불가</option>
                         </select>
                       </div>
-                      <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
-                        <span style={{ color: '#90caf9', fontSize: '11px', width: '60px', flexShrink: 0 }}>메모</span>
-                        <input
-                          type="text"
-                          value={editMemo}
-                          onChange={e => setEditMemo(e.target.value)}
-                          placeholder="메모 입력"
+                      <div style={{ display: 'flex', gap: '12px', alignItems: 'start' }}>
+                        <span style={{ color: '#90caf9', fontSize: '11px', width: '60px', flexShrink: 0, paddingTop: '6px' }}>작업메모</span>
+                        <textarea
+                          rows={2}
+                          placeholder="메모 입력..."
+                          defaultValue={curMemo}
+                          onBlur={(e) => { if (e.target.value !== curMemo) handleSaveStatus(curStatus, e.target.value); }}
                           style={{
                             flex: 1, background: 'rgba(255,255,255,0.1)', color: 'white',
-                            border: '1px solid rgba(100,180,255,0.4)', borderRadius: '6px',
-                            padding: '4px 8px', fontSize: '12px',
+                            border: '1px solid rgba(255,255,255,0.3)', borderRadius: '6px',
+                            padding: '4px 8px', fontSize: '12px', resize: 'none',
                           }} />
                       </div>
-                      <button
-                        onClick={handleSaveStatus}
-                        disabled={savingStatus}
-                        style={{
-                          marginTop: '2px', padding: '7px', borderRadius: '6px',
-                          background: savingStatus ? 'rgba(100,100,100,0.5)' : 'rgba(21,101,192,0.8)',
-                          color: 'white', fontSize: '12px', fontWeight: 'bold',
-                          border: 'none', cursor: savingStatus ? 'default' : 'pointer',
-                        }}>
-                        {savingStatus ? '저장 중...' : '저장'}
-                      </button>
                     </div>
-                  ) : curStatus ? (
-                    <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
-                      <span style={{ color: '#90caf9', fontSize: '11px', width: '60px', flexShrink: 0, paddingTop: '2px' }}>작업상태</span>
-                      <span style={{ color: '#80cbc4', fontSize: '11px', fontWeight: 'bold' }}>{curStatus}</span>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                      <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
+                        <span style={{ color: '#90caf9', fontSize: '11px', width: '60px', flexShrink: 0, paddingTop: '2px' }}>작업상태</span>
+                        <span style={{ color: '#80cbc4', fontSize: '11px', fontWeight: 'bold' }}>{curStatus}</span>
+                      </div>
+                      <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
+                        <span style={{ color: '#90caf9', fontSize: '11px', width: '60px', flexShrink: 0, paddingTop: '2px' }}>작업메모</span>
+                        <span style={{ color: 'white', fontSize: '11px', flex: 1 }}>{curMemo}</span>
+                      </div>
                     </div>
-                  ) : null}
+                  )}
                 </div>
               </div>
 
-              {/* 티맵 / 네이버지도 버튼 */}
-              <div style={{ display: 'flex', gap: '8px', marginTop: '20px' }}>
+              {/* 티맵 / 네이버지도 버튼 - 맨 아래 */}
+              <div style={{ display: 'flex', gap: '8px', marginTop: '20px', paddingTop: '16px', borderTop: '1px solid rgba(255,255,255,0.15)' }}>
                 <button
                   onClick={() => window.open(`tmap://route?goalname=${encodeURIComponent(selectedPoint.destination || selectedPoint.address)}&goaly=${selectedPoint.lat}&goalx=${selectedPoint.lng}`)}
                   style={{
