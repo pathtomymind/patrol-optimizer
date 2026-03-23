@@ -83,6 +83,9 @@ export default function MapPage() {
   // ★ 팝업 상태
   const [selectedPoint, setSelectedPoint] = useState<RoutePoint | null>(null);
   const [showDetailModal, setShowDetailModal] = useState(false);
+  // ★ 겹침 목록 팝업 상태
+  const [overlappingPoints, setOverlappingPoints] = useState<RoutePoint[]>([]);
+  const [showOverlapModal, setShowOverlapModal] = useState(false);
 
   const statusKey = (point: RoutePoint) => {
     const addrPart = point.address?.trim() || point.destination?.trim() || '';
@@ -671,8 +674,25 @@ export default function MapPage() {
       if (point.source !== 'fixed') {
         naver.maps.Event.addListener(marker, 'click', () => {
           if (currentZoomRef.current >= PULSE_THRESHOLD) {
-            setSelectedPoint(point);
-            setShowDetailModal(true);
+            // 같은 좌표 지점 탐색 (fixed 제외)
+            const currentRoute = routeRef.current;
+            const sameCoordPoints = currentRoute
+              ? currentRoute.points.filter(
+                  p => p.source !== 'fixed' &&
+                  Math.abs(p.lat - point.lat) < 0.0001 &&
+                  Math.abs(p.lng - point.lng) < 0.0001
+                )
+              : [point];
+            console.log('[overlap] 클릭 지점:', point.order, point.lat, point.lng, '/ 같은좌표:', sameCoordPoints.map(p => p.order));
+            if (sameCoordPoints.length > 1) {
+              // 겹친 지점이 2개 이상 → 목록 팝업
+              setOverlappingPoints(sameCoordPoints);
+              setShowOverlapModal(true);
+            } else {
+              // 단일 지점 → 바로 상세 팝업
+              setSelectedPoint(point);
+              setShowDetailModal(true);
+            }
           }
         });
       }
@@ -1019,8 +1039,69 @@ export default function MapPage() {
         </div>
       )}
 
+      {/* ★ 겹침 목록 팝업 */}
+      {showOverlapModal && overlappingPoints.length > 0 && (
+        <div
+          style={{
+            position: 'fixed', inset: 0, display: 'flex', alignItems: 'center',
+            justifyContent: 'center', zIndex: 50, background: 'rgba(0,0,0,0.6)',
+          }}
+          onClick={() => setShowOverlapModal(false)}>
+          <div
+            style={{
+              background: '#1a3a6e', borderRadius: '12px', padding: '20px',
+              width: '88%', maxWidth: '400px',
+              boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
+            }}
+            onClick={e => e.stopPropagation()}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
+              <h2 style={{ color: 'white', fontWeight: 'bold', fontSize: '14px', margin: 0 }}>
+                📍 같은 위치 {overlappingPoints.length}개 지점
+              </h2>
+              <span style={{ color: 'white', cursor: 'pointer', fontSize: '18px' }}
+                onClick={() => setShowOverlapModal(false)}>✕</span>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              {overlappingPoints.map((p) => {
+                const st = statuses[statusKey(p)];
+                const isDone = st && DONE_STATUSES.includes(st.status);
+                return (
+                  <div
+                    key={p.order}
+                    onClick={() => { setShowOverlapModal(false); setSelectedPoint(p); setShowDetailModal(true); }}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: '12px',
+                      background: isDone ? 'rgba(255,255,255,0.12)' : 'rgba(235,100,0,0.45)',
+                      borderRadius: '8px', padding: '10px 12px', cursor: 'pointer',
+                    }}>
+                    <div style={{
+                      width: '28px', height: '28px', borderRadius: '50%',
+                      background: isDone ? '#1565c0' : '#FF6B35',
+                      border: '2px solid white', flexShrink: 0,
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      color: 'white', fontWeight: 'bold', fontSize: '12px',
+                    }}>{p.order}</div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ color: 'white', fontSize: '13px', fontWeight: 'bold',
+                        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {p.destination ? `${p.address} (${p.destination})` : p.address}
+                      </div>
+                      <div style={{ color: 'rgba(255,255,255,0.7)', fontSize: '11px', marginTop: '2px' }}>
+                        {p.complaint || '-'}
+                        {st?.status && <span style={{ color: '#80cbc4', marginLeft: '8px', fontWeight: 'bold' }}>{st.status}</span>}
+                      </div>
+                    </div>
+                    <span style={{ color: 'rgba(255,255,255,0.5)', fontSize: '16px' }}>›</span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* 줌 안내 토스트 - 팝업 없을 때만 표시 */}
-      {routeDrawn && !showDetailModal && (
+      {routeDrawn && !showDetailModal && !showOverlapModal && (
         <div style={{
           position: 'absolute', bottom: 16, left: '50%', transform: 'translateX(-50%)',
           background: 'rgba(0,0,0,0.55)', color: 'rgba(200,230,255,0.85)',
