@@ -15,7 +15,7 @@ const dummyRoute = {
 
 export default function Home() {
   const [activeTab, setActiveTab] = useState<'view' | 'input'>('view');
-  const [cardListOpen, setCardListOpen] = useState(true);
+  const [cardListOpen, setCardListOpen] = useState(false);
   const [uploadOpen, setUploadOpen] = useState(true);
   const [directOpen, setDirectOpen] = useState(false);
   // 직접 입력 지점
@@ -906,8 +906,34 @@ export default function Home() {
             )}
             {!isLoadingRoute && currentRoute && (
               <>
-                {/* 카드 리스트 */}
+                {/* 지도 뷰 - 상단 배치 */}
                 <div className="rounded overflow-hidden">
+                  <div className="w-full flex justify-between items-center px-4 py-3 text-white font-medium text-sm"
+                    style={{ background: 'linear-gradient(180deg, #4a90d9 0%, #1a5fb4 100%)' }}>
+                    <button
+                      onClick={() => { sessionStorage.setItem('map-entry', '1'); window.location.href = '/map'; }}
+                      style={{ background: 'none', border: 'none', color: 'white', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center', gap: '8px', flex: 1 }}>
+                      <span className="font-medium text-sm">지도 뷰</span>
+                      <span className="text-xs text-blue-200">{currentRoute.date} 버전{currentRoute.version}</span>
+                    </button>
+                    <span className="flex items-center gap-1">
+                      <button
+                        onClick={(e) => { e.stopPropagation(); loadCurrentRoute(); }}
+                        title="최신 정보로 가져오기"
+                        style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '2px 6px', color: 'white', fontSize: '15px', lineHeight: 1 }}>
+                        🔄
+                      </button>
+                      <button
+                        onClick={() => { sessionStorage.setItem('map-entry', '1'); window.location.href = '/map'; }}
+                        style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '2px 4px', color: 'white', fontSize: '14px', lineHeight: 1 }}>
+                        ▶
+                      </button>
+                    </span>
+                  </div>
+                </div>
+
+                {/* 카드 리스트 - 하단 배치, 기본 닫힘 */}
+                <div className="rounded overflow-hidden mt-2">
                   <button
                     onClick={() => setCardListOpen(!cardListOpen)}
                     className="w-full flex justify-between items-center px-4 py-3 text-white font-medium text-sm"
@@ -916,6 +942,12 @@ export default function Home() {
                     <span>카드 리스트</span>
                     <span className="flex items-center gap-2">
                       <span className="text-xs text-blue-200">{currentRoute.date} 버전{currentRoute.version}</span>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); loadCurrentRoute(); }}
+                        title="최신 정보로 가져오기"
+                        style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '2px 6px', color: 'white', fontSize: '15px', lineHeight: 1 }}>
+                        🔄
+                      </button>
                       <span>{cardListOpen ? '▲' : '▼'}</span>
                     </span>
                   </button>
@@ -1047,29 +1079,9 @@ export default function Home() {
                   )}
                 </div>
 
-                {/* 지도 뷰 */}
-                <div className="rounded overflow-hidden mt-2">
-                  <button
-                    onClick={() => { sessionStorage.setItem('map-entry', '1'); window.location.href = '/map'; }}
-                    className="w-full flex justify-between items-center px-4 py-3 text-white font-medium text-sm"
-                    style={{ background: 'linear-gradient(180deg, #4a90d9 0%, #1a5fb4 100%)' }}
-                  >
-                    <span>지도 뷰</span>
-                    <span className="flex items-center gap-2">
-                      <span className="text-xs text-blue-200">{currentRoute.date} 버전{currentRoute.version}</span>
-                      <span>▶</span>
-                    </span>
-                  </button>
-                </div>
               </>
             )}
 
-            <div className="rounded mt-2" style={{ background: '#0d2444' }}>
-              <button
-                onClick={loadCurrentRoute}
-                className="w-full py-3 text-white text-sm font-medium"
-              >최신 정보로 가져오기</button>
-            </div>
           </>
         )}
 
