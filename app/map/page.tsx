@@ -1138,16 +1138,16 @@ export default function MapPage() {
           <div style={{ color: 'white', fontWeight: 'bold', fontSize: '15px' }}>순회 경로 지도</div>
         </div>
         {route && (
-          <div style={{ color: 'rgba(150,200,255,0.85)', fontSize: '11px', paddingLeft: '108px' }}>
+          <div style={{ color: 'rgba(150,200,255,0.85)', fontSize: '11px' }}>
             {route.date} · 버전{route.version} · {route.points.filter(p => p.source !== 'fixed').length}개 지점
           </div>
         )}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', paddingLeft: '108px', flexWrap: 'nowrap', overflow: 'hidden' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'nowrap', overflow: 'hidden' }}>
           <div style={{ display: 'flex', borderRadius: '6px', overflow: 'hidden', border: '1px solid rgba(255,255,255,0.25)' }}>
             <button
               onClick={() => setLineMode('straight')}
               style={{
-                padding: '4px 10px',
+                padding: '4px 8px',
                 fontSize: '11px',
                 fontWeight: 'bold',
                 cursor: 'pointer',
@@ -1158,7 +1158,7 @@ export default function MapPage() {
             <button
               onClick={() => setLineMode('road')}
               style={{
-                padding: '4px 10px',
+                padding: '4px 8px',
                 fontSize: '11px',
                 fontWeight: 'bold',
                 cursor: 'pointer',
