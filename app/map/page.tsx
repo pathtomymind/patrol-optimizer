@@ -856,15 +856,27 @@ export default function MapPage() {
   };
 
   // ★ PDF 보고서 생성
+  const loadScript = (src: string): Promise<void> => {
+    return new Promise((resolve, reject) => {
+      if (document.querySelector(`script[src="${src}"]`)) { resolve(); return; }
+      const s = document.createElement('script');
+      s.src = src; s.onload = () => resolve(); s.onerror = reject;
+      document.head.appendChild(s);
+    });
+  };
+
   const handleGenerateReport = async () => {
     if (!route || isGeneratingReport) return;
     setIsGeneratingReport(true);
     try {
-      // jsPDF + html2canvas 동적 로드
-      const [{ default: jsPDF }, { default: html2canvas }] = await Promise.all([
-        import('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js' as any),
-        import('https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js' as any),
+      // jsPDF + html2canvas 동적 로드 (script 태그 방식)
+      await Promise.all([
+        loadScript('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js'),
+        loadScript('https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js'),
       ]);
+      const jsPDF = (window as any).jspdf?.jsPDF || (window as any).jsPDF;
+      const html2canvas = (window as any).html2canvas;
+      if (!jsPDF || !html2canvas) throw new Error('라이브러리 로드 실패');
 
       // 보고서 HTML 컨테이너 생성
       const container = document.createElement('div');
@@ -937,7 +949,7 @@ export default function MapPage() {
       document.body.removeChild(container);
 
       const imgData = canvas.toDataURL('image/jpeg', 0.92);
-      const pdf = new (jsPDF as any).jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+      const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
       const pdfW = pdf.internal.pageSize.getWidth();
       const pdfH = pdf.internal.pageSize.getHeight();
       const imgH = (canvas.height * pdfW) / canvas.width;
@@ -1130,7 +1142,7 @@ export default function MapPage() {
             {route.date} · 버전{route.version} · {route.points.filter(p => p.source !== 'fixed').length}개 지점
           </div>
         )}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', paddingLeft: '108px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', paddingLeft: '108px', flexWrap: 'nowrap', overflow: 'hidden' }}>
           <div style={{ display: 'flex', borderRadius: '6px', overflow: 'hidden', border: '1px solid rgba(255,255,255,0.25)' }}>
             <button
               onClick={() => setLineMode('straight')}
@@ -1173,9 +1185,10 @@ export default function MapPage() {
                 background: isGeneratingReport ? 'rgba(100,100,100,0.5)' : 'rgba(255,255,255,0.15)',
                 border: '1px solid rgba(255,255,255,0.35)',
                 color: 'white', fontSize: '10px', fontWeight: 'bold',
-                padding: '3px 9px', borderRadius: '12px',
+                padding: '3px 8px', borderRadius: '12px',
                 cursor: isGeneratingReport ? 'default' : 'pointer',
-                display: 'flex', alignItems: 'center', gap: '4px',
+                display: 'flex', alignItems: 'center', gap: '3px',
+                flexShrink: 0,
               }}>
               {isGeneratingReport ? (
                 <>⏳ 생성중</>
