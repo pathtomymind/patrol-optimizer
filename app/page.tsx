@@ -808,6 +808,7 @@ export default function Home() {
       const data = await res.json();
       console.log('✅ 경로 저장 완료:', JSON.stringify(data, null, 2));
       alert(`최적화 경로 생성 완료! (${today} 버전${data.version}, ${routePoints.length}개 지점)\n경로 계산: ${usedORS ? '도로 거리 기반 + 2-opt 개선 (ORS)' : '직선 거리 기반 (fallback)'}`);
+      await loadCurrentRoute(); // 이력 즉시 갱신
     } catch (e) {
       console.error(e);
       alert('경로 생성 중 오류가 발생했습니다.');
@@ -1298,12 +1299,12 @@ export default function Home() {
 
             {/* 오늘 버전 이력 */}
             {currentRoute?.history && currentRoute.history.length > 0 && (
-              <div className="rounded mt-2 px-3 py-2" style={{ background: 'rgba(0,0,0,0.2)' }}>
+              <div className="mt-2 px-1">
                 {currentRoute.history.map((h) => {
                   const d = new Date(h.createdAt);
                   const timeStr = d.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', hour12: false });
                   return (
-                    <div key={h.version} style={{ color: 'rgba(180,210,255,0.65)', fontSize: '11px', lineHeight: '1.8' }}>
+                    <div key={h.version} style={{ color: 'rgba(180,210,255,0.55)', fontSize: '11px', lineHeight: '1.9' }}>
                       {currentRoute.date} 버전{h.version} · {timeStr}
                     </div>
                   );
