@@ -1405,9 +1405,7 @@ export default function MapPage() {
                 {/* 타임마크 카메라 버튼 */}
                 <button
                   onClick={() => (() => {
-                    const pkg = 'com.oceangalaxy.camera.new';
-                    const intent = `intent://open#Intent;scheme=timemark;package=${pkg};action=android.intent.action.MAIN;category=android.intent.category.LAUNCHER;S.browser_fallback_url=market%3A%2F%2Fdetails%3Fid%3D${pkg};end`;
-                    window.location.href = intent;
+                    window.location.href = 'showyourtime://';
                   })()}
                   title="타임마크 촬영"
                   style={{
