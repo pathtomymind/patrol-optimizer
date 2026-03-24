@@ -78,6 +78,12 @@ export default function MapPage() {
   const [isAdmin, setIsAdmin] = useState(false);
   const [savingStatus, setSavingStatus] = useState(false);
 
+  // ★ 내 위치 추적
+  const [isTracking, setIsTracking] = useState(false);
+  const myLocationMarkerRef = useRef<naver.maps.Marker | null>(null);
+  const myLocationCircleRef = useRef<any>(null);
+  const watchIdRef = useRef<number | null>(null);
+
   // ★ 팝업 상태
   const [selectedPoint, setSelectedPoint] = useState<RoutePoint | null>(null);
   const [showDetailModal, setShowDetailModal] = useState(false);
@@ -205,6 +211,15 @@ export default function MapPage() {
   useEffect(() => {
     const adminAuth = localStorage.getItem('patrol-admin-auth');
     if (adminAuth === 'true') setIsAdmin(true);
+  }, []);
+
+  // 5-3. 언마운트 시 위치 감시 정리
+  useEffect(() => {
+    return () => {
+      if (watchIdRef.current !== null) {
+        navigator.geolocation.clearWatch(watchIdRef.current);
+      }
+    };
   }, []);
 
   // 6. lineMode 변경시 경로선 재그리기 + localStorage 저장
@@ -839,6 +854,92 @@ export default function MapPage() {
     }, 5000);
   };
 
+  // ★ 내 위치 추적 시작/중지 토글
+  const toggleTracking = () => {
+    const naver = (window as any).naver;
+    const map = naverMapRef.current;
+    if (!naver || !map) return;
+
+    if (isTracking) {
+      // 추적 중지
+      if (watchIdRef.current !== null) {
+        navigator.geolocation.clearWatch(watchIdRef.current);
+        watchIdRef.current = null;
+      }
+      if (myLocationMarkerRef.current) {
+        myLocationMarkerRef.current.setMap(null);
+        myLocationMarkerRef.current = null;
+      }
+      if (myLocationCircleRef.current) {
+        myLocationCircleRef.current.setMap(null);
+        myLocationCircleRef.current = null;
+      }
+      setIsTracking(false);
+    } else {
+      // 추적 시작
+      if (!navigator.geolocation) {
+        alert('이 기기는 GPS를 지원하지 않습니다.');
+        return;
+      }
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          const { latitude, longitude, accuracy } = pos.coords;
+          const latlng = new naver.maps.LatLng(latitude, longitude);
+
+          // 내 위치 마커 생성
+          myLocationMarkerRef.current = new naver.maps.Marker({
+            map,
+            position: latlng,
+            icon: {
+              content: `<div style="
+                width:16px;height:16px;border-radius:50%;
+                background:#1976d2;border:3px solid white;
+                box-shadow:0 0 0 2px rgba(25,118,210,0.4);
+                position:relative;z-index:1;
+              "></div>`,
+              anchor: new naver.maps.Point(8, 8),
+            },
+            zIndex: 200,
+          });
+
+          // 정확도 원 생성
+          myLocationCircleRef.current = new naver.maps.Circle({
+            map,
+            center: latlng,
+            radius: accuracy,
+            fillColor: 'rgba(25,118,210,0.12)',
+            fillOpacity: 1,
+            strokeColor: 'rgba(25,118,210,0.35)',
+            strokeWeight: 1,
+          });
+
+          // 버튼 탭 시 내 위치로 화면 이동
+          map.setCenter(latlng);
+
+          setIsTracking(true);
+
+          // 이후 위치 변경 감시
+          watchIdRef.current = navigator.geolocation.watchPosition(
+            (pos) => {
+              const { latitude, longitude, accuracy } = pos.coords;
+              const latlng = new naver.maps.LatLng(latitude, longitude);
+              myLocationMarkerRef.current?.setPosition(latlng);
+              myLocationCircleRef.current?.setCenter(latlng);
+              myLocationCircleRef.current?.setRadius(accuracy);
+            },
+            (err) => console.warn('위치 감시 오류:', err),
+            { enableHighAccuracy: true, maximumAge: 3000 }
+          );
+        },
+        (err) => {
+          console.warn('위치 조회 실패:', err);
+          alert('위치 정보를 가져올 수 없습니다. GPS 권한을 확인해주세요.');
+        },
+        { enableHighAccuracy: true, timeout: 10000 }
+      );
+    }
+  };
+
   // ★ 팝업에서 사용할 완료 상태 정보
   const getSelectedStatus = () => {
     if (!selectedPoint) return { curStatus: '', curMemo: '', isDone: false };
@@ -1100,6 +1201,42 @@ export default function MapPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* ★ 내 위치 추적 버튼 - 우측 하단 */}
+      {!showDetailModal && !showOverlapModal && (
+        <button
+          onClick={toggleTracking}
+          title={isTracking ? '위치 추적 중지' : '내 위치 보기'}
+          style={{
+            position: 'absolute',
+            bottom: 52,
+            right: 12,
+            width: '44px',
+            height: '44px',
+            borderRadius: '50%',
+            background: isTracking ? '#1976d2' : 'rgba(255,255,255,0.95)',
+            border: isTracking ? '2px solid white' : '2px solid rgba(100,150,255,0.4)',
+            boxShadow: '0 2px 8px rgba(0,0,0,0.35)',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 150,
+            transition: 'background 0.2s',
+          }}>
+          {isTracking ? (
+            // 추적 중 - 흰색 위치 아이콘
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="white">
+              <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/>
+            </svg>
+          ) : (
+            // 추적 꺼짐 - 파란색 위치 아이콘
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="#1976d2">
+              <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/>
+            </svg>
+          )}
+        </button>
       )}
 
       {/* 줌 안내 토스트 - 팝업 없을 때만 표시 */}
