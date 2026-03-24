@@ -1770,7 +1770,11 @@ export default function Home() {
             <div className="flex gap-2 mt-5 pt-4" style={{ borderTop: '1px solid rgba(255,255,255,0.15)' }}>
               {/* 타임마크 카메라 버튼 */}
               <button
-                onClick={() => window.location.href = 'intent://launch#Intent;action=android.intent.action.MAIN;category=android.intent.category.LAUNCHER;package=com.oceangalaxy.camera.new;S.browser_fallback_url=market%3A%2F%2Fdetails%3Fid%3Dcom.oceangalaxy.camera.new;end'}
+                onClick={() => (() => {
+                    const pkg = 'com.oceangalaxy.camera.new';
+                    const intent = `intent://open#Intent;scheme=timemark;package=${pkg};action=android.intent.action.MAIN;category=android.intent.category.LAUNCHER;S.browser_fallback_url=market%3A%2F%2Fdetails%3Fid%3D${pkg};end`;
+                    window.location.href = intent;
+                  })()}
                 title="타임마크 촬영"
                 className="rounded flex items-center justify-center"
                 style={{ background: '#f9d835', width: '44px', flexShrink: 0, minHeight: '36px' }}>
