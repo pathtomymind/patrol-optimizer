@@ -77,6 +77,7 @@ export default function MapPage() {
   const blinkOriginalPolylineRef = useRef<any>(null);
   const [isAdmin, setIsAdmin] = useState(false);
   const [savingStatus, setSavingStatus] = useState(false);
+  const [isGeneratingReport, setIsGeneratingReport] = useState(false);
 
   // ★ 내 위치 추적
   const [isTracking, setIsTracking] = useState(false);
@@ -854,6 +855,109 @@ export default function MapPage() {
     }, 5000);
   };
 
+  // ★ PDF 보고서 생성
+  const handleGenerateReport = async () => {
+    if (!route || isGeneratingReport) return;
+    setIsGeneratingReport(true);
+    try {
+      // jsPDF + html2canvas 동적 로드
+      const [{ default: jsPDF }, { default: html2canvas }] = await Promise.all([
+        import('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js' as any),
+        import('https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js' as any),
+      ]);
+
+      // 보고서 HTML 컨테이너 생성
+      const container = document.createElement('div');
+      container.style.cssText = `
+        position: fixed; top: -9999px; left: -9999px;
+        width: 794px; background: #f0f4f8; font-family: 'Apple SD Gothic Neo', 'Noto Sans KR', sans-serif;
+        padding: 40px; box-sizing: border-box;
+      `;
+
+      const donePoints = route.points.filter(p => p.source !== 'fixed');
+      const totalCount = donePoints.length;
+      const doneCount = donePoints.filter(p => {
+        const st = statusesRef.current[statusKey(p)];
+        return st && ['민원처리완료','기처리','확인불가'].includes(st.status);
+      }).length;
+
+      // 헤더
+      container.innerHTML = `
+        <div style="background: linear-gradient(135deg, #1a3a6e 0%, #1565c0 100%); border-radius: 12px; padding: 28px 32px; margin-bottom: 24px;">
+          <div style="color: white; font-size: 22px; font-weight: bold; margin-bottom: 6px;">패트롤 옵티마이저 순회 보고서</div>
+          <div style="color: rgba(200,230,255,0.85); font-size: 13px;">${route.date} · 버전${route.version} · 총 ${totalCount}개 지점 · 완료 ${doneCount}개</div>
+        </div>
+      `;
+
+      // 각 지점 카드
+      const cardsHtml = donePoints.map((point) => {
+        const st = statusesRef.current[statusKey(point)];
+        const isDone = st && ['민원처리완료','기처리','확인불가'].includes(st.status);
+        const cardBg = isDone ? '#e8f5e9' : '#fff3e0';
+        const badgeBg = isDone ? '#2e7d32' : '#e65100';
+        const statusText = st?.status || '미완료';
+        const photoHtml = point.photoUrl
+          ? `<img src="${point.photoUrl}" style="width:100%; border-radius:8px; margin-top:10px; object-fit:cover; max-height:200px;" crossorigin="anonymous" />`
+          : '';
+        const descHtml = point.photoDescription
+          ? `<div style="color:#666; font-size:11px; margin-top:4px;">${point.photoDescription}</div>` : '';
+
+        return `
+          <div style="background: ${cardBg}; border-radius: 10px; padding: 16px 18px; margin-bottom: 14px; border-left: 4px solid ${badgeBg};">
+            <div style="display:flex; align-items:flex-start; justify-content:space-between; margin-bottom:8px;">
+              <div style="display:flex; align-items:center; gap:10px;">
+                <div style="width:28px; height:28px; border-radius:50%; background:${badgeBg}; color:white; font-size:12px; font-weight:bold; display:flex; align-items:center; justify-content:center; flex-shrink:0;">${point.order}</div>
+                <div style="font-size:14px; font-weight:bold; color:#1a1a2e;">
+                  ${point.address}${point.destination ? ` (${point.destination})` : ''}
+                </div>
+              </div>
+              <div style="background:${badgeBg}; color:white; font-size:11px; font-weight:bold; padding:3px 10px; border-radius:20px; white-space:nowrap; margin-left:8px;">${statusText}</div>
+            </div>
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:4px 16px; font-size:12px; color:#444;">
+              ${point.originalId ? `<div><span style="color:#888;">민원번호</span> ${point.originalId}번</div>` : '<div></div>'}
+              ${point.manager ? `<div><span style="color:#888;">담당자</span> ${point.manager}</div>` : '<div></div>'}
+              <div style="grid-column:1/-1;"><span style="color:#888;">민원내용</span> ${point.complaint || '-'}</div>
+              ${st?.memo ? `<div style="grid-column:1/-1;"><span style="color:#888;">작업메모</span> ${st.memo}</div>` : ''}
+            </div>
+            ${photoHtml}
+            ${descHtml}
+          </div>
+        `;
+      }).join('');
+
+      container.innerHTML += `<div>${cardsHtml}</div>`;
+      document.body.appendChild(container);
+
+      // html2canvas → jsPDF
+      const canvas = await html2canvas(container, {
+        scale: 2, useCORS: true, allowTaint: false,
+        backgroundColor: '#f0f4f8',
+        logging: false,
+      });
+      document.body.removeChild(container);
+
+      const imgData = canvas.toDataURL('image/jpeg', 0.92);
+      const pdf = new (jsPDF as any).jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+      const pdfW = pdf.internal.pageSize.getWidth();
+      const pdfH = pdf.internal.pageSize.getHeight();
+      const imgH = (canvas.height * pdfW) / canvas.width;
+
+      let y = 0;
+      while (y < imgH) {
+        if (y > 0) pdf.addPage();
+        pdf.addImage(imgData, 'JPEG', 0, -y, pdfW, imgH);
+        y += pdfH;
+      }
+
+      pdf.save(`순회보고서_${route.date}_버전${route.version}.pdf`);
+    } catch (e) {
+      console.error('PDF 생성 오류:', e);
+      alert('PDF 생성 중 오류가 발생했습니다.');
+    } finally {
+      setIsGeneratingReport(false);
+    }
+  };
+
   // ★ 내 위치 추적 시작/중지 토글
   const toggleTracking = () => {
     const naver = (window as any).naver;
@@ -1061,6 +1165,24 @@ export default function MapPage() {
               <div style={{ width: 9, height: 9, borderRadius: '50%', background: '#1565c0', border: '1px solid white' }} />
               <span style={{ color: 'rgba(255,255,255,0.7)', fontSize: '10px' }}>완료</span>
             </div>
+            {/* 보고서 버튼 */}
+            <button
+              onClick={handleGenerateReport}
+              disabled={isGeneratingReport || !route}
+              style={{
+                background: isGeneratingReport ? 'rgba(100,100,100,0.5)' : 'rgba(255,255,255,0.15)',
+                border: '1px solid rgba(255,255,255,0.35)',
+                color: 'white', fontSize: '10px', fontWeight: 'bold',
+                padding: '3px 9px', borderRadius: '12px',
+                cursor: isGeneratingReport ? 'default' : 'pointer',
+                display: 'flex', alignItems: 'center', gap: '4px',
+              }}>
+              {isGeneratingReport ? (
+                <>⏳ 생성중</>
+              ) : (
+                <><svg width="10" height="12" viewBox="0 0 10 12" fill="white"><path d="M6 0H1C0.45 0 0 0.45 0 1V11C0 11.55 0.45 12 1 12H9C9.55 12 10 11.55 10 11V4L6 0ZM8.5 10.5H1.5V1.5H5.5V4.5H8.5V10.5Z"/></svg>보고서</>
+              )}
+            </button>
           </div>
         </div>
       </div>
