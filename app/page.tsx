@@ -1766,8 +1766,19 @@ export default function Home() {
               );
             })()}
 
-            {/* 티맵 / 네이버지도 버튼 - 맨 아래 */}
+            {/* 티맵 / 네이버지도 / 타임마크 버튼 - 맨 아래 */}
             <div className="flex gap-2 mt-5 pt-4" style={{ borderTop: '1px solid rgba(255,255,255,0.15)' }}>
+              {/* 타임마크 카메라 버튼 */}
+              <button
+                onClick={() => window.location.href = 'intent://#Intent;package=com.oceangalaxy.camera.new;scheme=launch;end'}
+                title="타임마크 촬영"
+                className="rounded flex items-center justify-center"
+                style={{ background: '#f9d835', width: '44px', flexShrink: 0, minHeight: '36px' }}>
+                <svg width="22" height="20" viewBox="0 0 24 22" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M9 2L7.17 4H4C2.9 4 2 4.9 2 6V18C2 19.1 2.9 20 4 20H20C21.1 20 22 19.1 22 18V6C22 4.9 21.1 4 20 4H16.83L15 2H9ZM12 17C9.24 17 7 14.76 7 12C7 9.24 9.24 7 12 7C14.76 7 17 9.24 17 12C17 14.76 14.76 17 12 17Z" fill="#1a1a1a"/>
+                  <circle cx="12" cy="12" r="3.5" fill="#1a1a1a"/>
+                </svg>
+              </button>
               <button
                 onClick={() => window.open(`tmap://route?goalname=${encodeURIComponent(selectedPoint.destination || selectedPoint.address)}&goaly=${selectedPoint.lat}&goalx=${selectedPoint.lng}`)}
                 className="flex-1 py-2 rounded text-sm text-white font-bold"
