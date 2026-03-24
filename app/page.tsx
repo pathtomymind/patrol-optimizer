@@ -914,14 +914,16 @@ export default function Home() {
                       onClick={() => { sessionStorage.setItem('map-entry', '1'); window.location.href = '/map'; }}
                       style={{ background: 'none', border: 'none', color: 'white', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center', gap: '8px', flex: 1 }}>
                       <span className="font-medium text-sm">지도 뷰</span>
-                      <span className="text-xs text-blue-200">{currentRoute.date} 버전{currentRoute.version}</span>
+                      <span className="text-xs" style={{ color: 'rgba(200,230,255,0.85)' }}>{currentRoute.date} 버전{currentRoute.version}</span>
                     </button>
                     <span className="flex items-center gap-1">
                       <button
                         onClick={(e) => { e.stopPropagation(); loadCurrentRoute(); }}
                         title="최신 정보로 가져오기"
-                        style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '2px 6px', color: 'white', fontSize: '15px', lineHeight: 1 }}>
-                        🔄
+                        style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '2px 4px', display: 'flex', alignItems: 'center' }}>
+                        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                          <path d="M17.65 6.35C16.2 4.9 14.21 4 12 4C7.58 4 4.01 7.58 4.01 12C4.01 16.42 7.58 20 12 20C15.73 20 18.84 17.45 19.73 14H17.65C16.83 16.33 14.61 18 12 18C8.69 18 6 15.31 6 12C6 8.69 8.69 6 12 6C13.66 6 15.14 6.69 16.22 7.78L13 11H20V4L17.65 6.35Z" fill="#7dd3fc"/>
+                        </svg>
                       </button>
                       <button
                         onClick={() => { sessionStorage.setItem('map-entry', '1'); window.location.href = '/map'; }}
@@ -939,14 +941,18 @@ export default function Home() {
                     className="w-full flex justify-between items-center px-4 py-3 text-white font-medium text-sm"
                     style={{ background: 'linear-gradient(180deg, #4a90d9 0%, #1a5fb4 100%)' }}
                   >
-                    <span>카드 리스트</span>
-                    <span className="flex items-center gap-2">
-                      <span className="text-xs text-blue-200">{currentRoute.date} 버전{currentRoute.version}</span>
+                    <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span>카드 리스트</span>
+                      <span className="text-xs" style={{ color: 'rgba(200,230,255,0.85)' }}>{currentRoute.date} 버전{currentRoute.version}</span>
+                    </span>
+                    <span className="flex items-center gap-1">
                       <button
                         onClick={(e) => { e.stopPropagation(); loadCurrentRoute(); }}
                         title="최신 정보로 가져오기"
-                        style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '2px 6px', color: 'white', fontSize: '15px', lineHeight: 1 }}>
-                        🔄
+                        style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '2px 4px', display: 'flex', alignItems: 'center' }}>
+                        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                          <path d="M17.65 6.35C16.2 4.9 14.21 4 12 4C7.58 4 4.01 7.58 4.01 12C4.01 16.42 7.58 20 12 20C15.73 20 18.84 17.45 19.73 14H17.65C16.83 16.33 14.61 18 12 18C8.69 18 6 15.31 6 12C6 8.69 8.69 6 12 6C13.66 6 15.14 6.69 16.22 7.78L13 11H20V4L17.65 6.35Z" fill="#7dd3fc"/>
+                        </svg>
                       </button>
                       <span>{cardListOpen ? '▲' : '▼'}</span>
                     </span>
