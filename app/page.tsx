@@ -285,6 +285,7 @@ export default function Home() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [currentRoute, setCurrentRoute] = useState<{
     date: string; version: number; createdAt: number;
+    history?: { version: number; createdAt: number }[];
     points: { order: number; originalId?: number | null; address: string; destination: string | null; complaint: string; lat: number; lng: number; placeName: string | null; source: string | null; photoDescription?: string | null; photoUrl?: string | null; manager?: string | null; }[];
   } | null>(null);
   const [isLoadingRoute, setIsLoadingRoute] = useState(false);
@@ -1294,6 +1295,21 @@ export default function Home() {
                 style={{ opacity: isGenerating ? 0.6 : 1, cursor: isGenerating ? 'not-allowed' : 'pointer' }}
               >{isGenerating ? '경로 생성 중...' : '최적화 경로 생성하기'}</button>
             </div>
+
+            {/* 오늘 버전 이력 */}
+            {currentRoute?.history && currentRoute.history.length > 0 && (
+              <div className="rounded mt-2 px-3 py-2" style={{ background: 'rgba(0,0,0,0.2)' }}>
+                {currentRoute.history.map((h) => {
+                  const d = new Date(h.createdAt);
+                  const timeStr = d.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', hour12: false });
+                  return (
+                    <div key={h.version} style={{ color: 'rgba(180,210,255,0.65)', fontSize: '11px', lineHeight: '1.8' }}>
+                      {currentRoute.date} 버전{h.version} · {timeStr}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </>
         )}
       </main>
