@@ -1539,7 +1539,7 @@ export default function MapPage() {
               <div style={{ display: 'flex', gap: '8px', marginTop: '20px', paddingTop: '16px', borderTop: '1px solid rgba(255,255,255,0.15)' }}>
                 {/* 타임마크 카메라 버튼 */}
                 <button
-                  onClick={() => window.location.href = 'market://details?id=com.oceangalaxy.camera.new'}
+                  onClick={() => window.location.href = 'timemarkcamera://'}
                   title="타임마크 촬영"
                   style={{
                     background: '#f9d835', width: '48px', flexShrink: 0,
