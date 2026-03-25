@@ -21,9 +21,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   // 1단계: 목적지명으로 네이버 지역검색
   if (destination) {
     try {
-      // 주소가 있으면 주소 컨텍스트를 함께 넣어 정확도 향상
-      // 예: '경기도 의정부시 의정부동 371 의정부1동 주민센터'
-      const searchQuery = address
+      // 주소 컨텍스트 활용 전략:
+      // - 지번 주소(동+번지)일 때만 주소를 앞에 붙여 정확도 향상
+      //   예: '경기도 의정부시 의정부동 371 의정부1동 주민센터'
+      // - 도로명 주소(로/길 포함)는 붙이면 장소검색이 안 되므로 제외
+      //   예: '의정부 해태프라자' (도로명 주소 컨텍스트 제외)
+      const isJibunAddress = address && !/로\d*번?길?|대로\d*번?길?/.test(address) && /동\s*\d|읍\s*\d|면\s*\d/.test(address);
+      const searchQuery = isJibunAddress
         ? encodeURIComponent(`${normalizeAddress(address)} ${destination}`)
         : encodeURIComponent(`의정부 ${destination}`);
       const SEARCH_CLIENT_ID = process.env.NAVER_SEARCH_CLIENT_ID;
