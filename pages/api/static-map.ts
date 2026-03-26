@@ -14,21 +14,25 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const centerLat = 37.745;
   const zoomLevel = 11;
 
-  // 마커 파라미터 - 순번 숫자 포함
-  const markerParams = markers.map((m: { lng: number; lat: number; order: number; isDone: boolean }) => {
-    if (m.order === 0) {
-      // 시청 기점 - 주황 핀
-      return `markers=type:d|size:mid|pos:${m.lng} ${m.lat}|label:S|color:f57f17`;
-    }
-    const color = m.isDone ? '1565c0' : 'FF6B35';
-    return `markers=type:d|size:mid|pos:${m.lng} ${m.lat}|label:${m.order}|color:${color}`;
-  }).join('&');
+  // 마커 파라미터 - 순번 숫자 포함 (네이버 Static Map v2 공식 형식)
+  // type:d = 드롭핀, label은 한 글자만 지원 → 숫자가 두 자리면 잘릴 수 있음
+  const markerParams = markers
+    .filter((m: { order: number }) => m.order !== 999) // 복귀용 중복 시청 마커 제외
+    .map((m: { lng: number; lat: number; order: number; isDone: boolean }) => {
+      if (m.order === 0) {
+        return `markers=type:d|size:mid|pos:${m.lng} ${m.lat}|label:S|color:f57f17`;
+      }
+      const color = m.isDone ? '1e88e5' : 'e65100';
+      const label = m.order <= 9 ? String(m.order) : 'N';
+      return `markers=type:d|size:mid|pos:${m.lng} ${m.lat}|label:${label}|color:${color}`;
+    }).join('&');
 
-  // 경로 연결선 - 모든 지점을 순서대로 연결 (path 파라미터)
+  // 경로 연결선 - path 파라미터 (좌표는 lng,lat 순서, | 구분)
+  // 시청 → 지점1 → ... → 지점N → 시청 복귀
   const pathCoords = markers.map((m: { lng: number; lat: number }) => `${m.lng},${m.lat}`).join('|');
-  const pathParam = `path=weight:3|color:0x1565c0CC|${pathCoords}`;
+  const pathParam = `path=weight:3|color:0x1a6dd5BF|${pathCoords}`;
 
-  const url = `https://maps.apigw.ntruss.com/map-static/v2/raster?w=714&h=380&center=${centerLng},${centerLat}&level=${zoomLevel}&${pathParam}&${markerParams}`;
+  const url = `https://maps.apigw.ntruss.com/map-static/v2/raster?w=714&h=350&center=${centerLng},${centerLat}&level=${zoomLevel}&${pathParam}&${markerParams}`;
 
   console.log('[static-map] 요청 URL:', url);
 
