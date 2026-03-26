@@ -882,8 +882,8 @@ export default function MapPage() {
       const container = document.createElement('div');
       container.style.cssText = `
         position: fixed; top: -9999px; left: -9999px;
-        width: 794px; background: #f0f4f8; font-family: 'Apple SD Gothic Neo', 'Noto Sans KR', sans-serif;
-        padding: 40px; box-sizing: border-box;
+        width: 794px; background: #ffffff; font-family: 'Apple SD Gothic Neo', 'Noto Sans KR', sans-serif;
+        padding: 0px; box-sizing: border-box;
       `;
 
       const donePoints = route.points.filter(p => p.source !== 'fixed');
@@ -893,57 +893,83 @@ export default function MapPage() {
         return st && ['민원처리완료','기처리','확인불가'].includes(st.status);
       }).length;
 
-      // 헤더
+      // ── 헤더 ──────────────────────────────────────────────
       container.innerHTML = `
-        <div style="background: linear-gradient(135deg, #1a3a6e 0%, #1565c0 100%); border-radius: 12px; padding: 28px 32px; margin-bottom: 24px;">
-          <div style="color: white; font-size: 22px; font-weight: bold; margin-bottom: 6px;">패트롤 옵티마이저 순회 보고서</div>
-          <div style="color: rgba(200,230,255,0.85); font-size: 13px;">${route.date} · 버전${route.version} · 총 ${totalCount}개 지점 · 완료 ${doneCount}개</div>
+        <div style="background: linear-gradient(135deg, #1a3a6e 0%, #1565c0 100%); padding: 20px 28px; margin-bottom: 6px;">
+          <div style="color: white; font-size: 20px; font-weight: bold; margin-bottom: 4px;">불법 옥외광고물 순회 단속 결과</div>
+          <div style="color: rgba(200,230,255,0.9); font-size: 12px;">
+            단속일자: ${route.date} &nbsp;|&nbsp; 버전: ${route.version} &nbsp;|&nbsp; 총 지점: ${totalCount}개 &nbsp;|&nbsp; 처리완료: ${doneCount}개
+          </div>
+        </div>
+        <div style="background:#e8edf2; padding:6px 28px 16px; margin-bottom:20px; font-size:11px; color:#555;">
+          ※ 본 문서는 패트롤 옵티마이저 앱으로 자동 생성된 순회 단속 결과 보고서입니다.
         </div>
       `;
 
-      // 각 지점 카드
-      const cardsHtml = donePoints.map((point) => {
-        const st = statusesRef.current[statusKey(point)];
-        const isDone = st && ['민원처리완료','기처리','확인불가'].includes(st.status);
-        const cardBg = isDone ? '#e8f5e9' : '#fff3e0';
-        const badgeBg = isDone ? '#2e7d32' : '#e65100';
-        const statusText = st?.status || '미완료';
-        const photoHtml = point.photoUrl
-          ? `<img src="${point.photoUrl}" style="width:100%; border-radius:8px; margin-top:10px; object-fit:cover; max-height:200px;" crossorigin="anonymous" />`
-          : '';
-        const descHtml = point.photoDescription
-          ? `<div style="color:#666; font-size:11px; margin-top:4px;">${point.photoDescription}</div>` : '';
+      // ── 표 헤더 ──────────────────────────────────────────
+      const cellStyle = (w: string, center = false) =>
+        `style="width:${w}; padding:7px 6px; border:1px solid #b0bec5; font-size:11px; vertical-align:middle; ${center ? 'text-align:center;' : ''}"`;
 
-        return `
-          <div style="background: ${cardBg}; border-radius: 10px; padding: 16px 18px; margin-bottom: 14px; border-left: 4px solid ${badgeBg};">
-            <div style="display:flex; align-items:flex-start; justify-content:space-between; margin-bottom:8px;">
-              <div style="display:flex; align-items:center; gap:10px;">
-                <div style="width:28px; height:28px; border-radius:50%; background:${badgeBg}; color:white; font-size:12px; font-weight:bold; display:flex; align-items:center; justify-content:center; flex-shrink:0;">${point.order}</div>
-                <div style="font-size:14px; font-weight:bold; color:#1a1a2e;">
-                  ${point.address}${point.destination ? ` (${point.destination})` : ''}
-                </div>
-              </div>
-              <div style="background:${badgeBg}; color:white; font-size:11px; font-weight:bold; padding:3px 10px; border-radius:20px; white-space:nowrap; margin-left:8px;">${statusText}</div>
-            </div>
-            <div style="display:grid; grid-template-columns:1fr 1fr; gap:4px 16px; font-size:12px; color:#444;">
-              ${point.originalId ? `<div><span style="color:#888;">민원번호</span> ${point.originalId}번</div>` : '<div></div>'}
-              ${point.manager ? `<div><span style="color:#888;">담당자</span> ${point.manager}</div>` : '<div></div>'}
-              <div style="grid-column:1/-1;"><span style="color:#888;">민원내용</span> ${point.complaint || '-'}</div>
-              ${st?.memo ? `<div style="grid-column:1/-1;"><span style="color:#888;">작업메모</span> ${st.memo}</div>` : ''}
-            </div>
-            ${photoHtml}
-            ${descHtml}
-          </div>
-        `;
-      }).join('');
+      const tableHtml = `
+        <table style="width:100%; border-collapse:collapse; table-layout:fixed; margin-bottom:24px;">
+          <colgroup>
+            <col style="width:5%"/>   <!-- 순회순번 -->
+            <col style="width:7%"/>   <!-- 민원번호 -->
+            <col style="width:18%"/>  <!-- 주소 -->
+            <col style="width:13%"/>  <!-- 민원내용 -->
+            <col style="width:8%"/>   <!-- 담당자 -->
+            <col style="width:10%"/>  <!-- 작업상태 -->
+            <col style="width:13%"/>  <!-- 작업메모 -->
+            <col style="width:26%"/>  <!-- 현장사진 -->
+          </colgroup>
+          <thead>
+            <tr style="background:#1a3a6e; color:white;">
+              <th style="padding:8px 4px; border:1px solid #1565c0; font-size:11px; text-align:center; font-weight:bold;">순회<br/>순번</th>
+              <th style="padding:8px 4px; border:1px solid #1565c0; font-size:11px; text-align:center; font-weight:bold;">민원<br/>번호</th>
+              <th style="padding:8px 6px; border:1px solid #1565c0; font-size:11px; text-align:center; font-weight:bold;">주소 (목적지)</th>
+              <th style="padding:8px 6px; border:1px solid #1565c0; font-size:11px; text-align:center; font-weight:bold;">민원내용</th>
+              <th style="padding:8px 4px; border:1px solid #1565c0; font-size:11px; text-align:center; font-weight:bold;">담당자</th>
+              <th style="padding:8px 4px; border:1px solid #1565c0; font-size:11px; text-align:center; font-weight:bold;">작업상태</th>
+              <th style="padding:8px 6px; border:1px solid #1565c0; font-size:11px; text-align:center; font-weight:bold;">작업메모</th>
+              <th style="padding:8px 6px; border:1px solid #1565c0; font-size:11px; text-align:center; font-weight:bold;">현장사진</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${donePoints.map((point, idx) => {
+              const st = statusesRef.current[statusKey(point)];
+              const isDone = st && ['민원처리완료','기처리','확인불가'].includes(st.status);
+              const rowBg = idx % 2 === 0 ? '#ffffff' : '#f5f8fb';
+              const statusColor = isDone ? '#2e7d32' : '#e65100';
+              const statusText = st?.status || '미완료';
+              const addrText = point.address + (point.destination ? `\n(${point.destination})` : '');
+              const photoHtml = point.photoUrl
+                ? `<img src="${point.photoUrl}" style="max-width:100%; max-height:120px; object-fit:contain; display:block; margin:0 auto;" crossorigin="anonymous" />${point.photoDescription ? `<div style="font-size:9px; color:#666; margin-top:3px; text-align:center;">${point.photoDescription}</div>` : ''}`
+                : '<div style="color:#aaa; font-size:10px; text-align:center;">사진 없음</div>';
 
-      container.innerHTML += `<div>${cardsHtml}</div>`;
+              return `
+                <tr style="background:${rowBg};">
+                  <td style="padding:8px 4px; border:1px solid #cfd8dc; font-size:13px; font-weight:bold; text-align:center; color:#1a3a6e;">${point.order}</td>
+                  <td style="padding:8px 4px; border:1px solid #cfd8dc; font-size:12px; font-weight:bold; text-align:center;">${point.originalId ? point.originalId + '번' : '-'}</td>
+                  <td style="padding:8px 6px; border:1px solid #cfd8dc; font-size:11px; word-break:break-all;">${point.address}${point.destination ? '<br/><span style="color:#1565c0;">(' + point.destination + ')</span>' : ''}</td>
+                  <td style="padding:8px 6px; border:1px solid #cfd8dc; font-size:11px;">${point.complaint || '-'}</td>
+                  <td style="padding:8px 4px; border:1px solid #cfd8dc; font-size:11px; text-align:center;">${point.manager || '-'}</td>
+                  <td style="padding:8px 4px; border:1px solid #cfd8dc; font-size:12px; font-weight:bold; text-align:center; color:${statusColor};">${statusText}</td>
+                  <td style="padding:8px 6px; border:1px solid #cfd8dc; font-size:11px;">${st?.memo || '-'}</td>
+                  <td style="padding:6px; border:1px solid #cfd8dc; text-align:center; vertical-align:middle;">${photoHtml}</td>
+                </tr>
+              `;
+            }).join('')}
+          </tbody>
+        </table>
+      `;
+
+      container.innerHTML += tableHtml;
       document.body.appendChild(container);
 
       // html2canvas → jsPDF
       const canvas = await html2canvas(container, {
         scale: 2, useCORS: true, allowTaint: false,
-        backgroundColor: '#f0f4f8',
+        backgroundColor: '#ffffff',
         logging: false,
       });
       document.body.removeChild(container);
