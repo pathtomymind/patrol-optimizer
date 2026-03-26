@@ -898,11 +898,17 @@ export default function MapPage() {
       const avgLat = allPoints.reduce((s, p) => s + p.lat, 0) / allPoints.length;
       const avgLng = allPoints.reduce((s, p) => s + p.lng, 0) / allPoints.length;
 
-      const markers = allPoints.slice(0, 20).map(p => ({
-        lng: p.lng, lat: p.lat, order: p.order,
-        isDone: !!(statusesRef.current[statusKey(p)] &&
-          ['민원처리완료','기처리','확인불가'].includes(statusesRef.current[statusKey(p)].status)),
-      }));
+      // 시청 기점(order=0) + 순회지점 합쳐서 전달 (경로선 그리기용)
+      const cityHall = { lng: 127.0338, lat: 37.7381, order: 0, isDone: true };
+      const markers = [
+        cityHall,
+        ...allPoints.slice(0, 18).map(p => ({
+          lng: p.lng, lat: p.lat, order: p.order,
+          isDone: !!(statusesRef.current[statusKey(p)] &&
+            ['민원처리완료','기처리','확인불가'].includes(statusesRef.current[statusKey(p)].status)),
+        })),
+        cityHall, // 복귀
+      ];
 
       let mapImgHtml = '';
       try {
