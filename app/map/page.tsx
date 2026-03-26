@@ -893,6 +893,41 @@ export default function MapPage() {
         return st && ['민원처리완료','기처리','확인불가'].includes(st.status);
       }).length;
 
+      // ── Static Map URL 생성 ──────────────────────────────
+      // 전체 지점 중심 좌표 계산
+      const allPoints = route.points.filter(p => p.source !== 'fixed');
+      const avgLat = allPoints.reduce((s, p) => s + p.lat, 0) / allPoints.length;
+      const avgLng = allPoints.reduce((s, p) => s + p.lng, 0) / allPoints.length;
+      const naverClientId = process.env.NEXT_PUBLIC_NAVER_CLIENT_ID || (window as any).__NAVER_CLIENT_ID__ || '';
+
+      // 마커 파라미터 (최대 20개 제한)
+      const markerParams = allPoints.slice(0, 20).map((p, i) => {
+        const isDone = statusesRef.current[statusKey(p)] &&
+          ['민원처리완료','기처리','확인불가'].includes(statusesRef.current[statusKey(p)].status);
+        const color = isDone ? '1565c0' : 'FF6B35';
+        return `markers=type:d|size:mid|pos:${p.lng} ${p.lat}|label:${p.order}|color:${color}`;
+      }).join('&');
+
+      const staticMapUrl = `https://maps.apigw.ntruss.com/map-static/v2/raster?w=714&h=300&center=${avgLng},${avgLat}&level=12&markers=type:d|size:small|pos:${37.7381} ${127.0338}|color:f57f17&${markerParams}&X-NCP-APIGW-API-KEY-ID=${naverClientId}`;
+
+      // Static Map 이미지를 base64로 변환 (CORS 우회용 서버 프록시)
+      let mapImgHtml = '';
+      try {
+        const mapRes = await fetch('/api/proxy-image?url=' + encodeURIComponent(staticMapUrl));
+        if (mapRes.ok) {
+          const blob = await mapRes.blob();
+          const base64 = await new Promise<string>(resolve => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(reader.result as string);
+            reader.readAsDataURL(blob);
+          });
+          mapImgHtml = `<img src="${base64}" style="width:100%; height:auto; display:block;" />`;
+        }
+      } catch (e) {
+        console.warn('지도 이미지 로드 실패:', e);
+        mapImgHtml = `<div style="height:40px; display:flex; align-items:center; justify-content:center; color:#888; font-size:11px;">지도 이미지를 불러올 수 없습니다.</div>`;
+      }
+
       // ── 헤더 ──────────────────────────────────────────────
       container.innerHTML = `
         <div style="background: linear-gradient(135deg, #1a3a6e 0%, #1565c0 100%); padding: 20px 28px; margin-bottom: 6px;">
@@ -901,8 +936,11 @@ export default function MapPage() {
             단속일자: ${route.date} &nbsp;|&nbsp; 버전: ${route.version} &nbsp;|&nbsp; 총 지점: ${totalCount}개 &nbsp;|&nbsp; 처리완료: ${doneCount}개
           </div>
         </div>
-        <div style="background:#e8edf2; padding:6px 28px 16px; margin-bottom:20px; font-size:11px; color:#555;">
+        <div style="background:#e8edf2; padding:6px 28px 12px; font-size:11px; color:#555;">
           ※ 본 문서는 패트롤 옵티마이저 앱으로 자동 생성된 순회 단속 결과 보고서입니다.
+        </div>
+        <div style="margin:0 0 20px 0; border:1px solid #cfd8dc; overflow:hidden;">
+          ${mapImgHtml}
         </div>
       `;
 
