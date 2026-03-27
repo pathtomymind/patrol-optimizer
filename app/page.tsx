@@ -21,7 +21,7 @@ export default function Home() {
   // 직접 입력 지점
   const [directPoints, setDirectPoints] = useState<{
     id: number; address: string; destination: string; complaint: string; manager: string; photoUrl: string;
-    lat?: number | null; lng?: number | null; placeName?: string | null; source?: string | null;
+    lat?: number | null; lng?: number | null; placeName?: string | null; source?: string | null; coordMessage?: string | null;
   }[]>([]);
   const [showDirectModal, setShowDirectModal] = useState(false);
   const [editingPoint, setEditingPoint] = useState<{
@@ -29,7 +29,7 @@ export default function Home() {
   } | null>(null);
   const [directForm, setDirectForm] = useState({ address: '', destination: '', complaint: '', manager: '', photoUrl: '' });
   const [directCoordStatus, setDirectCoordStatus] = useState<'idle' | 'loading' | 'success' | 'fail'>('idle');
-  const [directCoord, setDirectCoord] = useState<{ lat: number | null; lng: number | null; placeName: string | null; source: string | null }>({ lat: null, lng: null, placeName: null, source: null });
+  const [directCoord, setDirectCoord] = useState<{ lat: number | null; lng: number | null; placeName: string | null; source: string | null; coordMessage: string | null }>({ lat: null, lng: null, placeName: null, source: null, coordMessage: null });
   // 지점 상세정보 팝업
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [selectedPoint, setSelectedPoint] = useState<{
@@ -53,22 +53,22 @@ export default function Home() {
   });
   const [extractEditCoordStatus, setExtractEditCoordStatus] = useState<'idle' | 'loading' | 'success' | 'fail'>('idle');
   const [extractEditCoord, setExtractEditCoord] = useState<{
-    lat: number | null; lng: number | null; placeName: string | null; source: string | null;
-  }>({ lat: null, lng: null, placeName: null, source: null });
+    lat: number | null; lng: number | null; placeName: string | null; source: string | null; coordMessage: string | null;
+  }>({ lat: null, lng: null, placeName: null, source: null, coordMessage: null });
 
   const handleDirectAdd = () => {
     setEditingPoint(null);
     setDirectForm({ address: '', destination: '', complaint: '', manager: '', photoUrl: '' });
     setDirectCoordStatus('idle');
-    setDirectCoord({ lat: null, lng: null, placeName: null, source: null });
+    setDirectCoord({ lat: null, lng: null, placeName: null, source: null, coordMessage: null });
     setShowDirectModal(true);
   };
 
-  const handleDirectEdit = (point: { id: number; address: string; destination: string; complaint: string; manager: string; photoUrl: string; lat?: number | null; lng?: number | null; placeName?: string | null; source?: string | null }) => {
+  const handleDirectEdit = (point: { id: number; address: string; destination: string; complaint: string; manager: string; photoUrl: string; lat?: number | null; lng?: number | null; placeName?: string | null; source?: string | null; coordMessage?: string | null }) => {
     setEditingPoint(point);
     setDirectForm({ address: point.address, destination: point.destination, complaint: point.complaint, manager: point.manager, photoUrl: point.photoUrl || '' });
     setDirectCoordStatus(point.lat ? 'success' : 'idle');
-    setDirectCoord({ lat: point.lat || null, lng: point.lng || null, placeName: point.placeName || null, source: point.source || null });
+    setDirectCoord({ lat: point.lat || null, lng: point.lng || null, placeName: point.placeName || null, source: point.source || null, coordMessage: point.coordMessage || null });
     setShowDirectModal(true);
   };
 
@@ -91,7 +91,7 @@ export default function Home() {
   const handleDirectSave = async () => {
     if (isSaving) return;
     setIsSaving(true);
-    const coordData = directCoordStatus === 'success' ? { lat: directCoord.lat, lng: directCoord.lng, placeName: directCoord.placeName, source: directCoord.source } : { lat: null, lng: null, placeName: null, source: null };
+    const coordData = directCoordStatus === 'success' ? { lat: directCoord.lat, lng: directCoord.lng, placeName: directCoord.placeName, source: directCoord.source, coordMessage: directCoord.coordMessage } : { lat: null, lng: null, placeName: null, source: null, coordMessage: null };
 
     // 현장사진 Blob 업로드 (로컬 URL인 경우만)
     let photoUrl = directForm.photoUrl;
@@ -149,7 +149,7 @@ export default function Home() {
   const [extractedPoints, setExtractedPoints] = useState<{ 
     id: number; address: string; destination?: string | null; complaint: string;
     lat?: number | null; lng?: number | null; placeName?: string | null;
-    source?: string | null; photoDescription?: string | null; photoUrl?: string | null;
+    source?: string | null; coordMessage?: string | null; photoDescription?: string | null; photoUrl?: string | null;
     photoCrop?: { x: number; y: number; w: number; h: number } | null;
   }[]>([]);
 
@@ -459,8 +459,8 @@ export default function Home() {
           let lat = null;
           let lng = null;
           let placeName = null;
-
           let source = null;
+          let coordMessage = null;
             try {
               const geoRes = await fetch('/api/geocode', {
                 method: 'POST',
@@ -473,6 +473,7 @@ export default function Home() {
                 lng = geoData.lng;
                 placeName = geoData.placeName;
                 source = geoData.source;
+                coordMessage = geoData.coordMessage || null;
               }
             } catch (e) {
               console.error('geocode 오류:', e);
@@ -518,6 +519,7 @@ export default function Home() {
               lng,
               placeName,
               source,
+              coordMessage,
             };
         })
       );
@@ -568,10 +570,10 @@ export default function Home() {
   });
   if (point.lat && point.lng) {
     setExtractEditCoordStatus('success');
-    setExtractEditCoord({ lat: point.lat ?? null, lng: point.lng ?? null, placeName: point.placeName ?? null, source: point.source ?? null });
+    setExtractEditCoord({ lat: point.lat ?? null, lng: point.lng ?? null, placeName: point.placeName ?? null, source: point.source ?? null, coordMessage: (point as any).coordMessage ?? null });
   } else {
     setExtractEditCoordStatus('fail');
-    setExtractEditCoord({ lat: null, lng: null, placeName: null, source: null });
+    setExtractEditCoord({ lat: null, lng: null, placeName: null, source: null, coordMessage: null });
   }
   setShowExtractEditModal(true);
 };
@@ -587,7 +589,7 @@ export default function Home() {
       if (res.ok) {
         const data = await res.json();
         if (data.lat && data.lng) {
-          setExtractEditCoord({ lat: data.lat, lng: data.lng, placeName: data.placeName, source: data.source });
+          setExtractEditCoord({ lat: data.lat, lng: data.lng, placeName: data.placeName, source: data.source, coordMessage: data.coordMessage || null });
           setExtractEditCoordStatus('success');
         } else {
           setExtractEditCoordStatus('fail');
@@ -611,6 +613,7 @@ export default function Home() {
     lng: extractEditCoord.lng,
     placeName: extractEditCoord.placeName,
     source: extractEditCoord.source,
+    coordMessage: extractEditCoord.coordMessage,
   };
   const updatedPoints = extractedPoints.map((p) =>
     p.id === extractEditTarget.id ? updatedPoint : p
@@ -1010,11 +1013,11 @@ export default function Home() {
                                     </span>
                                   </div>
                                 )}
-                                {(!point.placeName || point.source === 'address') && point.source && point.source !== 'fixed' && (
-                                  <div style={{ display: 'flex', gap: '6px', marginTop: '2px', color: '#fff176', fontSize: '12px' }}>
+                                {point.source && point.source !== 'fixed' && (point as any).coordMessage && (
+                                  <div style={{ display: 'flex', gap: '6px', marginTop: '2px', fontSize: '12px' }}>
                                     <span style={{ width: '3.2rem', flexShrink: 0 }}></span>
-                                    <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                      <span>📍</span><span>주소로 위치 확인</span>
+                                    <span style={{ display: 'flex', alignItems: 'center', gap: '4px', color: (point as any).coordMessage.includes('⚠️') ? '#ffb74d' : '#fff176' }}>
+                                      <span>📍</span><span>{(point as any).coordMessage}</span>
                                     </span>
                                   </div>
                                 )}
@@ -1178,16 +1181,15 @@ export default function Home() {
                                   <span style={{ display: 'inline-block', width: '4.5rem' }}>🔍</span>{point.placeName}
                                 </p>
                               )}
-                              {(!point.placeName || point.source === 'address') && point.source && (
-                                <p className="text-xs mt-0.5" style={{ color: '#fff176' }}>
-                                  <span style={{ display: 'inline-block', width: '4.5rem' }}>📍</span>주소로 위치 확인
+                              {point.coordMessage ? (
+                                <p className="text-xs mt-0.5" style={{ color: point.coordMessage.includes('⚠️') ? '#ffb74d' : point.source ? '#fff176' : 'rgba(255,255,255,0.5)' }}>
+                                  <span style={{ display: 'inline-block', width: '4.5rem' }}>📍</span>{point.coordMessage}
                                 </p>
-                              )}
-                              {!point.source && (
+                              ) : !point.source ? (
                                 <p className="text-xs mt-0.5" style={{ color: 'rgba(255,255,255,0.5)' }}>
                                   <span style={{ display: 'inline-block', width: '4.5rem' }}>❓</span>위치를 찾지 못했습니다
                                 </p>
-                              )}
+                              ) : null}
                               <p className="text-xs mt-0.5" style={{ color: '#a5d6a7' }}>
                                 <span style={{ color: 'rgba(255,255,255,0.6)', display: 'inline-block', width: '3.2rem' }}>민원내용:</span><span style={{ color: '#a5d6a7' }}>{point.complaint}</span>
                               </p>
@@ -1386,7 +1388,7 @@ export default function Home() {
                     });
                     const data = await res.json();
                     if (res.ok && data.lat && data.lng) {
-                      setDirectCoord({ lat: data.lat, lng: data.lng, placeName: data.placeName || null, source: data.source || null });
+                      setDirectCoord({ lat: data.lat, lng: data.lng, placeName: data.placeName || null, source: data.source || null, coordMessage: data.coordMessage || null });
                       setDirectCoordStatus('success');
                     } else {
                       setDirectCoordStatus('fail');

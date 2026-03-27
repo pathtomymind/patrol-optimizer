@@ -12,6 +12,7 @@ type RoutePoint = {
   lng: number;
   placeName: string | null;
   source: string | null;
+  coordMessage?: string | null;
   originalId?: number | null;
   photoDescription?: string | null;
   photoUrl?: string | null;
@@ -1461,12 +1462,14 @@ export default function MapPage() {
                 {[
                   { label: '주소', value: selectedPoint.address || '' },
                   { label: '목적지', value: selectedPoint.destination || '' },
-                  { label: '좌표확인', value:
+                  { label: '플레이스명', value: selectedPoint.placeName || '' },
+                  { label: '좌표확인', value: selectedPoint.coordMessage || (
                     selectedPoint.source === 'place_single' || selectedPoint.source === 'place_nearest'
                       ? '✅ 목적지로 위치 확인'
                       : selectedPoint.source === 'address'
                       ? '📍 주소로 위치 확인'
-                      : '❌ 위치 미확인' },
+                      : '❌ 위치 미확인'
+                  )},
                 ].map(({ label, value }) => (
                   <div key={label} style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
                     <span style={{ color: '#90caf9', fontSize: '11px', width: '60px', flexShrink: 0, paddingTop: '2px' }}>{label}</span>
