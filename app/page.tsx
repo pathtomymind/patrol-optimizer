@@ -1411,11 +1411,11 @@ export default function Home() {
                 {directCoordStatus === 'success' && '✅ 좌표가 확인되었습니다.'}
                 {directCoordStatus === 'fail' && '❌ 좌표를 찾지 못했습니다. 주소나 목적지를 다시 확인해주세요.'}
               </p>
-              {directCoordStatus === 'success' && directCoord.placeName && directCoord.source !== 'address' && (
+              {directCoordStatus === 'success' && directCoord.placeName && (
                 <p className="text-xs mt-1 text-left" style={{ color: '#a5d6a7' }}>🔍 {directCoord.placeName}</p>
               )}
-              {directCoordStatus === 'success' && directCoord.source === 'address' && (
-                <p className="text-xs mt-1 text-left" style={{ color: '#fff176' }}>📍 주소로 좌표 확인 (목적지 미확인)</p>
+              {directCoordStatus === 'success' && directCoord.coordMessage && (
+                <p className="text-xs mt-1 text-left" style={{ color: directCoord.coordMessage.includes('⚠️') ? '#ffb74d' : '#fff176' }}>📍 {directCoord.coordMessage}</p>
               )}
             </div>
 
@@ -1577,11 +1577,11 @@ export default function Home() {
                 {extractEditCoordStatus === 'success' && '✅ 좌표가 확인되었습니다.'}
                 {extractEditCoordStatus === 'fail' && '❌ 좌표를 찾지 못했습니다. 주소나 목적지를 다시 확인해주세요.'}
               </p>
-              {extractEditCoordStatus === 'success' && extractEditCoord.placeName && extractEditCoord.source !== 'address' && (
+              {extractEditCoordStatus === 'success' && extractEditCoord.placeName && (
                 <p className="text-xs mt-1 text-left" style={{ color: '#a5d6a7' }}>🔍 {extractEditCoord.placeName}</p>
               )}
-              {extractEditCoordStatus === 'success' && extractEditCoord.source === 'address' && (
-                <p className="text-xs mt-1 text-left" style={{ color: '#fff176' }}>📍 주소로 좌표 확인 (목적지 미확인)</p>
+              {extractEditCoordStatus === 'success' && extractEditCoord.coordMessage && (
+                <p className="text-xs mt-1 text-left" style={{ color: extractEditCoord.coordMessage.includes('⚠️') ? '#ffb74d' : '#fff176' }}>📍 {extractEditCoord.coordMessage}</p>
               )}
             </div>
 
