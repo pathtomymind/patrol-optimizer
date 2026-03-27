@@ -27,9 +27,27 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       // - 도로명 주소(로/길 포함)는 붙이면 장소검색이 안 되므로 제외
       //   예: '의정부 해태프라자' (도로명 주소 컨텍스트 제외)
       const isJibunAddress = address && !/로\d*번?길?|대로\d*번?길?/.test(address) && /동\s*\d|읍\s*\d|면\s*\d/.test(address);
-      const searchQuery = isJibunAddress
-        ? encodeURIComponent(`${normalizeAddress(address)} ${destination}`)
-        : encodeURIComponent(`의정부 ${destination}`);
+
+      let searchQuery: string;
+      if (isJibunAddress) {
+        // 지번 주소: 주소 전체를 앞에 붙여 검색
+        searchQuery = encodeURIComponent(`${normalizeAddress(address)} ${destination}`);
+      } else if (address) {
+        // 도로명 주소: 주소 좌표로 역지오코딩해서 동 이름 얻기
+        const addrCoordForDong = await getAddressCoord(address, CLIENT_ID!, CLIENT_SECRET!);
+        const dongName = addrCoordForDong
+          ? await getDongFromCoord(addrCoordForDong.lat, addrCoordForDong.lng, CLIENT_ID!, CLIENT_SECRET!)
+          : null;
+        if (dongName) {
+          // 동 이름 + 목적지명으로 정밀 검색 (예: '민락동 GS25')
+          searchQuery = encodeURIComponent(`${dongName} ${destination}`);
+          console.log(`역지오코딩 동 이름: ${dongName} → 검색어: ${dongName} ${destination}`);
+        } else {
+          searchQuery = encodeURIComponent(`의정부 ${destination}`);
+        }
+      } else {
+        searchQuery = encodeURIComponent(`의정부 ${destination}`);
+      }
       const SEARCH_CLIENT_ID = process.env.NAVER_SEARCH_CLIENT_ID;
       const SEARCH_CLIENT_SECRET = process.env.NAVER_SEARCH_CLIENT_SECRET;
       
@@ -114,6 +132,37 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   return res.status(404).json({ message: '좌표를 찾을 수 없습니다.' });
+}
+
+// 좌표 → 동 이름 변환 함수 (역지오코딩)
+async function getDongFromCoord(
+  lat: number,
+  lng: number,
+  clientId: string,
+  clientSecret: string
+): Promise<string | null> {
+  try {
+    const res = await fetch(
+      `https://maps.apigw.ntruss.com/map-reversegeocode/v2/gc?coords=${lng},${lat}&orders=legalcode&output=json`,
+      {
+        headers: {
+          'X-NCP-APIGW-API-KEY-ID': clientId,
+          'X-NCP-APIGW-API-KEY': clientSecret,
+        },
+      }
+    );
+    const data = await res.json();
+    console.log('역지오코딩 응답:', JSON.stringify(data));
+    // 법정동 이름 추출 (예: '민락동', '의정부동')
+    const region = data.results?.[0]?.region;
+    if (region) {
+      const dong = region.area3?.name || region.area2?.name || null;
+      return dong || null;
+    }
+  } catch (error) {
+    console.error('역지오코딩 오류:', error);
+  }
+  return null;
 }
 
 // 주소 → 좌표 변환 함수
