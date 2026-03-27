@@ -1176,20 +1176,20 @@ export default function Home() {
                               </p>
                               {/* 돋보기: 좌표 있으면 표시, 없으면 돋보기만 */}
                               <p className="text-xs mt-0.5" style={{ color: '#a5d6a7' }}>
-                                <span style={{ display: 'inline-block', width: '4.5rem' }}>🔍</span>
+                                <span style={{ display: 'inline-block', width: '4rem' }}>🔍</span>
                                 {point.source ? (point.placeName || '') : ''}
                               </p>
                               {/* 핀: coordMessage 또는 케이스6 메시지 */}
                               <p className="text-xs mt-0.5" style={{ color: point.coordMessage?.includes('⚠️') ? '#ffb74d' : point.source ? '#fff176' : 'rgba(255,255,255,0.5)' }}>
-                                <span style={{ display: 'inline-block', width: '4.5rem' }}>📍</span>
+                                <span style={{ display: 'inline-block', width: '4rem' }}>📍</span>
                                 {point.coordMessage || '좌표 없음. (⚠️주소나 목적지명 확인 필요)'}
                               </p>
                               <p className="text-xs mt-0.5" style={{ color: '#a5d6a7' }}>
-                                <span style={{ color: 'rgba(255,255,255,0.6)', display: 'inline-block', width: '3.2rem' }}>민원내용:</span><span style={{ color: '#a5d6a7' }}>{point.complaint}</span>
+                                <span style={{ color: 'rgba(255,255,255,0.6)', display: 'inline-block', width: '4rem' }}>민원내용:</span><span style={{ color: '#a5d6a7' }}>{point.complaint}</span>
                               </p>
                               {point.photoDescription && (
                                 <p className="text-xs mt-0.5" style={{ color: '#a5d6a7' }}>
-                                  <span style={{ color: 'rgba(255,255,255,0.6)', display: 'inline-block', width: '3.2rem' }}>사진설명:</span>{point.photoDescription}
+                                  <span style={{ color: 'rgba(255,255,255,0.6)', display: 'inline-block', width: '4rem' }}>사진설명:</span>{point.photoDescription}
                                 </p>
                               )}
                             </div>
