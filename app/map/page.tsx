@@ -684,6 +684,7 @@ export default function MapPage() {
         icon: {
           content: makeMarkerContent(point, color, showPulse, currentZoomRef.current),
           anchor: new naver.maps.Point(14, 14),
+        },
       });
 
       // ★ 마커 클릭 → 줌 PULSE_THRESHOLD 이상일 때만 팝업 (fixed 제외)
