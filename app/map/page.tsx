@@ -1029,44 +1029,49 @@ export default function MapPage() {
             position: latlng,
             icon: {
               content: `
-                <div style="position:relative;width:52px;height:48px;display:flex;align-items:center;justify-content:center;">
-                  <!-- 픽업트럭 SVG -->
-                  <div style="position:relative;z-index:2;animation:my-bounce 1.2s ease-in-out infinite;">
-                    <svg width="52" height="40" viewBox="0 0 52 40" xmlns="http://www.w3.org/2000/svg">
+                <div style="position:relative;display:inline-block;">
+                  <div style="animation:my-bounce 1.2s ease-in-out infinite;">
+                    <svg width="56" height="36" viewBox="0 0 56 36" xmlns="http://www.w3.org/2000/svg">
                       <!-- 그림자 -->
-                      <ellipse cx="26" cy="38" rx="18" ry="2" fill="rgba(0,0,0,0.18)"/>
-                      <!-- 짐칸 (뒤쪽) -->
-                      <rect x="3" y="18" width="18" height="12" rx="2" fill="#1565c0"/>
+                      <ellipse cx="28" cy="35" rx="20" ry="1.8" fill="rgba(0,0,0,0.2)"/>
+                      <!-- 짐칸 바닥 -->
+                      <rect x="3" y="19" width="20" height="10" rx="2" fill="#c62828"/>
                       <!-- 짐칸 내부 -->
-                      <rect x="5" y="20" width="14" height="8" rx="1" fill="#0d47a1"/>
-                      <!-- 짐칸 앞판 -->
-                      <rect x="20" y="17" width="2.5" height="13" rx="1" fill="#1976d2"/>
+                      <rect x="5" y="20" width="16" height="7" rx="1" fill="#b71c1c"/>
+                      <!-- 차체 하단 전체 -->
+                      <rect x="3" y="21" width="50" height="8" rx="3" fill="#e53935"/>
                       <!-- 캐빈 -->
-                      <rect x="21" y="14" width="18" height="16" rx="3" fill="#1976d2"/>
-                      <!-- 캐빈 지붕 -->
-                      <rect x="23" y="10" width="14" height="6" rx="3" fill="#1565c0"/>
+                      <rect x="23" y="10" width="28" height="19" rx="4" fill="#e53935"/>
+                      <!-- 캐빈 지붕 둥글게 -->
+                      <ellipse cx="37" cy="12" rx="12" ry="4" fill="#e53935"/>
+                      <rect x="25" y="10" width="24" height="4" fill="#e53935"/>
                       <!-- 앞유리 -->
-                      <rect x="31" y="11" width="5" height="4" rx="1.5" fill="#b3e5fc" opacity="0.9"/>
+                      <rect x="43" y="11" width="7" height="8" rx="2" fill="#90caf9" opacity="0.9"/>
                       <!-- 옆유리 -->
-                      <rect x="24" y="11" width="5" height="4" rx="1.5" fill="#b3e5fc" opacity="0.9"/>
+                      <rect x="27" y="11" width="13" height="8" rx="2" fill="#90caf9" opacity="0.85"/>
+                      <!-- 창문 테두리 -->
+                      <rect x="43" y="11" width="7" height="8" rx="2" fill="none" stroke="#c62828" stroke-width="0.8"/>
+                      <rect x="27" y="11" width="13" height="8" rx="2" fill="none" stroke="#c62828" stroke-width="0.8"/>
+                      <!-- 문 구분선 -->
+                      <line x1="41" y1="10" x2="41" y2="29" stroke="#c62828" stroke-width="1.2"/>
                       <!-- 앞 범퍼 -->
-                      <rect x="37" y="22" width="4" height="6" rx="1.5" fill="#0d47a1"/>
+                      <rect x="49" y="23" width="5" height="5" rx="2" fill="#b71c1c"/>
                       <!-- 헤드라이트 -->
-                      <rect x="39" y="21" width="3" height="2.5" rx="1" fill="#fff9c4" opacity="0.95"/>
+                      <ellipse cx="52" cy="22" rx="2" ry="1.5" fill="#fff9c4" opacity="0.95"/>
                       <!-- 테일라이트 -->
-                      <rect x="3" y="21" width="2" height="2.5" rx="1" fill="#ef9a9a" opacity="0.9"/>
-                      <!-- 앞 바퀴 -->
-                      <circle cx="36" cy="31" r="5" fill="#263238"/>
-                      <circle cx="36" cy="31" r="2.8" fill="#546e7a"/>
-                      <circle cx="36" cy="31" r="1.2" fill="#263238"/>
-                      <!-- 뒷 바퀴 -->
-                      <circle cx="12" cy="31" r="5" fill="#263238"/>
-                      <circle cx="12" cy="31" r="2.8" fill="#546e7a"/>
-                      <circle cx="12" cy="31" r="1.2" fill="#263238"/>
-                      <!-- 문 라인 -->
-                      <line x1="29" y1="14" x2="29" y2="29" stroke="rgba(255,255,255,0.2)" stroke-width="1"/>
+                      <rect x="3" y="22" width="2.5" height="3" rx="1" fill="#ff8a80" opacity="0.95"/>
                       <!-- 사이드미러 -->
-                      <rect x="38" y="16" width="3" height="2" rx="0.8" fill="#1565c0"/>
+                      <rect x="50" y="15" width="4" height="2.5" rx="1" fill="#c62828"/>
+                      <!-- 앞 바퀴 -->
+                      <circle cx="44" cy="30" r="6" fill="#212121"/>
+                      <circle cx="44" cy="30" r="3.5" fill="#616161"/>
+                      <circle cx="44" cy="30" r="1.5" fill="#212121"/>
+                      <!-- 뒷 바퀴 -->
+                      <circle cx="13" cy="30" r="6" fill="#212121"/>
+                      <circle cx="13" cy="30" r="3.5" fill="#616161"/>
+                      <circle cx="13" cy="30" r="1.5" fill="#212121"/>
+                      <!-- 하단 몰딩 -->
+                      <rect x="6" y="27" width="43" height="2" rx="1" fill="#b71c1c" opacity="0.5"/>
                     </svg>
                   </div>
                 </div>
@@ -1077,7 +1082,7 @@ export default function MapPage() {
                   }
                 </style>
               `,
-              anchor: new naver.maps.Point(26, 36),
+              anchor: new naver.maps.Point(28, 35),
             },
             zIndex: 200,
           });
