@@ -794,6 +794,7 @@ export default function Home() {
           lng: p.lng,
           placeName: p.placeName || null,
           source: p.source || null,
+          coordMessage: ('coordMessage' in p ? p.coordMessage : null) || null,
           photoDescription: ('photoDescription' in p ? p.photoDescription : null) || null,
           photoUrl: ('photoUrl' in p ? p.photoUrl : null) || null,
           manager: ('manager' in p ? p.manager : null) || null,
