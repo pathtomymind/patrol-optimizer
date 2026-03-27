@@ -1168,28 +1168,22 @@ export default function Home() {
                             </div>
                             <div className="flex-1 cursor-pointer" onClick={() => handleExtractedEdit(point)}>
                               <p className="text-sm leading-snug font-medium">
-                                {point.source === 'place_single' || point.source === 'place_nearest' ? (
+                                {point.source ? (
                                   <span style={{ color: '#a5d6a7' }}>{point.address}{point.destination ? ` (${point.destination})` : ''}</span>
-                                ) : point.source === 'address' ? (
-                                  <><span style={{ color: '#a5d6a7' }}>{point.address}</span>{point.destination ? <span className="text-white"> ({point.destination})</span> : ''}</>
                                 ) : (
                                   <span className="text-white">{point.address}{point.destination ? ` (${point.destination})` : ''}</span>
                                 )}
                               </p>
-                              {point.placeName && point.source !== 'address' && (
-                                <p className="text-xs mt-0.5" style={{ color: '#a5d6a7' }}>
-                                  <span style={{ display: 'inline-block', width: '4.5rem' }}>🔍</span>{point.placeName}
-                                </p>
-                              )}
-                              {point.coordMessage ? (
-                                <p className="text-xs mt-0.5" style={{ color: point.coordMessage.includes('⚠️') ? '#ffb74d' : point.source ? '#fff176' : 'rgba(255,255,255,0.5)' }}>
-                                  <span style={{ display: 'inline-block', width: '4.5rem' }}>📍</span>{point.coordMessage}
-                                </p>
-                              ) : !point.source ? (
-                                <p className="text-xs mt-0.5" style={{ color: 'rgba(255,255,255,0.5)' }}>
-                                  <span style={{ display: 'inline-block', width: '4.5rem' }}>❓</span>위치를 찾지 못했습니다
-                                </p>
-                              ) : null}
+                              {/* 돋보기: 좌표 있으면 표시, 없으면 돋보기만 */}
+                              <p className="text-xs mt-0.5" style={{ color: '#a5d6a7' }}>
+                                <span style={{ display: 'inline-block', width: '4.5rem' }}>🔍</span>
+                                {point.source ? (point.placeName || '') : ''}
+                              </p>
+                              {/* 핀: coordMessage 또는 케이스6 메시지 */}
+                              <p className="text-xs mt-0.5" style={{ color: point.coordMessage?.includes('⚠️') ? '#ffb74d' : point.source ? '#fff176' : 'rgba(255,255,255,0.5)' }}>
+                                <span style={{ display: 'inline-block', width: '4.5rem' }}>📍</span>
+                                {point.coordMessage || '좌표 없음. (⚠️주소나 목적지명 확인 필요)'}
+                              </p>
                               <p className="text-xs mt-0.5" style={{ color: '#a5d6a7' }}>
                                 <span style={{ color: 'rgba(255,255,255,0.6)', display: 'inline-block', width: '3.2rem' }}>민원내용:</span><span style={{ color: '#a5d6a7' }}>{point.complaint}</span>
                               </p>
@@ -1414,8 +1408,8 @@ export default function Home() {
               {directCoordStatus === 'success' && directCoord.placeName && (
                 <p className="text-xs mt-1 text-left" style={{ color: '#a5d6a7' }}>🔍 {directCoord.placeName}</p>
               )}
-              {directCoordStatus === 'success' && directCoord.coordMessage && (
-                <p className="text-xs mt-1 text-left" style={{ color: directCoord.coordMessage.includes('⚠️') ? '#ffb74d' : '#fff176' }}>📍 {directCoord.coordMessage}</p>
+              {directCoordStatus === 'success' && (
+                <p className="text-xs mt-1 text-left" style={{ color: directCoord.coordMessage?.includes('⚠️') ? '#ffb74d' : '#fff176' }}>📍 {directCoord.coordMessage || ''}</p>
               )}
             </div>
 
@@ -1580,8 +1574,8 @@ export default function Home() {
               {extractEditCoordStatus === 'success' && extractEditCoord.placeName && (
                 <p className="text-xs mt-1 text-left" style={{ color: '#a5d6a7' }}>🔍 {extractEditCoord.placeName}</p>
               )}
-              {extractEditCoordStatus === 'success' && extractEditCoord.coordMessage && (
-                <p className="text-xs mt-1 text-left" style={{ color: extractEditCoord.coordMessage.includes('⚠️') ? '#ffb74d' : '#fff176' }}>📍 {extractEditCoord.coordMessage}</p>
+              {extractEditCoordStatus === 'success' && (
+                <p className="text-xs mt-1 text-left" style={{ color: extractEditCoord.coordMessage?.includes('⚠️') ? '#ffb74d' : '#fff176' }}>📍 {extractEditCoord.coordMessage || ''}</p>
               )}
             </div>
 

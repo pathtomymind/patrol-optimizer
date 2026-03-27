@@ -110,10 +110,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         console.error('POI 검색 오류:', error);
       }
 
-      // POI 보정 실패 → 지번 좌표 그대로
+      // POI 보정 실패 → 지번 좌표 그대로, placeName은 지번 주소
       return res.status(200).json({
         ...jibunCoord,
-        placeName: destination || address,
+        placeName: address,
         source: 'jibun_address',
         coordMessage: '지번 주소로 좌표 생성',
       });
