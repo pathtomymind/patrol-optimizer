@@ -245,8 +245,7 @@ export default function MapPage() {
         if (!marker) return;
         const color = getMarkerColor(point);
         marker.setIcon({
-          content: makeMarkerContent(point, color, showPulse),
-          anchor: (window as any).naver.maps.Point ? new (window as any).naver.maps.Point(14, 14) : undefined,
+          content: makeMarkerContent(point, color, showPulse, zoom),
         });
         marker.setMap(showMarkers ? naverMapRef.current : null);
       });
@@ -335,7 +334,7 @@ export default function MapPage() {
   };
 
   // ★ 마커 콘텐츠 - showPulse: JS 인라인 애니메이션으로 펄스 구현
-  const makeMarkerContent = (point: RoutePoint, color: string, showPulse = false) => {
+  const makeMarkerContent = (point: RoutePoint, color: string, showPulse = false, zoom = 14) => {
     const label = point.source === 'fixed' ? '🏛' : String(point.order);
     const isFixed = point.source === 'fixed';
     const isDone = color === '#1565c0';
@@ -343,13 +342,16 @@ export default function MapPage() {
     const activePulse = showPulse && !isDone && !isFixed;
     const pulseColor = 'rgba(255,107,53,0.75)';
     const pulseId = `pulse-${point.order}-${point.lat}`.replace(/\./g, '_');
+    // 줌 레벨에 따라 펄스 최대 배율 동적 조정
+    // 줌 14 → scale 3.5, 줌 16 → scale 2.0, 줌 18 → scale 1.5
+    const maxScale = Math.max(1.5, 3.5 - (zoom - 14) * 0.5);
     const pulseDiv = activePulse ? `
-      <div data-pulse="${pulseId}-0" data-delay="0" style="position:absolute;top:50%;left:50%;width:28px;height:28px;margin-left:-14px;margin-top:-14px;border-radius:50%;border:1.5px solid ${pulseColor};background:rgba(255,107,53,0.1);pointer-events:none;will-change:transform,opacity;transform-origin:center center;"></div>
-      <div data-pulse="${pulseId}-1" data-delay="333" style="position:absolute;top:50%;left:50%;width:28px;height:28px;margin-left:-14px;margin-top:-14px;border-radius:50%;border:1.5px solid ${pulseColor};background:rgba(255,107,53,0.1);pointer-events:none;will-change:transform,opacity;transform-origin:center center;"></div>
-      <div data-pulse="${pulseId}-2" data-delay="666" style="position:absolute;top:50%;left:50%;width:28px;height:28px;margin-left:-14px;margin-top:-14px;border-radius:50%;border:1.5px solid ${pulseColor};background:rgba(255,107,53,0.1);pointer-events:none;will-change:transform,opacity;transform-origin:center center;"></div>
-      <div data-pulse="${pulseId}-3" data-delay="1000" style="position:absolute;top:50%;left:50%;width:28px;height:28px;margin-left:-14px;margin-top:-14px;border-radius:50%;border:1.5px solid ${pulseColor};background:rgba(255,107,53,0.1);pointer-events:none;will-change:transform,opacity;transform-origin:center center;"></div>
-      <div data-pulse="${pulseId}-4" data-delay="1333" style="position:absolute;top:50%;left:50%;width:28px;height:28px;margin-left:-14px;margin-top:-14px;border-radius:50%;border:1.5px solid ${pulseColor};background:rgba(255,107,53,0.1);pointer-events:none;will-change:transform,opacity;transform-origin:center center;"></div>
-      <div data-pulse="${pulseId}-5" data-delay="1666" style="position:absolute;top:50%;left:50%;width:28px;height:28px;margin-left:-14px;margin-top:-14px;border-radius:50%;border:1.5px solid ${pulseColor};background:rgba(255,107,53,0.1);pointer-events:none;will-change:transform,opacity;transform-origin:center center;"></div>` : '';
+      <div data-pulse="${pulseId}-0" data-delay="0" data-maxscale="${maxScale}" style="position:absolute;top:50%;left:50%;width:28px;height:28px;margin-left:-14px;margin-top:-14px;border-radius:50%;border:1.5px solid ${pulseColor};background:rgba(255,107,53,0.1);pointer-events:none;will-change:transform,opacity;transform-origin:center center;"></div>
+      <div data-pulse="${pulseId}-1" data-delay="333" data-maxscale="${maxScale}" style="position:absolute;top:50%;left:50%;width:28px;height:28px;margin-left:-14px;margin-top:-14px;border-radius:50%;border:1.5px solid ${pulseColor};background:rgba(255,107,53,0.1);pointer-events:none;will-change:transform,opacity;transform-origin:center center;"></div>
+      <div data-pulse="${pulseId}-2" data-delay="666" data-maxscale="${maxScale}" style="position:absolute;top:50%;left:50%;width:28px;height:28px;margin-left:-14px;margin-top:-14px;border-radius:50%;border:1.5px solid ${pulseColor};background:rgba(255,107,53,0.1);pointer-events:none;will-change:transform,opacity;transform-origin:center center;"></div>
+      <div data-pulse="${pulseId}-3" data-delay="1000" data-maxscale="${maxScale}" style="position:absolute;top:50%;left:50%;width:28px;height:28px;margin-left:-14px;margin-top:-14px;border-radius:50%;border:1.5px solid ${pulseColor};background:rgba(255,107,53,0.1);pointer-events:none;will-change:transform,opacity;transform-origin:center center;"></div>
+      <div data-pulse="${pulseId}-4" data-delay="1333" data-maxscale="${maxScale}" style="position:absolute;top:50%;left:50%;width:28px;height:28px;margin-left:-14px;margin-top:-14px;border-radius:50%;border:1.5px solid ${pulseColor};background:rgba(255,107,53,0.1);pointer-events:none;will-change:transform,opacity;transform-origin:center center;"></div>
+      <div data-pulse="${pulseId}-5" data-delay="1666" data-maxscale="${maxScale}" style="position:absolute;top:50%;left:50%;width:28px;height:28px;margin-left:-14px;margin-top:-14px;border-radius:50%;border:1.5px solid ${pulseColor};background:rgba(255,107,53,0.1);pointer-events:none;will-change:transform,opacity;transform-origin:center center;"></div>` : '';
     const cursorStyle = (activePulse && !isFixed) ? 'cursor:pointer;' : 'cursor:default;';
     return `
       <div style="position:relative;display:flex;flex-direction:column;align-items:center;overflow:visible;user-select:none;-webkit-user-select:none;${cursorStyle}">
@@ -396,20 +398,19 @@ export default function MapPage() {
       div.dataset.animated = '1';
       const duration = 2000;
       const delay = parseInt(div.dataset.delay || '0', 10);
+      const maxScale = parseFloat(div.dataset.maxscale || '3.5');
       const step = (ts: number) => {
         const progress = ((ts - delay) % duration + duration) % duration / duration;
         let scale: number, opacity: number;
         if (progress < 0.1) {
-          // 빠르게 나타남
           scale = 1;
           opacity = progress / 0.1;
         } else if (progress < 0.8) {
-          // 천천히 퍼지면서 사라짐
           const p = (progress - 0.1) / 0.7;
-          scale = 1 + p * 2.5;
+          scale = 1 + p * (maxScale - 1);
           opacity = 1 - p;
         } else {
-          scale = 3.5; opacity = 0;
+          scale = maxScale; opacity = 0;
         }
         if (div.isConnected) {
           div.style.transform = `scale(${scale.toFixed(3)})`;
@@ -681,10 +682,8 @@ export default function MapPage() {
         map: showMarkers ? map : null,
         position: new naver.maps.LatLng(point.lat, point.lng),
         icon: {
-          content: makeMarkerContent(point, color, showPulse),
+          content: makeMarkerContent(point, color, showPulse, currentZoomRef.current),
           anchor: new naver.maps.Point(14, 14),
-        },
-        zIndex: isFirstFixed ? 20 : 10,
       });
 
       // ★ 마커 클릭 → 줌 PULSE_THRESHOLD 이상일 때만 팝업 (fixed 제외)
@@ -748,7 +747,7 @@ export default function MapPage() {
       if (!marker) return;
       const color = getMarkerColor(point);
       marker.setIcon({
-        content: makeMarkerContent(point, color, showPulse),
+        content: makeMarkerContent(point, color, showPulse, currentZoomRef.current),
         anchor: new naver.maps.Point(14, 14),
       });
       marker.setMap(showMarkers ? naverMapRef.current : null);
