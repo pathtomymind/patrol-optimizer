@@ -1029,65 +1029,55 @@ export default function MapPage() {
             position: latlng,
             icon: {
               content: `
-                <div style="position:relative;width:48px;height:48px;display:flex;align-items:center;justify-content:center;">
-                  <!-- 펄스 배경 -->
-                  <div style="
-                    position:absolute;width:48px;height:48px;border-radius:50%;
-                    background:rgba(25,118,210,0.15);
-                    animation:my-pulse 1.8s ease-out infinite;
-                    pointer-events:none;
-                  "></div>
-                  <div style="
-                    position:absolute;width:48px;height:48px;border-radius:50%;
-                    background:rgba(25,118,210,0.1);
-                    animation:my-pulse 1.8s ease-out infinite 0.6s;
-                    pointer-events:none;
-                  "></div>
-                  <!-- 자동차 SVG -->
+                <div style="position:relative;width:52px;height:48px;display:flex;align-items:center;justify-content:center;">
+                  <!-- 픽업트럭 SVG -->
                   <div style="position:relative;z-index:2;animation:my-bounce 1.2s ease-in-out infinite;">
-                    <svg width="36" height="36" viewBox="0 0 36 36" xmlns="http://www.w3.org/2000/svg">
-                      <!-- 차체 그림자 -->
-                      <ellipse cx="18" cy="30" rx="12" ry="2.5" fill="rgba(0,0,0,0.15)"/>
-                      <!-- 차체 -->
-                      <rect x="4" y="17" width="28" height="11" rx="3" fill="#1976d2"/>
-                      <!-- 지붕 -->
-                      <rect x="9" y="11" width="18" height="8" rx="3" fill="#1565c0"/>
+                    <svg width="52" height="40" viewBox="0 0 52 40" xmlns="http://www.w3.org/2000/svg">
+                      <!-- 그림자 -->
+                      <ellipse cx="26" cy="38" rx="18" ry="2" fill="rgba(0,0,0,0.18)"/>
+                      <!-- 짐칸 (뒤쪽) -->
+                      <rect x="3" y="18" width="18" height="12" rx="2" fill="#1565c0"/>
+                      <!-- 짐칸 내부 -->
+                      <rect x="5" y="20" width="14" height="8" rx="1" fill="#0d47a1"/>
+                      <!-- 짐칸 앞판 -->
+                      <rect x="20" y="17" width="2.5" height="13" rx="1" fill="#1976d2"/>
+                      <!-- 캐빈 -->
+                      <rect x="21" y="14" width="18" height="16" rx="3" fill="#1976d2"/>
+                      <!-- 캐빈 지붕 -->
+                      <rect x="23" y="10" width="14" height="6" rx="3" fill="#1565c0"/>
                       <!-- 앞유리 -->
-                      <rect x="20" y="12.5" width="6" height="5" rx="1.5" fill="#b3e5fc" opacity="0.9"/>
-                      <!-- 뒷유리 -->
-                      <rect x="10" y="12.5" width="6" height="5" rx="1.5" fill="#b3e5fc" opacity="0.9"/>
-                      <!-- 앞 바퀴 -->
-                      <circle cx="25" cy="28" r="4" fill="#263238"/>
-                      <circle cx="25" cy="28" r="2" fill="#90a4ae"/>
-                      <circle cx="25" cy="28" r="0.8" fill="#263238"/>
-                      <!-- 뒷 바퀴 -->
-                      <circle cx="11" cy="28" r="4" fill="#263238"/>
-                      <circle cx="11" cy="28" r="2" fill="#90a4ae"/>
-                      <circle cx="11" cy="28" r="0.8" fill="#263238"/>
+                      <rect x="31" y="11" width="5" height="4" rx="1.5" fill="#b3e5fc" opacity="0.9"/>
+                      <!-- 옆유리 -->
+                      <rect x="24" y="11" width="5" height="4" rx="1.5" fill="#b3e5fc" opacity="0.9"/>
+                      <!-- 앞 범퍼 -->
+                      <rect x="37" y="22" width="4" height="6" rx="1.5" fill="#0d47a1"/>
                       <!-- 헤드라이트 -->
-                      <rect x="29" y="19" width="3" height="2.5" rx="1" fill="#fff9c4" opacity="0.95"/>
+                      <rect x="39" y="21" width="3" height="2.5" rx="1" fill="#fff9c4" opacity="0.95"/>
                       <!-- 테일라이트 -->
-                      <rect x="4" y="19" width="2.5" height="2.5" rx="1" fill="#ef9a9a" opacity="0.9"/>
+                      <rect x="3" y="21" width="2" height="2.5" rx="1" fill="#ef9a9a" opacity="0.9"/>
+                      <!-- 앞 바퀴 -->
+                      <circle cx="36" cy="31" r="5" fill="#263238"/>
+                      <circle cx="36" cy="31" r="2.8" fill="#546e7a"/>
+                      <circle cx="36" cy="31" r="1.2" fill="#263238"/>
+                      <!-- 뒷 바퀴 -->
+                      <circle cx="12" cy="31" r="5" fill="#263238"/>
+                      <circle cx="12" cy="31" r="2.8" fill="#546e7a"/>
+                      <circle cx="12" cy="31" r="1.2" fill="#263238"/>
                       <!-- 문 라인 -->
-                      <line x1="18" y1="17" x2="18" y2="27" stroke="rgba(255,255,255,0.25)" stroke-width="1"/>
-                      <!-- 번호판 -->
-                      <rect x="13" y="25.5" width="10" height="3" rx="1" fill="white" opacity="0.85"/>
-                      <text x="18" y="28" text-anchor="middle" font-size="2.2" fill="#1565c0" font-weight="bold" font-family="sans-serif">나</text>
+                      <line x1="29" y1="14" x2="29" y2="29" stroke="rgba(255,255,255,0.2)" stroke-width="1"/>
+                      <!-- 사이드미러 -->
+                      <rect x="38" y="16" width="3" height="2" rx="0.8" fill="#1565c0"/>
                     </svg>
                   </div>
                 </div>
                 <style>
-                  @keyframes my-pulse {
-                    0% { transform: scale(0.8); opacity: 0.8; }
-                    100% { transform: scale(2.2); opacity: 0; }
-                  }
                   @keyframes my-bounce {
                     0%, 100% { transform: translateY(0px); }
                     50% { transform: translateY(-3px); }
                   }
                 </style>
               `,
-              anchor: new naver.maps.Point(24, 30),
+              anchor: new naver.maps.Point(26, 36),
             },
             zIndex: 200,
           });
