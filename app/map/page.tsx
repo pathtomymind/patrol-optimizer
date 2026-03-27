@@ -338,27 +338,17 @@ export default function MapPage() {
   const makeMarkerContent = (point: RoutePoint, color: string, showPulse = false) => {
     const label = point.source === 'fixed' ? '🏛' : String(point.order);
     const isFixed = point.source === 'fixed';
-    const pulseColor = color === '#1565c0'
-      ? 'rgba(21,101,192,0.6)'
-      : color === '#f57f17'
-      ? 'rgba(245,127,23,0.6)'
-      : 'rgba(255,107,53,0.6)';
-    // data-pulse 속성으로 마커 식별 후 외부에서 JS 애니메이션 적용
+    const isDone = color === '#1565c0';
+    // 완료(파란색) 마커는 펄스 없음
+    const activePulse = showPulse && !isDone && !isFixed;
+    const pulseColor = 'rgba(255,107,53,0.75)';
     const pulseId = `pulse-${point.order}-${point.lat}`.replace(/\./g, '_');
-    const pulseDiv = showPulse ? `
-      <div data-pulse="${pulseId}-0" data-delay="0" style="position:absolute;top:50%;left:50%;width:28px;height:28px;margin-left:-14px;margin-top:-14px;border-radius:50%;border:2px solid ${pulseColor};background:transparent;pointer-events:none;will-change:transform,opacity;transform-origin:center center;"></div>
-      <div data-pulse="${pulseId}-1" data-delay="333" style="position:absolute;top:50%;left:50%;width:28px;height:28px;margin-left:-14px;margin-top:-14px;border-radius:50%;border:2px solid ${pulseColor};background:transparent;pointer-events:none;will-change:transform,opacity;transform-origin:center center;"></div>
-      <div data-pulse="${pulseId}-2" data-delay="666" style="position:absolute;top:50%;left:50%;width:28px;height:28px;margin-left:-14px;margin-top:-14px;border-radius:50%;border:2px solid ${pulseColor};background:transparent;pointer-events:none;will-change:transform,opacity;transform-origin:center center;"></div>
-      <div data-pulse="${pulseId}-3" data-delay="999" style="position:absolute;top:50%;left:50%;width:28px;height:28px;margin-left:-14px;margin-top:-14px;border-radius:50%;border:2px solid ${pulseColor};background:transparent;pointer-events:none;will-change:transform,opacity;transform-origin:center center;"></div>
-      <div data-pulse="${pulseId}-4" data-delay="1332" style="position:absolute;top:50%;left:50%;width:28px;height:28px;margin-left:-14px;margin-top:-14px;border-radius:50%;border:2px solid ${pulseColor};background:transparent;pointer-events:none;will-change:transform,opacity;transform-origin:center center;"></div>
-      <div data-pulse="${pulseId}-5" data-delay="1665" style="position:absolute;top:50%;left:50%;width:28px;height:28px;margin-left:-14px;margin-top:-14px;border-radius:50%;border:2px solid ${pulseColor};background:transparent;pointer-events:none;will-change:transform,opacity;transform-origin:center center;"></div>
-      <div data-pulse="${pulseId}-6" data-delay="1998" style="position:absolute;top:50%;left:50%;width:28px;height:28px;margin-left:-14px;margin-top:-14px;border-radius:50%;border:2px solid ${pulseColor};background:transparent;pointer-events:none;will-change:transform,opacity;transform-origin:center center;"></div>
-      <div data-pulse="${pulseId}-7" data-delay="2331" style="position:absolute;top:50%;left:50%;width:28px;height:28px;margin-left:-14px;margin-top:-14px;border-radius:50%;border:2px solid ${pulseColor};background:transparent;pointer-events:none;will-change:transform,opacity;transform-origin:center center;"></div>
-      <div data-pulse="${pulseId}-8" data-delay="2664" style="position:absolute;top:50%;left:50%;width:28px;height:28px;margin-left:-14px;margin-top:-14px;border-radius:50%;border:2px solid ${pulseColor};background:transparent;pointer-events:none;will-change:transform,opacity;transform-origin:center center;"></div>
-      <div data-pulse="${pulseId}-9" data-delay="2997" style="position:absolute;top:50%;left:50%;width:28px;height:28px;margin-left:-14px;margin-top:-14px;border-radius:50%;border:2px solid ${pulseColor};background:transparent;pointer-events:none;will-change:transform,opacity;transform-origin:center center;"></div>
-      <div data-pulse="${pulseId}-10" data-delay="3330" style="position:absolute;top:50%;left:50%;width:28px;height:28px;margin-left:-14px;margin-top:-14px;border-radius:50%;border:2px solid ${pulseColor};background:transparent;pointer-events:none;will-change:transform,opacity;transform-origin:center center;"></div>
-      <div data-pulse="${pulseId}-11" data-delay="3663" style="position:absolute;top:50%;left:50%;width:28px;height:28px;margin-left:-14px;margin-top:-14px;border-radius:50%;border:2px solid ${pulseColor};background:transparent;pointer-events:none;will-change:transform,opacity;transform-origin:center center;"></div>` : '';
-    const cursorStyle = (showPulse && !isFixed) ? 'cursor:pointer;' : 'cursor:default;';
+    const pulseDiv = activePulse ? `
+      <div data-pulse="${pulseId}-0" data-delay="0" style="position:absolute;top:50%;left:50%;width:28px;height:28px;margin-left:-14px;margin-top:-14px;border-radius:50%;border:3px solid ${pulseColor};background:rgba(255,107,53,0.15);pointer-events:none;will-change:transform,opacity;transform-origin:center center;"></div>
+      <div data-pulse="${pulseId}-1" data-delay="500" style="position:absolute;top:50%;left:50%;width:28px;height:28px;margin-left:-14px;margin-top:-14px;border-radius:50%;border:3px solid ${pulseColor};background:rgba(255,107,53,0.15);pointer-events:none;will-change:transform,opacity;transform-origin:center center;"></div>
+      <div data-pulse="${pulseId}-2" data-delay="1000" style="position:absolute;top:50%;left:50%;width:28px;height:28px;margin-left:-14px;margin-top:-14px;border-radius:50%;border:3px solid ${pulseColor};background:rgba(255,107,53,0.15);pointer-events:none;will-change:transform,opacity;transform-origin:center center;"></div>
+      <div data-pulse="${pulseId}-3" data-delay="1500" style="position:absolute;top:50%;left:50%;width:28px;height:28px;margin-left:-14px;margin-top:-14px;border-radius:50%;border:3px solid ${pulseColor};background:rgba(255,107,53,0.15);pointer-events:none;will-change:transform,opacity;transform-origin:center center;"></div>` : '';
+    const cursorStyle = (activePulse && !isFixed) ? 'cursor:pointer;' : 'cursor:default;';
     return `
       <div style="position:relative;display:flex;flex-direction:column;align-items:center;overflow:visible;user-select:none;-webkit-user-select:none;${cursorStyle}">
         ${pulseDiv}
@@ -402,23 +392,22 @@ export default function MapPage() {
       const div = el as HTMLElement;
       if (div.dataset.animated) return;
       div.dataset.animated = '1';
-      const duration = 4000;          // 동심원 1개의 퍼지는 시간
+      const duration = 2000;
       const delay = parseInt(div.dataset.delay || '0', 10);
       const step = (ts: number) => {
-        // delay만큼 위상 이동 → 3개가 순서대로 퍼짐
         const progress = ((ts - delay) % duration + duration) % duration / duration;
         let scale: number, opacity: number;
-        if (progress < 0.15) {
+        if (progress < 0.1) {
           // 빠르게 나타남
-          scale = 1 + (progress / 0.15) * 0.2;
-          opacity = (progress / 0.15) * 0.7;
-        } else if (progress < 0.75) {
+          scale = 1;
+          opacity = progress / 0.1;
+        } else if (progress < 0.8) {
           // 천천히 퍼지면서 사라짐
-          const p = (progress - 0.15) / 0.60;
-          scale = 1.2 + p * 0.8;
-          opacity = 0.7 * (1 - p);
+          const p = (progress - 0.1) / 0.7;
+          scale = 1 + p * 2.5;
+          opacity = 1 - p;
         } else {
-          scale = 2.0; opacity = 0;
+          scale = 3.5; opacity = 0;
         }
         if (div.isConnected) {
           div.style.transform = `scale(${scale.toFixed(3)})`;
