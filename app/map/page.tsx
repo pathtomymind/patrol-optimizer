@@ -893,42 +893,7 @@ export default function MapPage() {
         return st && ['민원처리완료','기처리','확인불가'].includes(st.status);
       }).length;
 
-      // ── Static Map 이미지 (서버 API 경유) ────────────────
-      const allPoints = route.points.filter(p => p.source !== 'fixed');
-      const avgLat = allPoints.reduce((s, p) => s + p.lat, 0) / allPoints.length;
-      const avgLng = allPoints.reduce((s, p) => s + p.lng, 0) / allPoints.length;
 
-      // 시청 기점(order=0) + 순회지점 합쳐서 전달 (경로선 그리기용)
-      const cityHall = { lng: 127.0338, lat: 37.7381, order: 0, isDone: true };
-      const markers = [
-        cityHall,
-        ...allPoints.slice(0, 18).map(p => ({
-          lng: p.lng, lat: p.lat, order: p.order,
-          isDone: !!(statusesRef.current[statusKey(p)] &&
-            ['민원처리완료','기처리','확인불가'].includes(statusesRef.current[statusKey(p)].status)),
-        })),
-        cityHall, // 복귀
-      ];
-
-      let mapImgHtml = '';
-      try {
-        const mapRes = await fetch('/api/static-map', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ center: { lat: avgLat, lng: avgLng }, level: 12, markers }),
-        });
-        if (mapRes.ok) {
-          const mapData = await mapRes.json();
-          mapImgHtml = `<img src="${mapData.image}" style="width:100%; height:auto; display:block;" />`;
-        } else {
-          const err = await mapRes.json().catch(() => ({}));
-          console.warn('지도 이미지 오류:', mapRes.status, err);
-          mapImgHtml = `<div style="height:40px; display:flex; align-items:center; justify-content:center; color:#888; font-size:11px;">지도 이미지를 불러올 수 없습니다. (${mapRes.status})</div>`;
-        }
-      } catch (e) {
-        console.warn('지도 이미지 로드 실패:', e);
-        mapImgHtml = `<div style="height:40px; display:flex; align-items:center; justify-content:center; color:#888; font-size:11px;">지도 이미지를 불러올 수 없습니다.</div>`;
-      }
 
       // ── 헤더 ──────────────────────────────────────────────
       container.innerHTML = `
@@ -938,12 +903,10 @@ export default function MapPage() {
             단속일자: ${route.date} &nbsp;|&nbsp; 버전: ${route.version} &nbsp;|&nbsp; 총 지점: ${totalCount}개 &nbsp;|&nbsp; 처리완료: ${doneCount}개
           </div>
         </div>
-        <div style="background:#e8edf2; padding:6px 28px 12px; font-size:11px; color:#555;">
+        <div style="background:#e8edf2; padding:6px 28px 12px; margin-bottom:20px; font-size:11px; color:#555;">
           ※ 본 문서는 패트롤 옵티마이저 앱으로 자동 생성된 순회 단속 결과 보고서입니다.
         </div>
-        <div style="margin:0 0 20px 0; border:1px solid #cfd8dc; overflow:hidden;">
-          ${mapImgHtml}
-        </div>
+
       `;
 
       // ── 표 헤더 ──────────────────────────────────────────
