@@ -34,7 +34,7 @@ export default function Home() {
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [selectedPoint, setSelectedPoint] = useState<{
     order: number; originalId?: number | null; address: string; destination: string | null; complaint: string;
-    lat: number; lng: number; placeName: string | null; source: string | null;
+    lat: number; lng: number; placeName: string | null; source: string | null; coordMessage?: string | null;
     photoDescription?: string | null; photoUrl?: string | null; manager?: string | null;
   } | null>(null);
   // 완료상태
@@ -286,7 +286,7 @@ export default function Home() {
   const [currentRoute, setCurrentRoute] = useState<{
     date: string; version: number; createdAt: number;
     history?: { version: number; createdAt: number }[];
-    points: { order: number; originalId?: number | null; address: string; destination: string | null; complaint: string; lat: number; lng: number; placeName: string | null; source: string | null; photoDescription?: string | null; photoUrl?: string | null; manager?: string | null; }[];
+    points: { order: number; originalId?: number | null; address: string; destination: string | null; complaint: string; lat: number; lng: number; placeName: string | null; source: string | null; coordMessage?: string | null; photoDescription?: string | null; photoUrl?: string | null; manager?: string | null; }[];
   } | null>(null);
   const [isLoadingRoute, setIsLoadingRoute] = useState(false);
   const [showDraftRestoreModal, setShowDraftRestoreModal] = useState(false);
@@ -1012,8 +1012,8 @@ export default function Home() {
                                 {point.source !== 'fixed' && (
                                   <div style={{ display: 'flex', gap: '6px', marginTop: '2px', fontSize: '12px' }}>
                                     <span style={{ flexShrink: 0 }}>📍</span>
-                                    <span style={{ color: (point as any).coordMessage?.includes('⚠️') ? '#ffb74d' : point.source ? '#fff176' : 'rgba(255,255,255,0.5)' }}>
-                                      {(point as any).coordMessage || (point.source ? '' : '좌표 없음. (⚠️주소나 목적지명 확인 필요)')}
+                                    <span style={{ color: point.coordMessage?.includes('⚠️') ? '#ffb74d' : point.source ? '#fff176' : 'rgba(255,255,255,0.5)' }}>
+                                      {point.coordMessage || (point.source ? '' : '좌표 없음. (⚠️주소나 목적지명 확인 필요)')}
                                     </span>
                                   </div>
                                 )}
@@ -1685,11 +1685,11 @@ export default function Home() {
                     { label: '주소', value: selectedPoint.address || '' },
                     { label: '목적지', value: selectedPoint.destination || '' },
                     { label: '플레이스명', value: selectedPoint.placeName || '' },
-                    { label: '좌표메시지', value: (selectedPoint as any).coordMessage || '' },
+                    { label: '좌표메시지', value: selectedPoint.coordMessage || '' },
                   ].map(({ label, value }) => (
                     <div key={label} className="flex gap-3 items-start">
                       <span className="text-blue-300 text-xs w-16 flex-shrink-0 pt-0.5">{label}</span>
-                      <span className="text-xs flex-1" style={{ color: (selectedPoint as any).coordMessage?.includes('⚠️') && label === '좌표메시지' ? '#ffb74d' : 'white' }}>{value}</span>
+                      <span className="text-xs flex-1" style={{ color: selectedPoint.coordMessage?.includes('⚠️') && label === '좌표메시지' ? '#ffb74d' : 'white' }}>{value}</span>
                     </div>
                   ))}
 
