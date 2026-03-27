@@ -995,29 +995,25 @@ export default function Home() {
                               {/* 정보 영역 */}
                               <div className="flex-1">
                                 <p className="text-sm leading-snug font-medium">
-                                  {point.source === 'place_single' || point.source === 'place_nearest' ? (
-                                    <span style={{ color: '#a5d6a7' }}>{point.address}{point.destination ? ` (${point.destination})` : ''}</span>
-                                  ) : point.source === 'address' ? (
-                                    <><span style={{ color: '#a5d6a7' }}>{point.address}</span>{point.destination ? <span className="text-white"> ({point.destination})</span> : ''}</>
-                                  ) : point.source === 'fixed' ? (
+                                  {point.source === 'fixed' ? (
                                     <span style={{ color: firstDone ? '#a5d6a7' : '#ffcc80' }}>{point.destination || point.address}</span>
+                                  ) : point.source ? (
+                                    <span style={{ color: '#a5d6a7' }}>{point.address}{point.destination ? ` (${point.destination})` : ''}</span>
                                   ) : (
                                     <span className="text-white">{point.address}{point.destination ? ` (${point.destination})` : ''}</span>
                                   )}
                                 </p>
-                                {point.placeName && point.source !== 'address' && point.source !== 'fixed' && (
+                                {point.source !== 'fixed' && (
                                   <div style={{ display: 'flex', gap: '6px', marginTop: '2px', color: '#a5d6a7', fontSize: '12px' }}>
-                                    <span style={{ width: '3.2rem', flexShrink: 0 }}></span>
-                                    <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                      <span>🔍</span><span>{point.placeName}</span>
-                                    </span>
+                                    <span style={{ flexShrink: 0 }}>🔍</span>
+                                    <span>{point.source ? (point.placeName || '') : ''}</span>
                                   </div>
                                 )}
-                                {point.source && point.source !== 'fixed' && (point as any).coordMessage && (
+                                {point.source !== 'fixed' && (
                                   <div style={{ display: 'flex', gap: '6px', marginTop: '2px', fontSize: '12px' }}>
-                                    <span style={{ width: '3.2rem', flexShrink: 0 }}></span>
-                                    <span style={{ display: 'flex', alignItems: 'center', gap: '4px', color: (point as any).coordMessage.includes('⚠️') ? '#ffb74d' : '#fff176' }}>
-                                      <span>📍</span><span>{(point as any).coordMessage}</span>
+                                    <span style={{ flexShrink: 0 }}>📍</span>
+                                    <span style={{ color: (point as any).coordMessage?.includes('⚠️') ? '#ffb74d' : point.source ? '#fff176' : 'rgba(255,255,255,0.5)' }}>
+                                      {(point as any).coordMessage || (point.source ? '' : '좌표 없음. (⚠️주소나 목적지명 확인 필요)')}
                                     </span>
                                   </div>
                                 )}
@@ -1026,19 +1022,19 @@ export default function Home() {
                                 )}
                                 {point.source !== 'fixed' && (
                                   <div style={{ display: 'flex', gap: '6px', marginTop: '2px' }}>
-                                    <span style={{ color: 'rgba(255,255,255,0.6)', fontSize: '12px', width: '3.2rem', flexShrink: 0 }}>민원번호:</span>
+                                    <span style={{ color: 'rgba(255,255,255,0.6)', fontSize: '12px', width: '4rem', flexShrink: 0 }}>민원번호:</span>
                                     <span style={{ color: '#a5d6a7', fontSize: '12px' }}>{point.originalId ? `${point.originalId} 번` : ''}</span>
                                   </div>
                                 )}
                                 {point.source !== 'fixed' && (
                                   <div style={{ display: 'flex', gap: '6px', marginTop: '2px' }}>
-                                    <span style={{ color: 'rgba(255,255,255,0.6)', fontSize: '12px', width: '3.2rem', flexShrink: 0 }}>민원내용:</span>
+                                    <span style={{ color: 'rgba(255,255,255,0.6)', fontSize: '12px', width: '4rem', flexShrink: 0 }}>민원내용:</span>
                                     <span style={{ color: '#a5d6a7', fontSize: '12px' }}>{point.complaint || ''}</span>
                                   </div>
                                 )}
                                 {point.source !== 'fixed' && (
                                   <div style={{ display: 'flex', gap: '6px', marginTop: '2px' }}>
-                                    <span style={{ color: 'rgba(255,255,255,0.6)', fontSize: '12px', width: '3.2rem', flexShrink: 0 }}>사진설명:</span>
+                                    <span style={{ color: 'rgba(255,255,255,0.6)', fontSize: '12px', width: '4rem', flexShrink: 0 }}>사진설명:</span>
                                     <span style={{ color: '#a5d6a7', fontSize: '12px' }}>{point.photoDescription || ''}</span>
                                   </div>
                                 )}
@@ -1046,11 +1042,11 @@ export default function Home() {
                                   <>
                                     <div style={{ borderTop: '1px solid rgba(255,255,255,0.2)', marginTop: 6, marginBottom: 4 }} />
                                     <div style={{ display: 'flex', gap: '6px', marginTop: '2px' }}>
-                                      <span style={{ color: 'rgba(255,255,255,0.6)', fontSize: '12px', width: '3.2rem', flexShrink: 0 }}>작업상태:</span>
+                                      <span style={{ color: 'rgba(255,255,255,0.6)', fontSize: '12px', width: '4rem', flexShrink: 0 }}>작업상태:</span>
                                       <span style={{ color: '#80cbc4', fontWeight: 'bold', fontSize: '12px' }}>{st?.status || ''}</span>
                                     </div>
                                     <div style={{ display: 'flex', gap: '6px', marginTop: '2px' }}>
-                                      <span style={{ color: 'rgba(255,255,255,0.6)', fontSize: '12px', width: '3.2rem', flexShrink: 0 }}>작업메모:</span>
+                                      <span style={{ color: 'rgba(255,255,255,0.6)', fontSize: '12px', width: '4rem', flexShrink: 0 }}>작업메모:</span>
                                       <span style={{ color: '#a5d6a7', fontSize: '12px' }}>{st?.memo || ''}</span>
                                     </div>
                                   </>
