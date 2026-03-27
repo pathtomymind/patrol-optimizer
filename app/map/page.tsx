@@ -1463,17 +1463,11 @@ export default function MapPage() {
                   { label: '주소', value: selectedPoint.address || '' },
                   { label: '목적지', value: selectedPoint.destination || '' },
                   { label: '플레이스명', value: selectedPoint.placeName || '' },
-                  { label: '좌표확인', value: selectedPoint.coordMessage || (
-                    selectedPoint.source === 'place_single' || selectedPoint.source === 'place_nearest'
-                      ? '✅ 목적지로 위치 확인'
-                      : selectedPoint.source === 'address'
-                      ? '📍 주소로 위치 확인'
-                      : '❌ 위치 미확인'
-                  )},
+                  { label: '좌표메시지', value: selectedPoint.coordMessage || '' },
                 ].map(({ label, value }) => (
                   <div key={label} style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
                     <span style={{ color: '#90caf9', fontSize: '11px', width: '60px', flexShrink: 0, paddingTop: '2px' }}>{label}</span>
-                    <span style={{ color: 'white', fontSize: '11px', flex: 1 }}>{value}</span>
+                    <span style={{ color: label === '좌표메시지' && selectedPoint.coordMessage?.includes('⚠️') ? '#ffb74d' : 'white', fontSize: '11px', flex: 1 }}>{value}</span>
                   </div>
                 ))}
 

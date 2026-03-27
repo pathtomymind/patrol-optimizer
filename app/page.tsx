@@ -1688,16 +1688,12 @@ export default function Home() {
                   {[
                     { label: '주소', value: selectedPoint.address || '' },
                     { label: '목적지', value: selectedPoint.destination || '' },
-                    { label: '좌표확인', value:
-                      selectedPoint.source === 'place_single' || selectedPoint.source === 'place_nearest'
-                        ? '✅ 목적지로 위치 확인'
-                        : selectedPoint.source === 'address'
-                        ? '📍 주소로 위치 확인'
-                        : '❌ 위치 미확인' },
+                    { label: '플레이스명', value: selectedPoint.placeName || '' },
+                    { label: '좌표메시지', value: (selectedPoint as any).coordMessage || '' },
                   ].map(({ label, value }) => (
                     <div key={label} className="flex gap-3 items-start">
                       <span className="text-blue-300 text-xs w-16 flex-shrink-0 pt-0.5">{label}</span>
-                      <span className="text-white text-xs flex-1">{value}</span>
+                      <span className="text-xs flex-1" style={{ color: (selectedPoint as any).coordMessage?.includes('⚠️') && label === '좌표메시지' ? '#ffb74d' : 'white' }}>{value}</span>
                     </div>
                   ))}
 
