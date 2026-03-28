@@ -1685,9 +1685,7 @@ export default function Home() {
                   {[
                     { label: '주소', value: selectedPoint.address || '' },
                     { label: '목적지', value: selectedPoint.destination || '' },
-                    ...(selectedPoint.source === 'place_nearest' || selectedPoint.source === 'place_single'
-                      ? [{ label: '플레이스명', value: selectedPoint.placeName || '' }]
-                      : []),
+                    { label: '플레이스명', value: (selectedPoint.source === 'place_nearest' || selectedPoint.source === 'place_single') ? (selectedPoint.placeName || '') : '' },
                     { label: '좌표메시지', value: selectedPoint.coordMessage || '' },
                   ].map(({ label, value }) => (
                     <div key={label} className="flex gap-3 items-start">
