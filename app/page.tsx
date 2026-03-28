@@ -283,6 +283,7 @@ export default function Home() {
   const [isSaving, setIsSaving] = useState(false);
   const [isResetting, setIsResetting] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [showHelpModal, setShowHelpModal] = useState(false);
   const [currentRoute, setCurrentRoute] = useState<{
     date: string; version: number; createdAt: number;
     history?: { version: number; createdAt: number }[];
@@ -1142,15 +1143,23 @@ export default function Home() {
                     )}
                   </div>
 
-                  {/* 지점 추출하기 버튼 */}
-                  <button
-                    onClick={isExtracting ? undefined : handleExtract}
-                    disabled={isExtracting}
-                    className="py-2 rounded text-white text-xs font-bold w-32"
-                    style={{ background: isExtracting ? '#f97316' : '#0a3d8f', animation: isExtracting ? 'pulse-btn 1s ease-in-out infinite' : 'none' }}
-                  >
-                    {isExtracting ? '추출 중...' : '지점 추출하기'}
-                  </button>
+                  {/* 지점 추출하기 버튼 + 도움말 버튼 */}
+                  <div className="flex items-center justify-between">
+                    <button
+                      onClick={isExtracting ? undefined : handleExtract}
+                      disabled={isExtracting}
+                      className="py-2 rounded text-white text-xs font-bold w-32"
+                      style={{ background: isExtracting ? '#f97316' : '#0a3d8f', animation: isExtracting ? 'pulse-btn 1s ease-in-out infinite' : 'none' }}
+                    >
+                      {isExtracting ? '추출 중...' : '지점 추출하기'}
+                    </button>
+                    <button
+                      onClick={() => setShowHelpModal(true)}
+                      title="좌표 생성 도움말"
+                      className="flex items-center justify-center rounded-full text-white text-xs font-bold"
+                      style={{ width: '24px', height: '24px', background: 'rgba(255,255,255,0.2)', border: '1px solid rgba(255,255,255,0.4)', flexShrink: 0 }}
+                    >?</button>
+                  </div>
 
                   {/* 추출된 지점카드 */}
                   {extractedPoints.length > 0 && (
@@ -1799,6 +1808,75 @@ export default function Home() {
                 onClick={() => window.open(`nmap://navigation?dlat=${selectedPoint.lat}&dlng=${selectedPoint.lng}&dname=${encodeURIComponent(selectedPoint.destination || selectedPoint.address)}&appname=patrol-optimizer`)}
                 className="flex-1 py-2 rounded text-sm text-white font-bold"
                 style={{ background: '#1b5e20' }}>네이버지도</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 좌표 생성 도움말 팝업 */}
+      {showHelpModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center"
+          style={{ background: 'rgba(0,0,0,0.6)' }}
+          onClick={() => setShowHelpModal(false)}>
+          <div
+            className="rounded-xl mx-3 overflow-y-auto"
+            style={{ background: '#1a3a6e', border: '1px solid rgba(100,180,255,0.3)', maxHeight: '85vh', width: '100%', maxWidth: '480px' }}
+            onClick={e => e.stopPropagation()}>
+            {/* 헤더 */}
+            <div className="flex items-center justify-between px-4 py-3" style={{ borderBottom: '1px solid rgba(255,255,255,0.15)' }}>
+              <span className="text-white font-bold text-sm">📍 좌표 생성 도움말</span>
+              <button onClick={() => setShowHelpModal(false)} className="text-white text-lg">✕</button>
+            </div>
+
+            {/* 표 */}
+            <div className="px-4 pt-3 pb-2 overflow-x-auto">
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11px' }}>
+                <thead>
+                  <tr style={{ background: 'rgba(255,255,255,0.1)' }}>
+                    {['민원요청주소', '좌표생성기준', '플레이스명', '좌표 생성 메시지'].map(h => (
+                      <th key={h} style={{ padding: '6px 8px', color: '#90caf9', fontWeight: 'bold', textAlign: 'left', borderBottom: '1px solid rgba(255,255,255,0.15)', whiteSpace: 'nowrap' }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {[
+                    ['도로명 + 목적지명 있음', '도로명 주소 직접 변환', '❌', '도로명 주소로 좌표 생성'],
+                    ['도로명 + 목적지명 없음', '도로명 주소 직접 변환', '❌', '도로명 주소로 좌표 생성'],
+                    ['지번 + 목적지명 있음\n(POI 보정 성공)', '목적지명 POI 검색\n100m 내 최근접', '✅', '목적지명으로 좌표 보정'],
+                    ['지번 + 목적지명 있음\n(POI 보정 실패)', '지번 주소 중심점', '❌', '지번 주소로 좌표 생성'],
+                    ['지번 + 목적지명 없음', '지번 주소 중심점', '❌', '지번 주소로 좌표 생성'],
+                    ['목적지명만 (1건)', '목적지명 POI 검색', '✅', '목적지명으로 좌표 생성'],
+                    ['목적지명만 (복수)', 'POI 검색 첫번째 결과', '✅', '목적지명으로 좌표 생성\n(⚠️복수 검색됨, 확인 필요)'],
+                    ['주소·목적지 모두 없음', '좌표 생성 불가', '❌', '좌표 없음.\n(⚠️주소나 목적지명 확인 필요)'],
+                  ].map((row, i) => (
+                    <tr key={i} style={{ background: i % 2 === 0 ? 'rgba(255,255,255,0.03)' : 'transparent' }}>
+                      {row.map((cell, j) => (
+                        <td key={j} style={{
+                          padding: '6px 8px',
+                          color: j === 2 ? (cell === '✅' ? '#a5d6a7' : '#ef9a9a') : j === 3 ? '#fff176' : 'rgba(255,255,255,0.85)',
+                          borderBottom: '1px solid rgba(255,255,255,0.07)',
+                          whiteSpace: 'pre-wrap',
+                          verticalAlign: 'top',
+                          fontSize: '10px',
+                        }}>{cell}</td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* 설명 */}
+            <div className="px-4 py-3 space-y-2" style={{ borderTop: '1px solid rgba(255,255,255,0.1)' }}>
+              {[
+                '📌 도로명 주소는 건물 단위까지 식별되므로 별도 POI 검색 없이 주소로 직접 좌표를 생성합니다.',
+                '📌 지번 주소는 토지(필지) 중심점 좌표를 생성하므로 현장 찾기가 어려울 수 있습니다. 목적지명이 있는 경우 반경 100m 내 POI 검색으로 좌표를 보정합니다.',
+                '📌 목적지명만 있는 경우 복수의 검색 결과가 나오면 첫 번째 결과를 사용합니다. ⚠️ 경고가 표시되면 지점 편집에서 확인해 주세요.',
+                '📌 좌표가 없는 지점은 최적화 경로 생성에서 제외됩니다. 지점 편집에서 주소나 목적지명을 입력해 주세요.',
+              ].map((text, i) => (
+                <p key={i} style={{ color: 'rgba(255,255,255,0.75)', fontSize: '11px', lineHeight: '1.6' }}>{text}</p>
+              ))}
             </div>
           </div>
         </div>
