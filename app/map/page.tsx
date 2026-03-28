@@ -71,7 +71,6 @@ export default function MapPage() {
   const [roadLoading, setRoadLoading] = useState(false);
   const [newRouteAvailable, setNewRouteAvailable] = useState(false);
   const [is3D, setIs3D] = useState(false);
-  const [heading, setHeading] = useState(0);
   const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const blinkIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const blinkRestoreRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -187,8 +186,8 @@ export default function MapPage() {
       center: new (window as any).naver.maps.LatLng(37.7381, 127.0338),
       zoom: 13,
       mapTypeId: (window as any).naver.maps.MapTypeId.NORMAL,
-      tilt: 0,
       heading: 0,
+      rotateControl: false,
     });
     naverMapRef.current = map;
 
@@ -197,12 +196,6 @@ export default function MapPage() {
     (window as any).naver.maps.Event.addListener(map, 'zoom_changed', (zoom: number) => {
       currentZoomRef.current = zoom;
       applyZoomVisibility(zoom);
-    });
-
-    // 나침반: heading 변경 감지
-    (window as any).naver.maps.Event.addListener(map, 'heading_changed', () => {
-      const h = map.getOptions('heading') || 0;
-      setHeading(h);
     });
   }, [mapReady]);
 
@@ -242,26 +235,14 @@ export default function MapPage() {
     redrawLines();
   }, [lineMode]);
 
-  // 7. 2D/3D 토글
+  // 7. 위성/일반 지도 토글
   const toggle3D = () => {
     const map = naverMapRef.current;
     if (!map) return;
     const next = !is3D;
     setIs3D(next);
     const naver = (window as any).naver;
-    console.log('[3D] 토글:', next ? '3D' : '2D');
     (map as any).setMapTypeId(next ? naver.maps.MapTypeId.HYBRID : naver.maps.MapTypeId.NORMAL);
-    (map as any).setOptions({ tilt: next ? 45 : 0 });
-    console.log('[3D] 현재 tilt:', (map as any).getOptions('tilt'));
-  };
-
-  // 8. 나침반 북쪽 리셋
-  const resetNorth = () => {
-    const map = naverMapRef.current;
-    if (!map) return;
-    console.log('[나침반] 북쪽 리셋');
-    (map as any).setOptions({ heading: 0 });
-    setHeading(0);
   };
 
   const applyZoomVisibility = (zoom: number) => {
@@ -1258,27 +1239,7 @@ export default function MapPage() {
               color: is3D ? '#a0ffd8' : 'rgba(255,255,255,0.5)',
               flexShrink: 0,
             }}>
-            {is3D ? '2D' : '3D'}
-          </button>
-          {/* 나침반 버튼 */}
-          <button
-            onClick={resetNorth}
-            title="북쪽으로 정렬"
-            style={{
-              width: '28px', height: '28px',
-              padding: 0,
-              cursor: 'pointer',
-              border: '1px solid rgba(255,255,255,0.25)',
-              borderRadius: '6px',
-              background: heading !== 0 ? 'rgba(255,200,100,0.25)' : 'rgba(255,255,255,0.08)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              flexShrink: 0,
-            }}>
-            <svg width="16" height="16" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg"
-              style={{ transform: `rotate(${-heading}deg)`, transition: 'transform 0.3s ease' }}>
-              <polygon points="8,1 10.5,8 8,6.5 5.5,8" fill="#ff6b6b"/>
-              <polygon points="8,15 10.5,8 8,9.5 5.5,8" fill="rgba(255,255,255,0.5)"/>
-            </svg>
+            {is3D ? '일반' : '위성'}
           </button>
           <div style={{ display: 'flex', borderRadius: '6px', overflow: 'hidden', border: '1px solid rgba(255,255,255,0.25)' }}>
             <button
