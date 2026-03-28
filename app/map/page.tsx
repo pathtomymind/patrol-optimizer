@@ -1042,60 +1042,17 @@ export default function MapPage() {
             position: latlng,
             icon: {
               content: `
-                <div style="position:relative;display:inline-block;">
-                  <div style="animation:my-bounce 1.2s ease-in-out infinite;">
-                    <svg width="56" height="36" viewBox="0 0 56 36" xmlns="http://www.w3.org/2000/svg">
-                      <!-- 그림자 -->
-                      <ellipse cx="28" cy="35" rx="20" ry="1.8" fill="rgba(0,0,0,0.2)"/>
-                      <!-- 짐칸 바닥 -->
-                      <rect x="3" y="19" width="20" height="10" rx="2" fill="#c62828"/>
-                      <!-- 짐칸 내부 -->
-                      <rect x="5" y="20" width="16" height="7" rx="1" fill="#b71c1c"/>
-                      <!-- 차체 하단 전체 -->
-                      <rect x="3" y="21" width="50" height="8" rx="3" fill="#e53935"/>
-                      <!-- 캐빈 -->
-                      <rect x="23" y="10" width="28" height="19" rx="4" fill="#e53935"/>
-                      <!-- 캐빈 지붕 둥글게 -->
-                      <ellipse cx="37" cy="12" rx="12" ry="4" fill="#e53935"/>
-                      <rect x="25" y="10" width="24" height="4" fill="#e53935"/>
-                      <!-- 앞유리 -->
-                      <rect x="43" y="11" width="7" height="8" rx="2" fill="#90caf9" opacity="0.9"/>
-                      <!-- 옆유리 -->
-                      <rect x="27" y="11" width="13" height="8" rx="2" fill="#90caf9" opacity="0.85"/>
-                      <!-- 창문 테두리 -->
-                      <rect x="43" y="11" width="7" height="8" rx="2" fill="none" stroke="#c62828" stroke-width="0.8"/>
-                      <rect x="27" y="11" width="13" height="8" rx="2" fill="none" stroke="#c62828" stroke-width="0.8"/>
-                      <!-- 문 구분선 -->
-                      <line x1="41" y1="10" x2="41" y2="29" stroke="#c62828" stroke-width="1.2"/>
-                      <!-- 앞 범퍼 -->
-                      <rect x="49" y="23" width="5" height="5" rx="2" fill="#b71c1c"/>
-                      <!-- 헤드라이트 -->
-                      <ellipse cx="52" cy="22" rx="2" ry="1.5" fill="#fff9c4" opacity="0.95"/>
-                      <!-- 테일라이트 -->
-                      <rect x="3" y="22" width="2.5" height="3" rx="1" fill="#ff8a80" opacity="0.95"/>
-                      <!-- 사이드미러 -->
-                      <rect x="50" y="15" width="4" height="2.5" rx="1" fill="#c62828"/>
-                      <!-- 앞 바퀴 -->
-                      <circle cx="44" cy="30" r="6" fill="#212121"/>
-                      <circle cx="44" cy="30" r="3.5" fill="#616161"/>
-                      <circle cx="44" cy="30" r="1.5" fill="#212121"/>
-                      <!-- 뒷 바퀴 -->
-                      <circle cx="13" cy="30" r="6" fill="#212121"/>
-                      <circle cx="13" cy="30" r="3.5" fill="#616161"/>
-                      <circle cx="13" cy="30" r="1.5" fill="#212121"/>
-                      <!-- 하단 몰딩 -->
-                      <rect x="6" y="27" width="43" height="2" rx="1" fill="#b71c1c" opacity="0.5"/>
-                    </svg>
-                  </div>
+                <div style="animation:my-bounce 1.2s ease-in-out infinite;display:inline-block;filter:drop-shadow(0 2px 4px rgba(0,0,0,0.4));">
+                  <img src="https://cdn.jsdelivr.net/gh/twitter/twemoji@latest/assets/svg/1f6fb.svg" width="40" height="40" style="display:block;" />
                 </div>
                 <style>
                   @keyframes my-bounce {
                     0%, 100% { transform: translateY(0px); }
-                    50% { transform: translateY(-3px); }
+                    50% { transform: translateY(-4px); }
                   }
                 </style>
               `,
-              anchor: new naver.maps.Point(28, 35),
+              anchor: new naver.maps.Point(20, 36),
             },
             zIndex: 200,
           });
