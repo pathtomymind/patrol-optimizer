@@ -1487,7 +1487,9 @@ export default function MapPage() {
                 {[
                   { label: '주소', value: selectedPoint.address || '' },
                   { label: '목적지', value: selectedPoint.destination || '' },
-                  { label: '플레이스명', value: selectedPoint.placeName || '' },
+                  ...(selectedPoint.source === 'place_nearest' || selectedPoint.source === 'place_single'
+                    ? [{ label: '플레이스명', value: selectedPoint.placeName || '' }]
+                    : []),
                   { label: '좌표메시지', value: selectedPoint.coordMessage || '' },
                 ].map(({ label, value }) => (
                   <div key={label} style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>

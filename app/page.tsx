@@ -1007,7 +1007,7 @@ export default function Home() {
                                 {point.source !== 'fixed' && (
                                   <div style={{ display: 'flex', gap: '6px', marginTop: '2px', color: '#a5d6a7', fontSize: '12px' }}>
                                     <span style={{ flexShrink: 0 }}>🔍</span>
-                                    <span>{point.source ? (point.placeName || '') : ''}</span>
+                                    <span>{(point.source === 'place_nearest' || point.source === 'place_single') ? (point.placeName || '') : ''}</span>
                                   </div>
                                 )}
                                 {point.source !== 'fixed' && (
@@ -1171,10 +1171,10 @@ export default function Home() {
                                   <span className="text-white">{point.address}{point.destination ? ` (${point.destination})` : ''}</span>
                                 )}
                               </p>
-                              {/* 돋보기: 좌표 있으면 표시, 없으면 돋보기만 */}
+                              {/* 돋보기: place_nearest/place_single일 때만 플레이스명 표시 */}
                               <p className="text-xs mt-0.5" style={{ color: '#a5d6a7' }}>
                                 <span style={{ display: 'inline-block', width: '4rem' }}>🔍</span>
-                                {point.source ? (point.placeName || '') : ''}
+                                {(point.source === 'place_nearest' || point.source === 'place_single') ? (point.placeName || '') : ''}
                               </p>
                               {/* 핀: coordMessage 또는 케이스6 메시지 */}
                               <p className="text-xs mt-0.5" style={{ color: point.coordMessage?.includes('⚠️') ? '#ffb74d' : point.source ? '#fff176' : 'rgba(255,255,255,0.5)' }}>
@@ -1685,7 +1685,9 @@ export default function Home() {
                   {[
                     { label: '주소', value: selectedPoint.address || '' },
                     { label: '목적지', value: selectedPoint.destination || '' },
-                    { label: '플레이스명', value: selectedPoint.placeName || '' },
+                    ...(selectedPoint.source === 'place_nearest' || selectedPoint.source === 'place_single'
+                      ? [{ label: '플레이스명', value: selectedPoint.placeName || '' }]
+                      : []),
                     { label: '좌표메시지', value: selectedPoint.coordMessage || '' },
                   ].map(({ label, value }) => (
                     <div key={label} className="flex gap-3 items-start">
