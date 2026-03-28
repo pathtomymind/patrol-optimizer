@@ -187,6 +187,8 @@ export default function MapPage() {
       center: new (window as any).naver.maps.LatLng(37.7381, 127.0338),
       zoom: 13,
       mapTypeId: (window as any).naver.maps.MapTypeId.NORMAL,
+      tilt: 0,
+      heading: 0,
     });
     naverMapRef.current = map;
 
@@ -246,16 +248,18 @@ export default function MapPage() {
     if (!map) return;
     const next = !is3D;
     setIs3D(next);
-    (map as any).setOptions({
-      tilt: next ? 45 : 0,
-      mapTypeId: (window as any).naver.maps.MapTypeId[next ? 'HYBRID' : 'NORMAL'],
-    });
+    const naver = (window as any).naver;
+    console.log('[3D] 토글:', next ? '3D' : '2D');
+    (map as any).setMapTypeId(next ? naver.maps.MapTypeId.HYBRID : naver.maps.MapTypeId.NORMAL);
+    (map as any).setOptions({ tilt: next ? 45 : 0 });
+    console.log('[3D] 현재 tilt:', (map as any).getOptions('tilt'));
   };
 
   // 8. 나침반 북쪽 리셋
   const resetNorth = () => {
     const map = naverMapRef.current;
     if (!map) return;
+    console.log('[나침반] 북쪽 리셋');
     (map as any).setOptions({ heading: 0 });
     setHeading(0);
   };
