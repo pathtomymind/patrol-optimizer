@@ -71,6 +71,7 @@ export default function MapPage() {
   const [roadLoading, setRoadLoading] = useState(false);
   const [newRouteAvailable, setNewRouteAvailable] = useState(false);
   const [is3D, setIs3D] = useState(false);
+  const [showMapHelpModal, setShowMapHelpModal] = useState(false);
   const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const blinkIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const blinkRestoreRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -1174,7 +1175,19 @@ export default function MapPage() {
             }}>
             ← 카드 리스트
           </button>
-          <div style={{ color: 'white', fontWeight: 'bold', fontSize: '15px' }}>순회 경로 지도</div>
+          <div style={{ color: 'white', fontWeight: 'bold', fontSize: '15px', flex: 1 }}>순회 경로 지도</div>
+          <button
+            onClick={() => setShowMapHelpModal(true)}
+            title="지도뷰 도움말"
+            style={{
+              width: '24px', height: '24px',
+              borderRadius: '50%',
+              background: 'rgba(255,255,255,0.2)',
+              border: '1px solid rgba(255,255,255,0.4)',
+              color: 'white', fontSize: '12px', fontWeight: 'bold',
+              cursor: 'pointer', flexShrink: 0,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}>?</button>
         </div>
         {route && (
           <div style={{ color: 'rgba(150,200,255,0.85)', fontSize: '11px', textAlign: 'right' }}>
@@ -1621,6 +1634,96 @@ export default function MapPage() {
           </div>
         );
       })()}
+
+      {/* 지도뷰 도움말 팝업 */}
+      {showMapHelpModal && (
+        <div
+          style={{ position: 'fixed', inset: 0, zIndex: 9999, background: 'rgba(0,0,0,0.65)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+          onClick={() => setShowMapHelpModal(false)}>
+          <div
+            style={{ background: '#1a3a6e', border: '1px solid rgba(100,180,255,0.3)', borderRadius: '12px', margin: '0 12px', maxHeight: '85vh', width: '100%', maxWidth: '480px', overflowY: 'auto' }}
+            onClick={e => e.stopPropagation()}>
+            {/* 헤더 */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', borderBottom: '1px solid rgba(255,255,255,0.15)' }}>
+              <span style={{ color: 'white', fontWeight: 'bold', fontSize: '14px' }}>🗺️ 지도뷰 사용 도움말</span>
+              <button onClick={() => setShowMapHelpModal(false)} style={{ color: 'white', fontSize: '18px', background: 'none', border: 'none', cursor: 'pointer' }}>✕</button>
+            </div>
+
+            {/* 내용 */}
+            <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+
+              {/* ① 마커 색상 */}
+              <div>
+                <p style={{ color: '#90caf9', fontWeight: 'bold', fontSize: '12px', marginBottom: '6px' }}>① 지점 마커 색상</p>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  {[
+                    { dot: '#FF6B35', text: '주황색 — 아직 작업하지 않은 지점 (미완료)' },
+                    { dot: '#1565c0', text: '파란색 — 작업이 완료된 지점 (민원처리완료 / 기처리 / 확인불가)' },
+                    { dot: '#f57f17', text: '노란색 — 출발지 및 복귀지점 (의정부시청)' },
+                  ].map(({ dot, text }) => (
+                    <div key={text} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: dot, flexShrink: 0, border: '1px solid white' }} />
+                      <span style={{ color: 'rgba(255,255,255,0.85)', fontSize: '11px' }}>{text}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* ② 마커 클릭 */}
+              <div>
+                <p style={{ color: '#90caf9', fontWeight: 'bold', fontSize: '12px', marginBottom: '6px' }}>② 지점 마커 클릭 — 상세 팝업</p>
+                <p style={{ color: 'rgba(255,255,255,0.8)', fontSize: '11px', lineHeight: '1.7' }}>
+                  마커를 탭하면 상세 정보 팝업이 열립니다. 팝업에서 <strong style={{ color: 'white' }}>작업상태</strong>(민원처리완료 / 기처리 / 확인불가)를 선택하고 <strong style={{ color: 'white' }}>작업메모</strong>를 입력할 수 있습니다. 작업상태를 입력하면 <strong style={{ color: 'white' }}>마커 색상이 즉시 파란색으로 변경</strong>됩니다. 팝업 하단의 <strong style={{ color: 'white' }}>티맵 / 네이버지도</strong> 버튼으로 해당 지점 내비게이션을 바로 실행할 수 있습니다.
+                </p>
+                <p style={{ color: '#ffb74d', fontSize: '11px', marginTop: '4px' }}>⚠️ 마커 클릭은 지도를 일정 수준 이상 확대한 상태에서만 활성화됩니다.</p>
+              </div>
+
+              {/* ③ 롱프레스 */}
+              <div>
+                <p style={{ color: '#90caf9', fontWeight: 'bold', fontSize: '12px', marginBottom: '6px' }}>③ 지점 마커 롱프레스 — 구간 경로 확인</p>
+                <p style={{ color: 'rgba(255,255,255,0.8)', fontSize: '11px', lineHeight: '1.7' }}>
+                  마커를 <strong style={{ color: 'white' }}>길게 누르면</strong> 해당 지점에서 다음 지점까지의 경로 구간이 <strong style={{ color: '#a5d6a7' }}>초록색으로 약 5초간 깜박입니다</strong>. 다음에 이동할 구간을 빠르게 확인할 때 유용합니다.
+                </p>
+              </div>
+
+              {/* ④ 위성 버튼 */}
+              <div>
+                <p style={{ color: '#90caf9', fontWeight: 'bold', fontSize: '12px', marginBottom: '6px' }}>④ 위성 버튼</p>
+                <p style={{ color: 'rgba(255,255,255,0.8)', fontSize: '11px', lineHeight: '1.7' }}>
+                  <strong style={{ color: 'white' }}>[위성]</strong> 버튼을 누르면 일반 지도에서 위성 사진 지도로 전환됩니다. 다시 누르면 <strong style={{ color: 'white' }}>[일반]</strong>으로 돌아오는 <strong style={{ color: 'white' }}>토글 버튼</strong>입니다. 위성 지도에서는 건물과 도로 실제 모습을 확인할 수 있어 현장 파악에 유용합니다.
+                </p>
+              </div>
+
+              {/* ⑤ 직선/도로 버튼 */}
+              <div>
+                <p style={{ color: '#90caf9', fontWeight: 'bold', fontSize: '12px', marginBottom: '6px' }}>⑤ 직선 / 도로 버튼</p>
+                <p style={{ color: 'rgba(255,255,255,0.8)', fontSize: '11px', lineHeight: '1.7' }}>
+                  경로 표시 방식을 선택합니다.<br />
+                  · <strong style={{ color: 'white' }}>직선</strong> — 지점 간 직선으로 경로를 표시합니다. 빠르게 로드됩니다.<br />
+                  · <strong style={{ color: 'white' }}>도로</strong> — <strong style={{ color: 'white' }}>ORS(OpenRouteService)</strong>로부터 실제 도로 정보를 수신하여 도로를 따라 경로를 표시합니다. 수신에 수 초가 소요될 수 있습니다.
+                </p>
+              </div>
+
+              {/* ⑥ 보고서 버튼 */}
+              <div>
+                <p style={{ color: '#90caf9', fontWeight: 'bold', fontSize: '12px', marginBottom: '6px' }}>⑥ 보고서 버튼</p>
+                <p style={{ color: 'rgba(255,255,255,0.8)', fontSize: '11px', lineHeight: '1.7' }}>
+                  <strong style={{ color: 'white' }}>[보고서]</strong> 버튼을 누르면 오늘의 순회 단속 결과를 <strong style={{ color: 'white' }}>PDF 파일로 자동 생성</strong>합니다. 민원번호, 주소, 민원내용, 담당자, 작업상태, 현장사진이 포함된 표 형식으로 저장됩니다.
+                </p>
+              </div>
+
+              {/* ⑦ 내 위치 */}
+              <div>
+                <p style={{ color: '#90caf9', fontWeight: 'bold', fontSize: '12px', marginBottom: '6px' }}>⑦ 내 위치 확인</p>
+                <p style={{ color: 'rgba(255,255,255,0.8)', fontSize: '11px', lineHeight: '1.7' }}>
+                  화면 우측 하단의 <strong style={{ color: 'white' }}>🔵 위치 버튼</strong>을 누르면 현재 내 GPS 위치가 <strong style={{ color: 'white' }}>🛻 트럭 아이콘</strong>으로 지도에 표시됩니다. 파란 원은 <strong style={{ color: 'white' }}>GPS 정확도 범위</strong>를 나타내며, 원이 클수록 오차가 큽니다. 위치는 <strong style={{ color: 'white' }}>실시간으로 자동 업데이트</strong>되며, 버튼을 다시 누르면 추적이 중지됩니다.
+                </p>
+              </div>
+
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
