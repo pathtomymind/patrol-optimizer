@@ -324,12 +324,18 @@ export default function Home() {
       const img = new Image();
       img.onload = () => {
         const canvas = document.createElement('canvas');
-        const sw = img.width * w;
-        const sh = img.height * h;
+        let sw = img.width * w;
+        let sh = img.height * h;
+        // 크롭 후 최대 1600px 제한 (파일 크기 5MB 이내 유지)
+        const MAX_PX = 1600;
+        if (sw > MAX_PX || sh > MAX_PX) {
+          if (sw > sh) { sh = Math.round(sh * MAX_PX / sw); sw = MAX_PX; }
+          else { sw = Math.round(sw * MAX_PX / sh); sh = MAX_PX; }
+        }
         canvas.width = sw;
         canvas.height = sh;
         const ctx = canvas.getContext('2d')!;
-        ctx.drawImage(img, img.width * x, img.height * y, sw, sh, 0, 0, sw, sh);
+        ctx.drawImage(img, img.width * x, img.height * y, img.width * w, img.height * h, 0, 0, sw, sh);
         resolve(canvas.toDataURL('image/jpeg', 0.92));
       };
       img.src = dataUrl;
