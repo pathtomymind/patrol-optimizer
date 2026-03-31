@@ -44,12 +44,12 @@ export default function Home() {
   // 추출지점 수정 모달
   const [showExtractEditModal, setShowExtractEditModal] = useState(false);
   const [extractEditTarget, setExtractEditTarget] = useState<{
-    id: number; address: string; destination?: string | null; complaint: string;
+    id: number; originalId?: number | null; address: string; destination?: string | null; complaint: string;
     lat?: number | null; lng?: number | null; placeName?: string | null;
     source?: string | null; photoUrl?: string | null; photoDescription?: string | null;
   } | null>(null);
   const [extractEditForm, setExtractEditForm] = useState({
-    address: '', destination: '', complaint: '', manager: '', photoUrl: '',
+    address: '', destination: '', complaint: '', manager: '', photoUrl: '', originalId: '' as string,
   });
   const [extractEditCoordStatus, setExtractEditCoordStatus] = useState<'idle' | 'loading' | 'success' | 'fail'>('idle');
   const [extractEditCoord, setExtractEditCoord] = useState<{
@@ -147,7 +147,7 @@ export default function Home() {
   // 이미지 업로드
   const [uploadedImages, setUploadedImages] = useState<{ id: number; url: string; name: string }[]>([]);
   const [extractedPoints, setExtractedPoints] = useState<{ 
-    id: number; address: string; destination?: string | null; complaint: string;
+    id: number; originalId?: number | null; address: string; destination?: string | null; complaint: string;
     lat?: number | null; lng?: number | null; placeName?: string | null;
     source?: string | null; coordMessage?: string | null; photoDescription?: string | null; photoUrl?: string | null;
     photoCrop?: { x: number; y: number; w: number; h: number } | null;
@@ -568,6 +568,7 @@ export default function Home() {
     complaint: point.complaint || '',
     manager: '',
     photoUrl: '',
+    originalId: point.originalId != null ? String(point.originalId) : '',
   });
   if (point.lat && point.lng) {
     setExtractEditCoordStatus('success');
@@ -605,8 +606,10 @@ export default function Home() {
 
   const handleExtractEditSave = () => {
   if (!extractEditTarget) return;
+  const parsedOriginalId = extractEditForm.originalId ? Number(extractEditForm.originalId) : null;
   const updatedPoint = {
     ...extractEditTarget,
+    originalId: !isNaN(parsedOriginalId as number) && parsedOriginalId !== null ? parsedOriginalId : extractEditTarget.originalId ?? null,
     address: extractEditForm.address,
     destination: extractEditForm.destination || null,
     complaint: extractEditForm.complaint,
@@ -1588,6 +1591,19 @@ export default function Home() {
               )}
             </div>
 
+            {/* 민원번호 */}
+            <div className="mb-3">
+              <label className="text-blue-200 text-xs mb-1 block">민원번호</label>
+              <input
+                type="number"
+                placeholder="예) 12"
+                value={extractEditForm.originalId}
+                onChange={(e) => setExtractEditForm((prev) => ({ ...prev, originalId: e.target.value }))}
+                className="w-full px-3 py-2 rounded text-sm outline-none"
+                style={{ background: 'rgba(255,255,255,0.15)', color: '#a5d6a7' }}
+              />
+            </div>
+
             {/* 민원내용 */}
             <div className="mb-3">
               <label className="text-blue-200 text-xs mb-1 block">민원내용</label>
@@ -1600,8 +1616,6 @@ export default function Home() {
                 style={{ background: 'rgba(255,255,255,0.15)', color: '#a5d6a7' }}
               />
             </div>
-
-            {/* 담당자 */}
             <div className="mb-3">
               <label className="text-blue-200 text-xs mb-1 block">담당자</label>
               <input
