@@ -791,7 +791,7 @@ export default function Home() {
         { ...cityHall, order: 0 },
         ...ordered.map((p, i) => ({
           order: i + 1,
-          originalId: ('id' in p && typeof p.id === 'number' && p.id < 10000 ? p.id : null),
+          originalId: ('originalId' in p ? (p as any).originalId : null) ?? null,
           address: p.address,
           destination: ('destination' in p ? p.destination : null) || null,
           complaint: p.complaint,
