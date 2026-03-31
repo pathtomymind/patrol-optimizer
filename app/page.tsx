@@ -21,7 +21,7 @@ export default function Home() {
   // 직접 입력 지점
   const [directPoints, setDirectPoints] = useState<{
     id: number; address: string; destination: string; complaint: string; manager: string; photoUrl: string;
-    lat?: number | null; lng?: number | null; placeName?: string | null; source?: string | null; coordMessage?: string | null;
+    lat?: number | null; lng?: number | null; placeName?: string | null; source?: string | null; coordMessage?: string | null; photoDescription?: string | null;
   }[]>([]);
   const [showDirectModal, setShowDirectModal] = useState(false);
   const [editingPoint, setEditingPoint] = useState<{
@@ -1244,28 +1244,31 @@ export default function Home() {
                           D{index + 1}
                         </div>
                         <div className="flex-1 cursor-pointer" onClick={() => handleDirectEdit(point)}>
-                          <p className="text-sm font-medium leading-snug"
-                            style={{ color: point.source ? '#a5d6a7' : 'white' }}>
-                            {point.address || '주소 없음'}{point.destination ? ` (${point.destination})` : ''}
+                          <p className="text-sm leading-snug font-medium">
+                            {point.source ? (
+                              <span style={{ color: '#a5d6a7' }}>{point.address || '주소 없음'}{point.destination ? ` (${point.destination})` : ''}</span>
+                            ) : (
+                              <span className="text-white">{point.address || '주소 없음'}{point.destination ? ` (${point.destination})` : ''}</span>
+                            )}
                           </p>
-                          {(point.source === 'place_single' || point.source === 'place_nearest') && (
+                          {/* 돋보기: place_nearest/place_single일 때만 플레이스명 표시 */}
+                          <p className="text-xs mt-0.5" style={{ color: '#a5d6a7' }}>
+                            <span style={{ display: 'inline-block', width: '4rem' }}>🔍</span>
+                            {(point.source === 'place_nearest' || point.source === 'place_single') ? (point.placeName || '') : ''}
+                          </p>
+                          {/* 핀: coordMessage 또는 케이스6 메시지 */}
+                          <p className="text-xs mt-0.5" style={{ color: point.coordMessage?.includes('⚠️') ? '#ffb74d' : point.source ? '#fff176' : 'rgba(255,255,255,0.5)' }}>
+                            <span style={{ display: 'inline-block', width: '4rem' }}>📍</span>
+                            {point.coordMessage || '좌표 없음. (⚠️주소나 목적지명 확인 필요)'}
+                          </p>
+                          <p className="text-xs mt-0.5" style={{ color: '#a5d6a7' }}>
+                            <span style={{ color: 'rgba(255,255,255,0.6)', display: 'inline-block', width: '4rem' }}>민원내용:</span><span style={{ color: '#a5d6a7' }}>{point.complaint}</span>
+                          </p>
+                          {point.photoDescription && (
                             <p className="text-xs mt-0.5" style={{ color: '#a5d6a7' }}>
-                              <span style={{ display: 'inline-block', width: '4.5rem' }}>🔍</span>{point.placeName}
+                              <span style={{ color: 'rgba(255,255,255,0.6)', display: 'inline-block', width: '4rem' }}>사진설명:</span>{point.photoDescription}
                             </p>
                           )}
-                          {point.source === 'address' && (
-                            <p className="text-xs mt-0.5" style={{ color: '#fff176' }}>
-                              <span style={{ display: 'inline-block', width: '4.5rem' }}>📍</span>주소로 위치 확인
-                            </p>
-                          )}
-                          {!point.source && (
-                            <p className="text-xs mt-0.5" style={{ color: 'rgba(255,255,255,0.5)' }}>
-                              <span style={{ display: 'inline-block', width: '4.5rem' }}>❓</span>위치를 찾지 못했습니다
-                            </p>
-                          )}
-                          <p className="text-xs mt-0.5" style={{ color: 'rgba(255,255,255,0.7)' }}>
-                            <span style={{ color: 'rgba(255,255,255,0.6)', display: 'inline-block', width: '3.2rem' }}>민원내용:</span><span style={{ color: '#a5d6a7' }}>{point.complaint}</span>
-                          </p>
                         </div>
                         <button
                           onClick={() => handleDirectDelete(point.id)}
