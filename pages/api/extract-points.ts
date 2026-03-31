@@ -55,6 +55,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 각 지점마다 아래 형식의 JSON 배열로만 응답하세요. 다른 텍스트는 절대 포함하지 마세요:
 [
   {
+    "complaintNumber": "표의 연번(숫자)을 그대로 추출. 없으면 null",
     "address": "도로명 주소 또는 지번 주소",
     "destination": "핵심 상호명 또는 null",
     "complaint": "광고물 종류 (예: 현수막, 벽보, 에어라이트 등)",

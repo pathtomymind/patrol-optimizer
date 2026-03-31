@@ -446,7 +446,7 @@ export default function Home() {
 
       // 결과 합치기 (각 지점에 원본 이미지 인덱스 포함)
       const allPoints = batchResults.flatMap(({ points, startIdx }) =>
-        points.map((p: { address: string; destination: string; complaint: string; photoDescription?: string | null; photoCrop?: { x: number; y: number; w: number; h: number } | null; imageIndex?: number }) => ({
+        points.map((p: { complaintNumber?: number | null; address: string; destination: string; complaint: string; photoDescription?: string | null; photoCrop?: { x: number; y: number; w: number; h: number } | null; imageIndex?: number }) => ({
           ...p,
           imageIdx: startIdx + (p.imageIndex ?? 0),
         }))
@@ -456,7 +456,7 @@ export default function Home() {
         // 각 지점마다 좌표 검색
         // 각 지점마다 좌표 검색
       const pointsWithCoords = await Promise.all(
-        allPoints.map(async (p: { address: string; destination: string; complaint: string; manager?: string | null; photoDescription?: string | null; photoCrop?: { x: number; y: number; w: number; h: number } | null; imageIdx: number }, idx: number) => {
+        allPoints.map(async (p: { complaintNumber?: number | null; address: string; destination: string; complaint: string; manager?: string | null; photoDescription?: string | null; photoCrop?: { x: number; y: number; w: number; h: number } | null; imageIdx: number }, idx: number) => {
           let lat = null;
           let lng = null;
           let placeName = null;
@@ -510,6 +510,7 @@ export default function Home() {
 
             return {
               id: idx + 1,
+              originalId: p.complaintNumber ?? null,
               address: p.address,
               destination: p.destination || null,
               complaint: p.complaint,
