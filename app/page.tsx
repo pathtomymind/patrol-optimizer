@@ -330,7 +330,7 @@ export default function Home() {
         canvas.height = sh;
         const ctx = canvas.getContext('2d')!;
         ctx.drawImage(img, img.width * x, img.height * y, sw, sh, 0, 0, sw, sh);
-        resolve(canvas.toDataURL('image/jpeg', 0.85));
+        resolve(canvas.toDataURL('image/jpeg', 0.92));
       };
       img.src = dataUrl;
     });
@@ -482,7 +482,7 @@ export default function Home() {
 
             // 현장사진 크롭 + Blob 업로드
             let photoUrl: string | null = null;
-            if (p.photoCrop && compressedImages[p.imageIdx]) {
+            if (p.photoCrop && uploadedImages[p.imageIdx]) {
               try {
                 const crop = p.photoCrop;
                 const pad = 0.03;
@@ -490,7 +490,8 @@ export default function Home() {
                 const cy = Math.max(0, crop.y - pad);
                 const cw = Math.min(1 - cx, crop.w + pad * 2);
                 const ch = Math.min(1 - cy, crop.h + pad * 2);
-                const croppedDataUrl = await cropImage(compressedImages[p.imageIdx], cx, cy, cw, ch);
+                // 크롭은 원본 이미지 URL에서 직접 수행 (압축본 대신 고해상도 유지)
+                const croppedDataUrl = await cropImage(uploadedImages[p.imageIdx].url, cx, cy, cw, ch);
                 const uploadRes = await fetch('/api/upload-photo', {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
