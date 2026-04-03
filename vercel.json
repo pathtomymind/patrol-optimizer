@@ -2,6 +2,15 @@
   "functions": {
     "pages/api/ors-route.ts": {
       "maxDuration": 60
+    },
+    "pages/api/cleanup.ts": {
+      "maxDuration": 60
     }
-  }
+  },
+  "crons": [
+    {
+      "path": "/api/cleanup",
+      "schedule": "0 17 * * *"
+    }
+  ]
 }
