@@ -19,6 +19,22 @@ type RoutePoint = {
   manager?: string | null;
 };
 
+type AdditionalPoint = {
+  id: number;
+  address: string;
+  destination: string;
+  complaint: string;
+  manager: string;
+  photoUrl: string;
+  lat?: number | null;
+  lng?: number | null;
+  placeName?: string | null;
+  source?: string | null;
+  coordMessage?: string | null;
+  isAdditional: true;
+  insertAfterOrder?: number | null;
+};
+
 type PointStatus = {
   status: string;
   memo: string;
@@ -81,6 +97,12 @@ export default function MapPage() {
   const [isAdmin, setIsAdmin] = useState(false);
   const [savingStatus, setSavingStatus] = useState(false);
   const [isGeneratingReport, setIsGeneratingReport] = useState(false);
+
+  // ★ 추가 지점 (localStorage에서 로드)
+  const [additionalPoints, setAdditionalPoints] = useState<AdditionalPoint[]>([]);
+  const additionalMarkersRef = useRef<naver.maps.Marker[]>([]);
+  const [showInsertModal, setShowInsertModal] = useState(false);
+  const [selectedAdditional, setSelectedAdditional] = useState<AdditionalPoint | null>(null);
 
   // ★ 내 위치 추적
   const [isTracking, setIsTracking] = useState(false);
@@ -167,6 +189,15 @@ export default function MapPage() {
 
   // 2. 네이버 지도 SDK 로드
   useEffect(() => {
+    // additionalPoints localStorage 로드
+    try {
+      const draft = JSON.parse(localStorage.getItem('draft-route') || '{}');
+      if (draft.additionalPoints?.length > 0) {
+        setAdditionalPoints(draft.additionalPoints);
+      }
+    } catch {}
+  }, []);
+  useEffect(() => {
     if (typeof window === 'undefined') return;
     if ((window as any).naver?.maps) {
       setMapReady(true);
@@ -218,6 +249,12 @@ export default function MapPage() {
     const adminAuth = localStorage.getItem('patrol-admin-auth');
     if (adminAuth === 'true') setIsAdmin(true);
   }, []);
+
+  // 5-3. additionalPoints 변경 시 마커 재렌더링
+  useEffect(() => {
+    if (!naverMapRef.current) return;
+    drawAdditionalMarkers(additionalPoints);
+  }, [additionalPoints, routeDrawn]);
 
   // 5-3. 언마운트 시 위치 감시 정리
   useEffect(() => {
@@ -272,6 +309,9 @@ export default function MapPage() {
     labelsRef.current.forEach(label => {
       label.setMap(showLabels ? naverMapRef.current : null);
     });
+
+    // 추가지점 마커 가시성 업데이트
+    updateAdditionalMarkersVisibility(zoom);
 
     // 펄스 활성화 시 DOM 반영 후 애니메이션 시작
     if (showPulse) {
@@ -345,6 +385,74 @@ export default function MapPage() {
   const getLineColor = (_fromPoint: RoutePoint, toPoint: RoutePoint) => {
     const toSt = statusesRef.current[statusKey(toPoint)];
     return toSt && DONE_STATUSES.includes(toSt.status) ? '#1565c0' : '#FF6B35';
+  };
+
+  // ★ 추가 지점 마름모 마커 콘텐츠 생성
+  const makeAdditionalMarkerContent = (point: AdditionalPoint, index: number, isDone: boolean) => {
+    const fillColor = isDone ? '#7b1fa2' : '#f97316';
+    const label = `A${index + 1}`;
+    return `
+      <div style="position:relative;display:flex;flex-direction:column;align-items:center;overflow:visible;cursor:pointer;">
+        <svg width="34" height="34" viewBox="0 0 34 34" style="filter:drop-shadow(0 2px 5px rgba(0,0,0,0.5));">
+          <polygon points="17,2 32,17 17,32 2,17" fill="${fillColor}" stroke="white" stroke-width="2"/>
+          <text x="17" y="21" text-anchor="middle" font-size="9" font-weight="bold" fill="white">${label}</text>
+        </svg>
+        <div style="
+          position:absolute;bottom:36px;left:50%;
+          transform:translateX(-50%);
+          background:rgba(0,0,0,0.38);
+          color:rgba(255,255,255,0.95);font-size:9px;
+          padding:2px 5px;border-radius:4px;
+          white-space:nowrap;max-width:80px;
+          overflow:hidden;text-overflow:ellipsis;
+          pointer-events:none;
+        ">${point.destination || point.address.slice(0, 10)}</div>
+      </div>
+    `;
+  };
+
+  // ★ 추가 지점 마커 전체 그리기
+  const drawAdditionalMarkers = (points: AdditionalPoint[]) => {
+    if (!naverMapRef.current) return;
+    const naver = (window as any).naver;
+    const map = naverMapRef.current;
+    const showMarkers = currentZoomRef.current >= ZOOM_THRESHOLD;
+
+    // 기존 추가지점 마커 제거
+    additionalMarkersRef.current.forEach(m => m.setMap(null));
+    additionalMarkersRef.current = [];
+
+    points.forEach((point, idx) => {
+      if (!point.lat || !point.lng) return;
+      const isDone = false; // 추가지점 완료 상태는 statusKey로 관리
+      const marker = new naver.maps.Marker({
+        map: showMarkers ? map : null,
+        position: new naver.maps.LatLng(point.lat, point.lng),
+        icon: {
+          content: makeAdditionalMarkerContent(point, idx, isDone),
+          anchor: new naver.maps.Point(17, 17),
+        },
+        zIndex: 10,
+      });
+
+      // 탭 시 삽입 위치 선택 팝업
+      naver.maps.Event.addListener(marker, 'click', () => {
+        if (currentZoomRef.current >= PULSE_THRESHOLD) {
+          setSelectedAdditional(point);
+          setShowInsertModal(true);
+        }
+      });
+
+      additionalMarkersRef.current.push(marker);
+    });
+  };
+
+  // ★ 추가 지점 마커 줌 가시성 업데이트
+  const updateAdditionalMarkersVisibility = (zoom: number) => {
+    const showMarkers = zoom >= ZOOM_THRESHOLD;
+    additionalMarkersRef.current.forEach(m => {
+      m.setMap(showMarkers ? naverMapRef.current : null);
+    });
   };
 
   // ★ 마커 콘텐츠 - showPulse: JS 인라인 애니메이션으로 펄스 구현
@@ -1108,6 +1216,41 @@ export default function MapPage() {
 
 
 
+  // ★ 추가지점 삽입 위치 저장
+  const handleInsertAfterSave = (insertAfterOrder: number | null) => {
+    if (!selectedAdditional) return;
+    const updated = additionalPoints.map(p =>
+      p.id === selectedAdditional.id ? { ...p, insertAfterOrder } : p
+    );
+    setAdditionalPoints(updated);
+    // localStorage 업데이트
+    try {
+      const draft = JSON.parse(localStorage.getItem('draft-route') || '{}');
+      draft.additionalPoints = updated;
+      draft.lastModified = Date.now();
+      localStorage.setItem('draft-route', JSON.stringify(draft));
+    } catch {}
+    setShowInsertModal(false);
+  };
+
+  // ★ 추가지점 삭제
+  const handleAdditionalDelete = async (id: number) => {
+    if (!window.confirm('이 추가 지점을 삭제하시겠습니까?')) return;
+    const point = additionalPoints.find(p => p.id === id);
+    if (point?.photoUrl && point.photoUrl.startsWith('https://')) {
+      try { await fetch('/api/delete-blob', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url: point.photoUrl }) }); } catch {}
+    }
+    const updated = additionalPoints.filter(p => p.id !== id);
+    setAdditionalPoints(updated);
+    try {
+      const draft = JSON.parse(localStorage.getItem('draft-route') || '{}');
+      draft.additionalPoints = updated;
+      draft.lastModified = Date.now();
+      localStorage.setItem('draft-route', JSON.stringify(draft));
+    } catch {}
+    setShowInsertModal(false);
+  };
+
   // 작업상태 저장 (자동저장 - 카드리스트와 동일 방식)
   const handleSaveStatus = async (status: string, memo: string) => {
     if (!selectedPoint || !route) return;
@@ -1190,8 +1333,13 @@ export default function MapPage() {
             }}>?</button>
         </div>
         {route && (
-          <div style={{ color: 'rgba(150,200,255,0.85)', fontSize: '11px', textAlign: 'right' }}>
-            {route.date} · 버전{route.version} · {route.points.filter(p => p.source !== 'fixed').length}개 지점
+          <div style={{ color: 'rgba(150,200,255,0.85)', fontSize: '11px', textAlign: 'right', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '8px' }}>
+            <span>{route.date} · 버전{route.version} · {route.points.filter(p => p.source !== 'fixed').length}개 지점</span>
+            {additionalPoints.filter(p => p.lat && p.lng).length > 0 && (
+              <span style={{ background: '#f97316', color: 'white', fontSize: '10px', fontWeight: 'bold', padding: '2px 6px', borderRadius: '10px' }}>
+                +{additionalPoints.filter(p => p.lat && p.lng).length} 추가
+              </span>
+            )}
           </div>
         )}
         <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'nowrap', overflow: 'hidden', justifyContent: 'flex-end' }}>
@@ -1635,6 +1783,106 @@ export default function MapPage() {
         );
       })()}
 
+      {/* ★ 추가지점 삽입 위치 선택 팝업 */}
+      {showInsertModal && selectedAdditional && (
+        <div
+          style={{ position: 'fixed', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 200, background: 'rgba(0,0,0,0.6)' }}
+          onClick={() => setShowInsertModal(false)}>
+          <div
+            style={{ background: '#1a3a6e', border: '2px solid rgba(249,115,22,0.5)', borderRadius: '12px', padding: '20px', width: '88%', maxWidth: '400px', maxHeight: '85vh', overflowY: 'auto' }}
+            onClick={e => e.stopPropagation()}>
+
+            {/* 헤더 */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
+              <h2 style={{ color: 'white', fontWeight: 'bold', fontSize: '14px', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <svg width="24" height="24" viewBox="0 0 24 24">
+                  <polygon points="12,2 22,12 12,22 2,12" fill="#f97316" stroke="white" strokeWidth="1.5"/>
+                  <text x="12" y="16" textAnchor="middle" fontSize="8" fontWeight="bold" fill="white">
+                    {`A${additionalPoints.findIndex(p => p.id === selectedAdditional.id) + 1}`}
+                  </text>
+                </svg>
+                추가지점 상세
+              </h2>
+              <button onClick={() => setShowInsertModal(false)} style={{ color: 'white', background: 'none', border: 'none', fontSize: '18px', cursor: 'pointer' }}>✕</button>
+            </div>
+
+            {/* 지점 정보 */}
+            <div style={{ background: 'rgba(249,115,22,0.15)', border: '1px solid rgba(249,115,22,0.3)', borderRadius: '8px', padding: '12px', marginBottom: '14px' }}>
+              <div style={{ color: '#fbbf77', fontSize: '13px', fontWeight: 'bold', marginBottom: '4px' }}>
+                {selectedAdditional.destination
+                  ? `${selectedAdditional.address} (${selectedAdditional.destination})`
+                  : selectedAdditional.address}
+              </div>
+              <div style={{ color: 'rgba(255,200,150,0.8)', fontSize: '11px' }}>{selectedAdditional.complaint || '-'}</div>
+              {selectedAdditional.manager && (
+                <div style={{ color: 'rgba(255,200,150,0.8)', fontSize: '11px', marginTop: '2px' }}>담당자: {selectedAdditional.manager}</div>
+              )}
+              {selectedAdditional.insertAfterOrder != null && (
+                <div style={{ color: '#c4b5fd', fontSize: '11px', marginTop: '4px' }}>
+                  📌 현재: {selectedAdditional.insertAfterOrder}번 지점 다음 삽입
+                </div>
+              )}
+            </div>
+
+            {/* 현장 사진 */}
+            {selectedAdditional.photoUrl && (
+              <div style={{ marginBottom: '14px' }}>
+                <img src={selectedAdditional.photoUrl} alt="현장사진" style={{ width: '100%', borderRadius: '8px', maxHeight: '180px', objectFit: 'cover' }} />
+              </div>
+            )}
+
+            {/* 삽입 위치 선택 */}
+            {isAdmin && (
+              <div style={{ background: 'rgba(249,115,22,0.1)', border: '1px solid rgba(249,115,22,0.3)', borderRadius: '8px', padding: '12px', marginBottom: '14px' }}>
+                <p style={{ color: '#fbbf77', fontSize: '12px', fontWeight: 'bold', marginBottom: '8px' }}>📌 경로 삽입 위치 설정</p>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  <button
+                    onClick={() => handleInsertAfterSave(null)}
+                    style={{
+                      padding: '8px 12px', borderRadius: '6px', border: 'none', cursor: 'pointer', textAlign: 'left',
+                      background: selectedAdditional.insertAfterOrder == null ? 'rgba(249,115,22,0.4)' : 'rgba(255,255,255,0.1)',
+                      color: 'white', fontSize: '12px',
+                    }}>
+                    연결 안 함 (지도에만 표시)
+                  </button>
+                  {route?.points.filter(p => p.source !== 'fixed' || p.order === 0).map(p => (
+                    <button
+                      key={p.order}
+                      onClick={() => handleInsertAfterSave(p.order)}
+                      style={{
+                        padding: '8px 12px', borderRadius: '6px', border: 'none', cursor: 'pointer', textAlign: 'left',
+                        background: selectedAdditional.insertAfterOrder === p.order ? 'rgba(249,115,22,0.4)' : 'rgba(255,255,255,0.1)',
+                        color: 'white', fontSize: '12px',
+                      }}>
+                      {p.order === 0 ? '출발지(시청) 다음' : `${p.order}번 (${p.destination || p.address.slice(0, 12)}) 다음`}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* 삭제 버튼 (관리자만) */}
+            {isAdmin && (
+              <button
+                onClick={() => handleAdditionalDelete(selectedAdditional.id)}
+                style={{
+                  width: '100%', padding: '10px', borderRadius: '8px', border: 'none',
+                  background: '#c62828', color: 'white', fontSize: '13px', fontWeight: 'bold', cursor: 'pointer',
+                }}>
+                이 추가지점 삭제
+              </button>
+            )}
+
+            {/* 비관리자 안내 */}
+            {!isAdmin && (
+              <p style={{ color: 'rgba(255,200,150,0.7)', fontSize: '11px', textAlign: 'center', marginTop: '8px' }}>
+                삽입 위치 설정 및 삭제는 관리자만 가능합니다.
+              </p>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* 지도뷰 도움말 팝업 */}
       {showMapHelpModal && (
         <div
@@ -1657,9 +1905,11 @@ export default function MapPage() {
                 <p style={{ color: '#90caf9', fontWeight: 'bold', fontSize: '12px', marginBottom: '6px' }}>① 지점 마커 색상</p>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                   {[
-                    { dot: '#FF6B35', text: '주황색 — 아직 작업하지 않은 지점 (미완료)' },
-                    { dot: '#1565c0', text: '파란색 — 작업이 완료된 지점 (민원처리완료 / 기처리 / 확인불가)' },
-                    { dot: '#f57f17', text: '노란색 — 출발지 및 복귀지점 (의정부시청)' },
+                    { dot: '#FF6B35', text: '주황색 원형 — 아직 작업하지 않은 지점 (미완료)' },
+                    { dot: '#1565c0', text: '파란색 원형 — 작업이 완료된 지점' },
+                    { dot: '#f57f17', text: '노란색 원형 — 출발지 및 복귀지점 (의정부시청)' },
+                    { dot: '#f97316', text: '주황색 마름모 — 추가 지점 (미완료)' },
+                    { dot: '#7b1fa2', text: '보라색 마름모 — 추가 지점 (완료)' },
                   ].map(({ dot, text }) => (
                     <div key={text} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                       <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: dot, flexShrink: 0, border: '1px solid white' }} />

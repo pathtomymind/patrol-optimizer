@@ -23,6 +23,25 @@ export default function Home() {
     id: number; address: string; destination: string; complaint: string; manager: string; photoUrl: string;
     lat?: number | null; lng?: number | null; placeName?: string | null; source?: string | null; coordMessage?: string | null; photoDescription?: string | null;
   }[]>([]);
+
+  // 추가 지점 (최적화 경로 완성 후 추가되는 지점)
+  const [additionalPoints, setAdditionalPoints] = useState<{
+    id: number; address: string; destination: string; complaint: string; manager: string; photoUrl: string;
+    lat?: number | null; lng?: number | null; placeName?: string | null; source?: string | null; coordMessage?: string | null;
+    isAdditional: true; insertAfterOrder?: number | null;
+  }[]>([]);
+  const [additionalOpen, setAdditionalOpen] = useState(false);
+  const [showAdditionalModal, setShowAdditionalModal] = useState(false);
+  const [editingAdditionalPoint, setEditingAdditionalPoint] = useState<{
+    id: number; address: string; destination: string; complaint: string; manager: string; photoUrl: string;
+    lat?: number | null; lng?: number | null; placeName?: string | null; source?: string | null; coordMessage?: string | null;
+    isAdditional: true; insertAfterOrder?: number | null;
+  } | null>(null);
+  const [additionalForm, setAdditionalForm] = useState({ address: '', destination: '', complaint: '', manager: '', photoUrl: '' });
+  const [additionalInsertAfter, setAdditionalInsertAfter] = useState<number | null>(null);
+  const [additionalCoordStatus, setAdditionalCoordStatus] = useState<'idle' | 'loading' | 'success' | 'fail'>('idle');
+  const [additionalCoord, setAdditionalCoord] = useState<{ lat: number | null; lng: number | null; placeName: string | null; source: string | null; coordMessage: string | null }>({ lat: null, lng: null, placeName: null, source: null, coordMessage: null });
+
   const [showDirectModal, setShowDirectModal] = useState(false);
   const [editingPoint, setEditingPoint] = useState<{
     id: number; address: string; destination: string; complaint: string; manager: string; photoUrl: string;
@@ -86,6 +105,106 @@ export default function Home() {
     draft.lastModified = Date.now();
     localStorage.setItem('draft-route', JSON.stringify(draft));
     setDeletingId(null);
+  };
+
+  // 추가 지점 핸들러들
+  const handleAdditionalAdd = () => {
+    setEditingAdditionalPoint(null);
+    setAdditionalForm({ address: '', destination: '', complaint: '', manager: '', photoUrl: '' });
+    setAdditionalInsertAfter(null);
+    setAdditionalCoordStatus('idle');
+    setAdditionalCoord({ lat: null, lng: null, placeName: null, source: null, coordMessage: null });
+    setShowAdditionalModal(true);
+  };
+
+  const handleAdditionalEdit = (point: typeof additionalPoints[0]) => {
+    setEditingAdditionalPoint(point);
+    setAdditionalForm({ address: point.address, destination: point.destination, complaint: point.complaint, manager: point.manager, photoUrl: point.photoUrl || '' });
+    setAdditionalInsertAfter(point.insertAfterOrder ?? null);
+    setAdditionalCoordStatus(point.lat ? 'success' : 'idle');
+    setAdditionalCoord({ lat: point.lat || null, lng: point.lng || null, placeName: point.placeName || null, source: point.source || null, coordMessage: point.coordMessage || null });
+    setShowAdditionalModal(true);
+  };
+
+  const handleAdditionalDelete = async (id: number) => {
+    if (deletingId !== null) return;
+    setDeletingId(id);
+    const point = additionalPoints.find((p) => p.id === id);
+    if (point?.photoUrl && point.photoUrl.startsWith('https://')) {
+      try { await fetch('/api/delete-blob', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url: point.photoUrl }) }); } catch (e) { console.error('Blob 삭제 오류:', e); }
+    }
+    const updated = additionalPoints.filter((p) => p.id !== id);
+    setAdditionalPoints(updated);
+    const draft = JSON.parse(localStorage.getItem('draft-route') || '{}');
+    draft.additionalPoints = updated;
+    draft.lastModified = Date.now();
+    localStorage.setItem('draft-route', JSON.stringify(draft));
+    setDeletingId(null);
+  };
+
+  const handleAdditionalSave = async () => {
+    if (isSaving) return;
+    setIsSaving(true);
+    const coordData = additionalCoordStatus === 'success'
+      ? { lat: additionalCoord.lat, lng: additionalCoord.lng, placeName: additionalCoord.placeName, source: additionalCoord.source, coordMessage: additionalCoord.coordMessage }
+      : { lat: null, lng: null, placeName: null, source: null, coordMessage: null };
+
+    let photoUrl = additionalForm.photoUrl;
+    if (photoUrl && photoUrl.startsWith('blob:')) {
+      try {
+        const res = await fetch(photoUrl);
+        const blob = await res.blob();
+        const reader = new FileReader();
+        const base64 = await new Promise<string>((resolve) => {
+          reader.onload = () => resolve((reader.result as string));
+          reader.readAsDataURL(blob);
+        });
+        const uploadRes = await fetch('/api/upload-photo', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ imageData: base64, filename: `additional-${Date.now()}.jpg` }),
+        });
+        if (uploadRes.ok) {
+          const uploadData = await uploadRes.json();
+          photoUrl = uploadData.url;
+        }
+      } catch (e) { console.error('추가지점 사진 업로드 오류:', e); }
+    }
+
+    let updatedPoints;
+    if (editingAdditionalPoint) {
+      updatedPoints = additionalPoints.map((p) =>
+        p.id === editingAdditionalPoint.id
+          ? { ...p, ...additionalForm, photoUrl, ...coordData, isAdditional: true as const, insertAfterOrder: additionalInsertAfter }
+          : p
+      );
+    } else {
+      updatedPoints = [...additionalPoints, {
+        id: Date.now(), ...additionalForm, photoUrl, ...coordData,
+        isAdditional: true as const, insertAfterOrder: additionalInsertAfter,
+      }];
+    }
+    setAdditionalPoints(updatedPoints);
+    const draft = JSON.parse(localStorage.getItem('draft-route') || '{}');
+    draft.additionalPoints = updatedPoints;
+    draft.lastModified = Date.now();
+    localStorage.setItem('draft-route', JSON.stringify(draft));
+    setIsSaving(false);
+    setShowAdditionalModal(false);
+  };
+
+  const handleAdditionalReset = async () => {
+    if (!window.confirm('추가지점 전체를 삭제합니다. 계속하시겠습니까?')) return;
+    await Promise.all(
+      additionalPoints
+        .filter(p => p.photoUrl && p.photoUrl.startsWith('https://'))
+        .map(p => fetch('/api/delete-blob', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url: p.photoUrl }) }).catch(() => {}))
+    );
+    setAdditionalPoints([]);
+    const draft = JSON.parse(localStorage.getItem('draft-route') || '{}');
+    delete draft.additionalPoints;
+    draft.lastModified = Date.now();
+    localStorage.setItem('draft-route', JSON.stringify(draft));
   };
 
   const handleDirectSave = async () => {
@@ -233,7 +352,7 @@ export default function Home() {
           const draft = JSON.parse(localStorage.getItem('draft-route') || '{}');
           const today = new Date().toLocaleDateString('ko-KR');
           const draftDate = draft.lastModified ? new Date(draft.lastModified).toLocaleDateString('ko-KR') : null;
-          const hasData = (draft.extractedPoints?.length > 0) || (draft.directPoints?.length > 0);
+          const hasData = (draft.extractedPoints?.length > 0) || (draft.directPoints?.length > 0) || (draft.additionalPoints?.length > 0);
           if (hasData && draftDate === today) {
             setPendingDraft(draft);
             setShowDraftRestoreModal(true);
@@ -663,10 +782,20 @@ export default function Home() {
   const handleGenerateRoute = async () => {
     if (isGenerating) return;
 
-    const allPoints = [
+    // 추가지점 포함 여부 확인
+    let includeAdditional = false;
+    if (additionalPoints.filter(p => p.lat && p.lng).length > 0) {
+      includeAdditional = window.confirm(
+        `추가지점 ${additionalPoints.filter(p => p.lat && p.lng).length}개가 있습니다.\n최적화 경로 생성에 포함하시겠습니까?\n\n확인: 추가지점 포함하여 전체 재최적화\n취소: 추가지점 제외하고 기존 지점만 최적화`
+      );
+    }
+
+    const basePoints = [
       ...extractedPoints.filter(p => p.lat && p.lng),
       ...directPoints.filter(p => p.lat && p.lng),
     ];
+    const addPoints = includeAdditional ? additionalPoints.filter(p => p.lat && p.lng) : [];
+    const allPoints = [...basePoints, ...addPoints];
 
     if (allPoints.length === 0) {
       alert('좌표가 확인된 지점이 없습니다.');
@@ -823,7 +952,16 @@ export default function Home() {
       if (!res.ok) throw new Error('저장 실패');
       const data = await res.json();
       console.log('✅ 경로 저장 완료:', JSON.stringify(data, null, 2));
-      alert(`최적화 경로 생성 완료! (${today} 버전${data.version}, ${routePoints.length}개 지점)\n경로 계산: ${usedORS ? '도로 거리 기반 + 2-opt 개선 (ORS)' : '직선 거리 기반 (fallback)'}`);
+
+      // 추가지점 포함하여 재최적화한 경우 additionalPoints 초기화
+      if (includeAdditional) {
+        setAdditionalPoints([]);
+        const draft = JSON.parse(localStorage.getItem('draft-route') || '{}');
+        delete draft.additionalPoints;
+        localStorage.setItem('draft-route', JSON.stringify(draft));
+      }
+
+      alert(`최적화 경로 생성 완료! (${today} 버전${data.version}, ${routePoints.length}개 지점)\n경로 계산: ${usedORS ? '도로 거리 기반 + 2-opt 개선 (ORS)' : '직선 거리 기반 (fallback)'}${includeAdditional ? '\n추가지점 포함하여 재최적화되었습니다.' : ''}`);
       await loadCurrentRoute(); // 이력 즉시 갱신
     } catch (e) {
       console.error(e);
@@ -1304,6 +1442,97 @@ export default function Home() {
               )}
             </div>
 
+            {/* 추가 지점 아코디언 */}
+            <div className="rounded overflow-hidden">
+              <button
+                onClick={() => setAdditionalOpen(!additionalOpen)}
+                className="w-full flex justify-between items-center px-4 py-3 text-white font-medium text-sm"
+                style={{ background: 'linear-gradient(180deg, #6a3fa0 0%, #4a2080 100%)' }}
+              >
+                <span className="flex items-center gap-2">
+                  <svg width="14" height="14" viewBox="0 0 14 14" style={{ flexShrink: 0 }}>
+                    <polygon points="7,0 14,7 7,14 0,7" fill="#f97316" stroke="none"/>
+                  </svg>
+                  추가 지점 입력하기
+                  {additionalPoints.length > 0 && (
+                    <span className="text-xs px-1.5 py-0.5 rounded-full font-bold" style={{ background: '#f97316', color: 'white' }}>
+                      {additionalPoints.length}
+                    </span>
+                  )}
+                </span>
+                <span className="flex items-center gap-2">
+                  {additionalPoints.length > 0 && (
+                    <div
+                      onClick={(e) => { e.stopPropagation(); handleAdditionalReset(); }}
+                      className="text-white text-xs px-2 py-1 rounded cursor-pointer"
+                      style={{ background: '#7b1fa2' }}
+                    >초기화</div>
+                  )}
+                  <span>{additionalOpen ? '▲' : '▼'}</span>
+                </span>
+              </button>
+              {additionalOpen && (
+                <div className="px-3 py-3 space-y-2" style={{ background: 'rgba(106,63,160,0.15)' }}>
+                  {/* 추가지점 설명 */}
+                  <p className="text-xs px-1" style={{ color: 'rgba(200,160,255,0.85)' }}>
+                    최적화 경로 완성 후 현장에서 추가되는 민원 지점입니다. 지점을 입력하면 지도에 마름모 마커로 표시됩니다.
+                  </p>
+                  {/* 추가지점 카드 목록 */}
+                  {additionalPoints.map((point, index) => (
+                    <div key={point.id} className="rounded px-3 py-2"
+                      style={{ background: 'rgba(249,115,22,0.15)', border: '1px solid rgba(249,115,22,0.4)' }}>
+                      <div className="flex justify-between items-start gap-2">
+                        {/* 마름모 마커 */}
+                        <div className="flex-shrink-0 flex items-center justify-center" style={{ width: '28px', height: '28px' }}>
+                          <svg width="26" height="26" viewBox="0 0 26 26">
+                            <polygon points="13,1 25,13 13,25 1,13" fill="#f97316" stroke="none"/>
+                            <text x="13" y="17" textAnchor="middle" fontSize="8" fontWeight="bold" fill="white">A{index + 1}</text>
+                          </svg>
+                        </div>
+                        <div className="flex-1 cursor-pointer" onClick={() => handleAdditionalEdit(point)}>
+                          <p className="text-sm leading-snug font-medium">
+                            <span style={{ color: point.source ? '#fbbf77' : 'white' }}>
+                              {point.address || '주소 없음'}{point.destination ? ` (${point.destination})` : ''}
+                            </span>
+                          </p>
+                          {(point.source === 'place_nearest' || point.source === 'place_single') && point.placeName && (
+                            <p className="text-xs mt-0.5" style={{ color: '#fbbf77' }}>🔍 {point.placeName}</p>
+                          )}
+                          <p className="text-xs mt-0.5" style={{ color: point.coordMessage?.includes('⚠️') ? '#ffb74d' : point.source ? '#fde68a' : 'rgba(255,255,255,0.5)' }}>
+                            📍 {point.coordMessage || '좌표 없음'}
+                          </p>
+                          <p className="text-xs mt-0.5" style={{ color: '#fbbf77' }}>
+                            <span style={{ color: 'rgba(255,255,255,0.6)', display: 'inline-block', width: '4rem' }}>민원내용:</span>
+                            {point.complaint}
+                          </p>
+                          {point.insertAfterOrder != null && (
+                            <p className="text-xs mt-0.5" style={{ color: '#c4b5fd' }}>
+                              📌 {point.insertAfterOrder}번 지점 다음 삽입
+                            </p>
+                          )}
+                        </div>
+                        <button
+                          onClick={() => handleAdditionalDelete(point.id)}
+                          disabled={deletingId !== null}
+                          className="text-xs text-white px-2 py-1 rounded flex-shrink-0"
+                          style={{ background: deletingId === point.id ? '#888' : '#c62828', cursor: deletingId !== null ? 'not-allowed' : 'pointer' }}>
+                          {deletingId === point.id ? '삭제 중' : '삭제'}
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                  {/* 추가 버튼 */}
+                  <div
+                    onClick={handleAdditionalAdd}
+                    className="flex items-center justify-center w-10 h-10 rounded-full cursor-pointer mx-auto mt-1"
+                    style={{ background: 'rgba(249,115,22,0.3)', border: '2px dashed rgba(249,115,22,0.7)' }}
+                  >
+                    <span className="text-white text-xl font-bold">+</span>
+                  </div>
+                </div>
+              )}
+            </div>
+
             {/* 최적화 경로 생성하기 */}
             <div className="rounded mt-2" style={{ background: '#0d2444' }}>
               <button
@@ -1501,6 +1730,9 @@ export default function Home() {
               {pendingDraft.directPoints?.length > 0 && (
                 <p className="text-xs mt-1" style={{ color: '#a5d6a7' }}>✏️ 직접입력 지점 {pendingDraft.directPoints.length}건</p>
               )}
+              {(pendingDraft as any).additionalPoints?.length > 0 && (
+                <p className="text-xs mt-1" style={{ color: '#fbbf77' }}>◆ 추가지점 {(pendingDraft as any).additionalPoints.length}건</p>
+              )}
             </div>
             <p className="text-blue-200 text-xs mb-4">복원하시겠습니까? 취소하면 이전 내역이 삭제됩니다.</p>
             <div className="flex gap-2">
@@ -1517,6 +1749,7 @@ export default function Home() {
                 onClick={() => {
                   if (pendingDraft.extractedPoints?.length > 0) setExtractedPoints(pendingDraft.extractedPoints);
                   if (pendingDraft.directPoints?.length > 0) setDirectPoints(pendingDraft.directPoints);
+                  if ((pendingDraft as any).additionalPoints?.length > 0) setAdditionalPoints((pendingDraft as any).additionalPoints);
                   setPendingDraft(null);
                   setShowDraftRestoreModal(false);
                   setActiveTab('input');
@@ -1531,6 +1764,157 @@ export default function Home() {
       {/* 전체 잠금 오버레이 */}
       {(isExtracting || isResetting || isGenerating || deletingId !== null) && (
         <div className="fixed inset-0 z-40" style={{ background: 'rgba(0,0,0,0.3)', cursor: 'not-allowed' }} />
+      )}
+
+      {/* 추가 지점 입력/수정 모달 */}
+      {showAdditionalModal && (
+        <div className="fixed inset-0 flex items-center justify-center z-50"
+          style={{ background: 'rgba(0,0,0,0.6)' }}>
+          <div className="rounded-lg px-5 py-5 w-80 max-h-screen overflow-y-auto" style={{ background: '#1a3a6e', border: '2px solid rgba(249,115,22,0.5)' }}>
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-white font-bold text-base flex items-center gap-2">
+                <svg width="28" height="28" viewBox="0 0 28 28">
+                  <polygon points="14,1 27,14 14,27 1,14" fill="#f97316" stroke="none"/>
+                  <text x="14" y="18" textAnchor="middle" fontSize="9" fontWeight="bold" fill="white">
+                    {editingAdditionalPoint
+                      ? `A${additionalPoints.findIndex(p => p.id === editingAdditionalPoint.id) + 1}`
+                      : `A${additionalPoints.length + 1}`}
+                  </text>
+                </svg>
+                추가지점 {editingAdditionalPoint ? '수정' : '입력'}
+              </h2>
+              <span className="text-white cursor-pointer text-lg" onClick={() => setShowAdditionalModal(false)}>✕</span>
+            </div>
+
+            {/* 위치정보 묶음 */}
+            <div className="rounded-lg p-3 mb-3" style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.15)' }}>
+              <div className="mb-2">
+                <label className="text-blue-200 text-xs mb-1 block">주소</label>
+                <input type="text" value={additionalForm.address} placeholder=""
+                  onChange={(e) => { setAdditionalForm((prev) => ({ ...prev, address: e.target.value })); setAdditionalCoordStatus('idle'); }}
+                  className="w-full px-3 py-2 rounded text-sm outline-none"
+                  style={{ background: 'rgba(255,255,255,0.15)', color: additionalCoordStatus === 'success' ? '#fbbf77' : 'white' }} />
+              </div>
+              <div className="mb-2">
+                <label className="text-blue-200 text-xs mb-1 block">목적지</label>
+                <input type="text" value={additionalForm.destination} placeholder=""
+                  onChange={(e) => { setAdditionalForm((prev) => ({ ...prev, destination: e.target.value })); setAdditionalCoordStatus('idle'); }}
+                  className="w-full px-3 py-2 rounded text-sm outline-none"
+                  style={{ background: 'rgba(255,255,255,0.15)', color: additionalCoordStatus === 'success' ? '#fbbf77' : 'white' }} />
+              </div>
+              <button
+                onClick={async () => {
+                  setAdditionalCoordStatus('loading');
+                  try {
+                    const res = await fetch('/api/geocode', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ address: additionalForm.address, destination: additionalForm.destination }),
+                    });
+                    const data = await res.json();
+                    if (res.ok && data.lat && data.lng) {
+                      setAdditionalCoord({ lat: data.lat, lng: data.lng, placeName: data.placeName || null, source: data.source || null, coordMessage: data.coordMessage || null });
+                      setAdditionalCoordStatus('success');
+                    } else {
+                      setAdditionalCoordStatus('fail');
+                    }
+                  } catch { setAdditionalCoordStatus('fail'); }
+                }}
+                disabled={additionalCoordStatus === 'loading'}
+                className="w-full py-2 rounded text-sm font-bold text-white mb-2"
+                style={{ background: additionalCoordStatus === 'loading' ? '#555' : '#7b2d00' }}
+              >
+                {additionalCoordStatus === 'loading' ? '확인 중...' : '좌표 확인하기'}
+              </button>
+              <p className="text-xs mt-1"
+                style={{ color: additionalCoordStatus === 'success' ? '#fbbf77' : additionalCoordStatus === 'fail' ? '#ef9a9a' : 'rgba(255,255,255,0.5)' }}>
+                {additionalCoordStatus === 'idle' && '주소나 목적지를 입력한 후 좌표 확인 버튼을 누르세요.'}
+                {additionalCoordStatus === 'loading' && '좌표를 검색하는 중입니다...'}
+                {additionalCoordStatus === 'success' && '✅ 좌표가 확인되었습니다.'}
+                {additionalCoordStatus === 'fail' && '❌ 좌표를 찾지 못했습니다.'}
+              </p>
+              {additionalCoordStatus === 'success' && additionalCoord.placeName && (
+                <p className="text-xs mt-1" style={{ color: '#fbbf77' }}>🔍 {additionalCoord.placeName}</p>
+              )}
+              {additionalCoordStatus === 'success' && (
+                <p className="text-xs mt-1" style={{ color: additionalCoord.coordMessage?.includes('⚠️') ? '#ffb74d' : '#fde68a' }}>📍 {additionalCoord.coordMessage || ''}</p>
+              )}
+            </div>
+
+            {/* 민원내용 */}
+            <div className="mb-3">
+              <label className="text-blue-200 text-xs mb-1 block">민원내용</label>
+              <input type="text" value={additionalForm.complaint}
+                onChange={(e) => setAdditionalForm((prev) => ({ ...prev, complaint: e.target.value }))}
+                className="w-full px-3 py-2 rounded text-sm outline-none"
+                style={{ background: 'rgba(255,255,255,0.15)', color: '#fbbf77' }} />
+            </div>
+
+            {/* 담당자 */}
+            <div className="mb-3">
+              <label className="text-blue-200 text-xs mb-1 block">담당자</label>
+              <input type="text" value={additionalForm.manager}
+                onChange={(e) => setAdditionalForm((prev) => ({ ...prev, manager: e.target.value }))}
+                className="w-full px-3 py-2 rounded text-sm outline-none"
+                style={{ background: 'rgba(255,255,255,0.15)', color: '#fbbf77' }} />
+            </div>
+
+            {/* 현장사진 */}
+            <div className="mb-3">
+              <label className="text-blue-200 text-xs mb-1 block">현장사진</label>
+              {additionalForm.photoUrl && (
+                <img src={additionalForm.photoUrl} alt="현장사진" className="w-full rounded mb-2" />
+              )}
+              <label className="flex items-center justify-center w-full py-2 rounded cursor-pointer text-white text-xs font-medium gap-1"
+                style={{ background: 'rgba(255,255,255,0.15)' }}>
+                📷 사진 선택
+                <input type="file" accept="image/*" className="hidden"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) {
+                      const url = URL.createObjectURL(file);
+                      setAdditionalForm((prev) => ({ ...prev, photoUrl: url }));
+                    }
+                    e.target.value = '';
+                  }} />
+              </label>
+            </div>
+
+            {/* 경로 삽입 위치 선택 */}
+            <div className="mb-4 rounded-lg p-3" style={{ background: 'rgba(249,115,22,0.15)', border: '1px solid rgba(249,115,22,0.35)' }}>
+              <label className="text-orange-200 text-xs mb-2 block font-bold">📌 경로 삽입 위치 (선택)</label>
+              <p className="text-xs mb-2" style={{ color: 'rgba(255,200,150,0.8)' }}>
+                현재 경로의 어느 지점 다음에 넣을지 선택하세요. 선택하지 않으면 지도에만 표시됩니다.
+              </p>
+              <select
+                value={additionalInsertAfter ?? ''}
+                onChange={(e) => setAdditionalInsertAfter(e.target.value === '' ? null : Number(e.target.value))}
+                className="w-full px-3 py-2 rounded text-sm text-white"
+                style={{ background: 'rgba(255,255,255,0.15)', border: '1px solid rgba(249,115,22,0.5)' }}>
+                <option value="" style={{ background: '#1a3a6e' }}>선택 안 함 (지도에만 표시)</option>
+                {currentRoute?.points
+                  .filter(p => p.source !== 'fixed' || p.order === 0)
+                  .map(p => (
+                    <option key={p.order} value={p.order} style={{ background: '#1a3a6e' }}>
+                      {p.order === 0 ? '출발지(시청) 다음' : `${p.order}번 (${p.destination || p.address}) 다음`}
+                    </option>
+                  ))}
+              </select>
+            </div>
+
+            <div className="flex gap-2 mt-2">
+              <button onClick={() => setShowAdditionalModal(false)}
+                className="flex-1 py-2 rounded text-sm text-white font-medium"
+                style={{ background: '#455a64' }}>취소</button>
+              <button onClick={handleAdditionalSave}
+                disabled={isSaving}
+                className="flex-1 py-2 rounded text-sm text-white font-bold"
+                style={{ background: isSaving ? '#555' : '#7b2d00' }}>
+                {isSaving ? '저장 중...' : '저장'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* 추출지점 수정 모달 */}
