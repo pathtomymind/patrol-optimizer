@@ -414,7 +414,24 @@ export default function MapPage() {
   };
 
   // ★ 추가 지점 마름모 마커 콘텐츠 생성
-  // ★ 추가지점 마커 data URL 캐시 (Canvas는 브라우저에서만 작동)
+  // ★ 추가지점 마커 애니메이션 CSS 삽입
+  useEffect(() => {
+    if (document.getElementById('additional-marker-style')) return;
+    const style = document.createElement('style');
+    style.id = 'additional-marker-style';
+    style.textContent = `
+      @keyframes additional-pulse {
+        0%   { transform: scale(1) rotate(0deg);   opacity: 0.9; }
+        50%  { transform: scale(1.15) rotate(5deg); opacity: 1; }
+        100% { transform: scale(1) rotate(0deg);   opacity: 0.9; }
+      }
+      .additional-marker-anim {
+        animation: additional-pulse 2s ease-in-out infinite;
+        display: block;
+      }
+    `;
+    document.head.appendChild(style);
+  }, []);
   const additionalMarkerUrlsRef = useRef<Record<string, string>>({});
 
   const getAdditionalMarkerUrl = (label: string, isDone: boolean): string => {
@@ -483,16 +500,17 @@ export default function MapPage() {
       const dataUrl = getAdditionalMarkerUrl(label, isDone);
       const name = (point.destination || point.address).slice(0, 10);
 
-      // ★ icon.url 방식 — 모바일 네이버 지도 SDK에서 가장 안정적
+      // ★ content HTML + 애니메이션 — icon.url은 CSS 애니메이션 불가
       const marker = new naver.maps.Marker({
         map: showMarkers ? map : null,
         position: new naver.maps.LatLng(point.lat, point.lng),
         icon: {
-          url: dataUrl,
-          size: new naver.maps.Size(48, 48),
+          content: `<div style="position:relative;width:48px;height:56px;cursor:pointer;">
+            <div style="position:absolute;bottom:50px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,0.5);color:#fff;font-size:9px;padding:1px 4px;border-radius:3px;white-space:nowrap;max-width:80px;overflow:hidden;text-overflow:ellipsis;">${name}</div>
+            <img src="${dataUrl}" width="48" height="48" style="position:absolute;top:0;left:0;display:block;" class="additional-marker-anim" />
+          </div>`,
           anchor: new naver.maps.Point(24, 24),
         },
-        title: name,
         zIndex: 10,
       });
 
@@ -935,7 +953,13 @@ export default function MapPage() {
     intervalM = 80
   ) => {
     if (coordPairs.length < 2) return;
+    const totalDist = coordPairs.reduce((sum, _, i) => {
+      if (i === 0) return sum;
+      return sum + latLngDistanceM(coordPairs[i-1].lat, coordPairs[i-1].lng, coordPairs[i].lat, coordPairs[i].lng);
+    }, 0);
+    const MARKER_CLEARANCE = 20; // 마커 위치 근처 20m 이내 화살표 제외
     let accumulated = 0;
+    let distFromStart = 0;
     for (let i = 0; i < coordPairs.length - 1; i++) {
       const from = coordPairs[i];
       const to = coordPairs[i + 1];
@@ -943,19 +967,24 @@ export default function MapPage() {
       const segBearing = bearing ?? calcBearing(from, to);
       let d = (accumulated === 0 ? intervalM / 2 : intervalM - (accumulated % intervalM));
       while (d <= segDist) {
-        const t = d / segDist;
-        const lat = from.lat + (to.lat - from.lat) * t;
-        const lng = from.lng + (to.lng - from.lng) * t;
-        const arrow = new naver.maps.Marker({
-          map,
-          position: new naver.maps.LatLng(lat, lng),
-          icon: makeArrowIcon(segBearing),
-          zIndex: 5,
-          clickable: false,
-        });
-        arrowMarkersRef.current.push(arrow);
+        const absPos = distFromStart + d;
+        // 시작점 또는 끝점으로부터 MARKER_CLEARANCE 이내면 건너뜀
+        if (absPos > MARKER_CLEARANCE && absPos < totalDist - MARKER_CLEARANCE) {
+          const t = d / segDist;
+          const lat = from.lat + (to.lat - from.lat) * t;
+          const lng = from.lng + (to.lng - from.lng) * t;
+          const arrow = new naver.maps.Marker({
+            map,
+            position: new naver.maps.LatLng(lat, lng),
+            icon: makeArrowIcon(segBearing),
+            zIndex: 5,
+            clickable: false,
+          });
+          arrowMarkersRef.current.push(arrow);
+        }
         d += intervalM;
       }
+      distFromStart += segDist;
       accumulated = (accumulated + segDist) % intervalM;
     }
   };
@@ -2429,14 +2458,34 @@ export default function MapPage() {
                   <span style={{ color: 'white', fontSize: '11px', flex: 1 }}>{(selectedAdditional as any).originalId ? `${(selectedAdditional as any).originalId}번` : ''}</span>
                 </div>
                 {/* 민원내용 */}
-                <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
-                  <span style={{ color: '#90caf9', fontSize: '11px', width: '60px', flexShrink: 0, paddingTop: '2px' }}>민원내용</span>
-                  <span style={{ color: 'white', fontSize: '11px', flex: 1 }}>{selectedAdditional.complaint || ''}</span>
+                <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                  <span style={{ color: '#90caf9', fontSize: '11px', width: '60px', flexShrink: 0 }}>민원내용</span>
+                  {isAdmin ? (
+                    <input defaultValue={selectedAdditional.complaint || ''} onBlur={async (e) => {
+                      if (e.target.value === selectedAdditional.complaint) return;
+                      const updated = additionalPoints.map(p => p.id === selectedAdditional.id ? { ...p, complaint: e.target.value } : p);
+                      setAdditionalPoints(updated); additionalPointsRef.current = updated;
+                      const today = routeRef.current?.date ?? '';
+                      await fetch('/api/save-additional', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ date: today, points: updated }) }).catch(() => {});
+                    }} style={{ flex: 1, borderRadius: '4px', padding: '4px 6px', fontSize: '11px', color: 'white', background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.25)' }} />
+                  ) : (
+                    <span style={{ color: 'white', fontSize: '11px', flex: 1 }}>{selectedAdditional.complaint || ''}</span>
+                  )}
                 </div>
                 {/* 담당자 */}
-                <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
-                  <span style={{ color: '#90caf9', fontSize: '11px', width: '60px', flexShrink: 0, paddingTop: '2px' }}>담당자</span>
-                  <span style={{ color: 'white', fontSize: '11px', flex: 1 }}>{selectedAdditional.manager || ''}</span>
+                <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                  <span style={{ color: '#90caf9', fontSize: '11px', width: '60px', flexShrink: 0 }}>담당자</span>
+                  {isAdmin ? (
+                    <input defaultValue={selectedAdditional.manager || ''} onBlur={async (e) => {
+                      if (e.target.value === selectedAdditional.manager) return;
+                      const updated = additionalPoints.map(p => p.id === selectedAdditional.id ? { ...p, manager: e.target.value } : p);
+                      setAdditionalPoints(updated); additionalPointsRef.current = updated;
+                      const today = routeRef.current?.date ?? '';
+                      await fetch('/api/save-additional', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ date: today, points: updated }) }).catch(() => {});
+                    }} style={{ flex: 1, borderRadius: '4px', padding: '4px 6px', fontSize: '11px', color: 'white', background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.25)' }} />
+                  ) : (
+                    <span style={{ color: 'white', fontSize: '11px', flex: 1 }}>{selectedAdditional.manager || ''}</span>
+                  )}
                 </div>
 
                 {/* 현장사진 */}
@@ -2449,6 +2498,31 @@ export default function MapPage() {
                       <div style={{ borderRadius: '6px', height: '60px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(255,255,255,0.1)', border: '1px dashed rgba(255,255,255,0.3)' }}>
                         <span style={{ color: '#90caf9', fontSize: '11px' }}>사진 없음</span>
                       </div>
+                    )}
+                    {isAdmin && (
+                      <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', padding: '6px', borderRadius: '4px', background: 'rgba(255,255,255,0.1)', color: 'white', fontSize: '11px', cursor: 'pointer', marginTop: '4px' }}>
+                        📷 사진 교체
+                        <input type="file" accept="image/*" style={{ display: 'none' }} onChange={async (e) => {
+                          const file = e.target.files?.[0];
+                          if (!file) return;
+                          const reader = new FileReader();
+                          reader.onload = async () => {
+                            try {
+                              const uploadRes = await fetch('/api/upload-photo', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ imageData: reader.result as string, filename: `additional-${Date.now()}.jpg` }) });
+                              if (uploadRes.ok) {
+                                const uploadData = await uploadRes.json();
+                                const updated = additionalPoints.map(p => p.id === selectedAdditional.id ? { ...p, photoUrl: uploadData.url } : p);
+                                setAdditionalPoints(updated); additionalPointsRef.current = updated;
+                                setSelectedAdditional(prev => prev ? { ...prev, photoUrl: uploadData.url } : prev);
+                                const today = routeRef.current?.date ?? '';
+                                await fetch('/api/save-additional', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ date: today, points: updated }) }).catch(() => {});
+                              }
+                            } catch {}
+                          };
+                          reader.readAsDataURL(file);
+                          e.target.value = '';
+                        }} />
+                      </label>
                     )}
                   </div>
                 </div>

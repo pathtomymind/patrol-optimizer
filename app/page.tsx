@@ -1857,8 +1857,14 @@ export default function Home() {
             <p className="text-blue-200 text-xs mb-4">복원하시겠습니까? 취소하면 이전 내역이 삭제됩니다.</p>
             <div className="flex gap-2">
               <button
-                onClick={() => {
+                onClick={async () => {
                   localStorage.removeItem('draft-route');
+                  // 추가지점 Redis에서도 삭제
+                  if ((pendingDraft as any).additionalPoints?.length > 0) {
+                    const today = new Date().toLocaleDateString('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/\. /g, '-').replace('.', '');
+                    fetch('/api/save-additional', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ date: today, points: [] }) }).catch(() => {});
+                  }
+                  setAdditionalPoints([]);
                   setPendingDraft(null);
                   setShowDraftRestoreModal(false);
                   setActiveTab('input');
