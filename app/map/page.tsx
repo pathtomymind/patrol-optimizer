@@ -100,6 +100,7 @@ export default function MapPage() {
 
   // ★ 추가 지점 (localStorage에서 로드)
   const [additionalPoints, setAdditionalPoints] = useState<AdditionalPoint[]>([]);
+  const additionalPointsRef = useRef<AdditionalPoint[]>([]);
   const additionalMarkersRef = useRef<naver.maps.Marker[]>([]);
   const [showInsertModal, setShowInsertModal] = useState(false);
   const [selectedAdditional, setSelectedAdditional] = useState<AdditionalPoint | null>(null);
@@ -194,6 +195,7 @@ export default function MapPage() {
       const draft = JSON.parse(localStorage.getItem('draft-route') || '{}');
       if (draft.additionalPoints?.length > 0) {
         setAdditionalPoints(draft.additionalPoints);
+        additionalPointsRef.current = draft.additionalPoints;
       }
     } catch {}
   }, []);
@@ -393,14 +395,12 @@ export default function MapPage() {
     const label = `A${index + 1}`;
     const name = point.destination || point.address.slice(0, 10);
     return `
-      <div style="position:relative;display:flex;flex-direction:column;align-items:center;overflow:visible;cursor:pointer;user-select:none;-webkit-user-select:none;">
-        <div style="position:absolute;bottom:38px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,0.38);color:rgba(255,255,255,0.95);font-size:9px;padding:2px 5px;border-radius:4px;white-space:nowrap;max-width:80px;overflow:hidden;text-overflow:ellipsis;pointer-events:none;">${name}</div>
-        <div style="position:relative;width:34px;height:34px;filter:drop-shadow(0 2px 5px rgba(0,0,0,0.5));">
-          <svg width="34" height="34" viewBox="0 0 34 34" xmlns="http://www.w3.org/2000/svg">
-            <polygon points="17,2 32,17 17,32 2,17" fill="${fillColor}" stroke="white" stroke-width="2"/>
-          </svg>
-          <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:white;font-size:9px;font-weight:bold;font-family:sans-serif;pointer-events:none;">${label}</div>
-        </div>
+      <div style="position:relative;width:44px;height:52px;cursor:pointer;user-select:none;-webkit-user-select:none;">
+        <div style="position:absolute;bottom:100%;left:50%;transform:translateX(-50%);background:rgba(0,0,0,0.45);color:white;font-size:9px;padding:2px 5px;border-radius:3px;white-space:nowrap;max-width:80px;overflow:hidden;text-overflow:ellipsis;pointer-events:none;margin-bottom:2px;">${name}</div>
+        <svg width="44" height="44" viewBox="0 0 44 44" xmlns="http://www.w3.org/2000/svg" style="display:block;filter:drop-shadow(0 2px 4px rgba(0,0,0,0.45));">
+          <polygon points="22,3 41,22 22,41 3,22" fill="${fillColor}" stroke="white" stroke-width="2.5"/>
+          <text x="22" y="22" text-anchor="middle" dominant-baseline="middle" font-size="10" font-weight="bold" fill="white" font-family="Arial,sans-serif">${label}</text>
+        </svg>
       </div>
     `;
   };
@@ -419,7 +419,7 @@ export default function MapPage() {
     points.forEach((point, idx) => {
       if (!point.lat || !point.lng) return;
 
-      // 완료 상태 확인 (statusKey 형식으로)
+      // 완료 상태 확인
       const addrPart = point.address?.trim() || point.destination?.trim() || '';
       const key = `${addrPart}:${(point.complaint || '').trim()}:none`;
       const st = statusesRef.current[key];
@@ -430,12 +430,12 @@ export default function MapPage() {
         position: new naver.maps.LatLng(point.lat, point.lng),
         icon: {
           content: makeAdditionalMarkerContent(point, idx, !!isDone),
-          anchor: new naver.maps.Point(17, 17),
+          anchor: new naver.maps.Point(22, 22), // 44x44 마커 중앙
         },
         zIndex: 10,
       });
 
-      // 탭 시 상세 팝업 (삽입 위치 선택 포함)
+      // 탭 시 상세 팝업
       naver.maps.Event.addListener(marker, 'click', () => {
         if (currentZoomRef.current >= PULSE_THRESHOLD) {
           setSelectedAdditional(point);
@@ -443,11 +443,77 @@ export default function MapPage() {
         }
       });
 
+      // ★ 롱프레스 — 추가지점 경로선 초록 깜박임
+      const startLongPress = () => {
+        longPressTimerRef.current = setTimeout(() => {
+          blinkAdditionalSegment(point);
+        }, 700);
+      };
+      const cancelLongPress = () => {
+        if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current);
+      };
+      naver.maps.Event.addListener(marker, 'mousedown', startLongPress);
+      naver.maps.Event.addListener(marker, 'mouseup', cancelLongPress);
+      naver.maps.Event.addListener(marker, 'touchstart', startLongPress);
+      naver.maps.Event.addListener(marker, 'touchend', cancelLongPress);
+
       additionalMarkersRef.current.push(marker);
     });
 
     // insertAfterOrder가 설정된 추가지점 경로선 연결
     drawAdditionalPolylines(points);
+  };
+
+  // ★ 추가지점 경로선 초록 깜박임 (롱프레스)
+  const blinkAdditionalSegment = (point: AdditionalPoint) => {
+    if (!naverMapRef.current || !point.lat || !point.lng || point.insertAfterOrder == null) return;
+    const naver = (window as any).naver;
+    const map = naverMapRef.current;
+    const routePoints = routeRef.current?.points ?? [];
+
+    const fromPoint = routePoints.find(p => p.order === point.insertAfterOrder);
+    const toPoint = routePoints.find(p => p.order === (point.insertAfterOrder! + 1));
+
+    // 기존 blink 정리
+    const cleanupBlink = () => {
+      if (blinkIntervalRef.current) { clearInterval(blinkIntervalRef.current); blinkIntervalRef.current = null; }
+      if (blinkRestoreRef.current) { clearTimeout(blinkRestoreRef.current); blinkRestoreRef.current = null; }
+      if (blinkPolylineRef.current) { blinkPolylineRef.current.setMap(null); blinkPolylineRef.current = null; }
+      blinkArrowsRef.current = [];
+    };
+    cleanupBlink();
+
+    // 추가지점 전후 구간 coords
+    const coords: { lat: number; lng: number }[] = [];
+    if (fromPoint) coords.push({ lat: fromPoint.lat, lng: fromPoint.lng });
+    coords.push({ lat: point.lat!, lng: point.lng! });
+    if (toPoint) coords.push({ lat: toPoint.lat, lng: toPoint.lng });
+
+    if (coords.length < 2) return;
+
+    blinkPolylineRef.current = new naver.maps.Polyline({
+      map,
+      path: coords.map(c => new naver.maps.LatLng(c.lat, c.lng)),
+      strokeColor: '#1b5e20',
+      strokeWeight: 8,
+      strokeOpacity: 1,
+      zIndex: 100,
+    });
+
+    const countBefore = arrowMarkersRef.current.length;
+    placeArrows(coords, null, map, naver);
+    blinkArrowsRef.current = arrowMarkersRef.current.slice(countBefore);
+
+    let visible = true;
+    blinkIntervalRef.current = setInterval(() => {
+      visible = !visible;
+      if (blinkPolylineRef.current) blinkPolylineRef.current.setOptions({ strokeOpacity: visible ? 1 : 0 });
+      blinkArrowsRef.current.forEach(a => a.setMap(visible ? map : null));
+    }, 300);
+
+    blinkRestoreRef.current = setTimeout(() => {
+      cleanupBlink();
+    }, 5000);
   };
 
   // ★ 추가지점 경로선 연결 (insertAfterOrder 기반)
@@ -492,13 +558,14 @@ export default function MapPage() {
 
       const fromPoint = routePoints.find(p => p.order === fromOrder);
       const toPoint = routePoints.find(p => p.order === toOrder);
-      const addLatLng = new naver.maps.LatLng(point.lat, point.lng);
+      const addLat = point.lat!;
+      const addLng = point.lng!;
 
-      // fromPoint → 추가지점 경로선 + 화살표
+      // fromPoint → 추가지점 경로선 (실선, 기존과 동일 스타일)
       if (fromPoint) {
         const coords1 = [
           { lat: fromPoint.lat, lng: fromPoint.lng },
-          { lat: point.lat!, lng: point.lng! },
+          { lat: addLat, lng: addLng },
         ];
         const line1 = new naver.maps.Polyline({
           map,
@@ -506,17 +573,16 @@ export default function MapPage() {
           strokeColor: '#FF6B35',
           strokeWeight: 6,
           strokeOpacity: 1,
-          strokeStyle: 'shortdash',
           zIndex: 8,
         });
         additionalPolylinesRef.current.push(line1);
         placeArrows(coords1, null, map, naver);
       }
 
-      // 추가지점 → toPoint 경로선 + 화살표
+      // 추가지점 → toPoint 경로선 (실선, 기존과 동일 스타일)
       if (toPoint) {
         const coords2 = [
-          { lat: point.lat!, lng: point.lng! },
+          { lat: addLat, lng: addLng },
           { lat: toPoint.lat, lng: toPoint.lng },
         ];
         const line2 = new naver.maps.Polyline({
@@ -525,7 +591,6 @@ export default function MapPage() {
           strokeColor: '#FF6B35',
           strokeWeight: 6,
           strokeOpacity: 1,
-          strokeStyle: 'shortdash',
           zIndex: 8,
         });
         additionalPolylinesRef.current.push(line2);
@@ -721,7 +786,7 @@ export default function MapPage() {
       );
     }
     // 직선 완료 후 추가지점 경로선 재적용
-    drawAdditionalPolylines(additionalPoints);
+    drawAdditionalPolylines(additionalPointsRef.current);
   };
 
   const drawRoadLines = async (points: RoutePoint[], map: any, naver: any) => {
@@ -738,11 +803,10 @@ export default function MapPage() {
 
     // ★ 도로 경로 렌더 완료 후 추가지점 경로선 재적용 헬퍼
     const applyAdditionalAfterRoad = () => {
-      // polylinesRef가 채워진 직후 추가지점 경로선 재적용
       additionalPolylinesRef.current.forEach(p => p.setMap(null));
       additionalPolylinesRef.current = [];
       hiddenPolylinesRef.current = [];
-      drawAdditionalPolylines(additionalPoints);
+      drawAdditionalPolylines(additionalPointsRef.current);
     };
 
     // 공통 렌더링 함수
@@ -878,8 +942,7 @@ export default function MapPage() {
       drawRoadLines(points, map, naver);
     } else {
       drawStraightLines(points, map, naver);
-      // 직선 모드는 동기적으로 완료되므로 즉시 재적용
-      setTimeout(() => drawAdditionalPolylines(additionalPoints), 50);
+      setTimeout(() => drawAdditionalPolylines(additionalPointsRef.current), 50);
     }
   };
 
@@ -1336,6 +1399,7 @@ export default function MapPage() {
       p.id === selectedAdditional.id ? { ...p, insertAfterOrder } : p
     );
     setAdditionalPoints(updated);
+    additionalPointsRef.current = updated;
     // localStorage 업데이트
     try {
       const draft = JSON.parse(localStorage.getItem('draft-route') || '{}');
@@ -1344,6 +1408,8 @@ export default function MapPage() {
       localStorage.setItem('draft-route', JSON.stringify(draft));
     } catch {}
     setShowInsertModal(false);
+    // 경로선 즉시 재적용
+    drawAdditionalMarkers(updated);
   };
 
   // ★ 추가지점 삭제
@@ -1355,6 +1421,7 @@ export default function MapPage() {
     }
     const updated = additionalPoints.filter(p => p.id !== id);
     setAdditionalPoints(updated);
+    additionalPointsRef.current = updated;
     try {
       const draft = JSON.parse(localStorage.getItem('draft-route') || '{}');
       draft.additionalPoints = updated;
@@ -1362,6 +1429,7 @@ export default function MapPage() {
       localStorage.setItem('draft-route', JSON.stringify(draft));
     } catch {}
     setShowInsertModal(false);
+    drawAdditionalMarkers(updated);
   };
 
   // 작업상태 저장 (자동저장 - 카드리스트와 동일 방식)
