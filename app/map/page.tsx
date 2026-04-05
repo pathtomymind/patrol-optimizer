@@ -461,7 +461,7 @@ export default function MapPage() {
     const map = naverMapRef.current;
     const routePoints = routeRef.current.points;
 
-    // 기존 추가지점 경로선 제거
+    // 기존 추가지점 경로선 + 화살표 제거
     additionalPolylinesRef.current.forEach(p => p.setMap(null));
     additionalPolylinesRef.current = [];
 
@@ -479,54 +479,57 @@ export default function MapPage() {
       const toOrder = fromOrder + 1;
 
       // fromPoint → toPoint 사이의 기존 경로선 숨기기
-      // polylinesRef[i]는 route.points[i] → route.points[i+1] 구간
-      // route.points에서 order === fromOrder인 인덱스 찾기
       const fromIdx = routePoints.findIndex(p => p.order === fromOrder);
       if (fromIdx >= 0 && fromIdx < polylinesRef.current.length) {
         const existingPl = polylinesRef.current[fromIdx];
         if (existingPl) {
           existingPl.setMap(null);
-          hiddenPolylinesRef.current.push(fromIdx);
+          if (!hiddenPolylinesRef.current.includes(fromIdx)) {
+            hiddenPolylinesRef.current.push(fromIdx);
+          }
         }
       }
 
       const fromPoint = routePoints.find(p => p.order === fromOrder);
       const toPoint = routePoints.find(p => p.order === toOrder);
-
       const addLatLng = new naver.maps.LatLng(point.lat, point.lng);
 
-      // fromPoint → 추가지점 경로선 (오렌지 점선)
+      // fromPoint → 추가지점 경로선 + 화살표
       if (fromPoint) {
+        const coords1 = [
+          { lat: fromPoint.lat, lng: fromPoint.lng },
+          { lat: point.lat!, lng: point.lng! },
+        ];
         const line1 = new naver.maps.Polyline({
           map,
-          path: [
-            new naver.maps.LatLng(fromPoint.lat, fromPoint.lng),
-            addLatLng,
-          ],
-          strokeColor: '#f97316',
+          path: coords1.map(c => new naver.maps.LatLng(c.lat, c.lng)),
+          strokeColor: '#FF6B35',
           strokeWeight: 6,
           strokeOpacity: 1,
           strokeStyle: 'shortdash',
           zIndex: 8,
         });
         additionalPolylinesRef.current.push(line1);
+        placeArrows(coords1, null, map, naver);
       }
 
-      // 추가지점 → toPoint 경로선 (오렌지 점선)
+      // 추가지점 → toPoint 경로선 + 화살표
       if (toPoint) {
+        const coords2 = [
+          { lat: point.lat!, lng: point.lng! },
+          { lat: toPoint.lat, lng: toPoint.lng },
+        ];
         const line2 = new naver.maps.Polyline({
           map,
-          path: [
-            addLatLng,
-            new naver.maps.LatLng(toPoint.lat, toPoint.lng),
-          ],
-          strokeColor: '#f97316',
+          path: coords2.map(c => new naver.maps.LatLng(c.lat, c.lng)),
+          strokeColor: '#FF6B35',
           strokeWeight: 6,
           strokeOpacity: 1,
           strokeStyle: 'shortdash',
           zIndex: 8,
         });
         additionalPolylinesRef.current.push(line2);
+        placeArrows(coords2, null, map, naver);
       }
     });
   };
@@ -717,6 +720,8 @@ export default function MapPage() {
         naver
       );
     }
+    // 직선 완료 후 추가지점 경로선 재적용
+    drawAdditionalPolylines(additionalPoints);
   };
 
   const drawRoadLines = async (points: RoutePoint[], map: any, naver: any) => {
@@ -731,6 +736,15 @@ export default function MapPage() {
       from, to: points[i + 1], color: getLineColor(from, points[i + 1]),
     }));
 
+    // ★ 도로 경로 렌더 완료 후 추가지점 경로선 재적용 헬퍼
+    const applyAdditionalAfterRoad = () => {
+      // polylinesRef가 채워진 직후 추가지점 경로선 재적용
+      additionalPolylinesRef.current.forEach(p => p.setMap(null));
+      additionalPolylinesRef.current = [];
+      hiddenPolylinesRef.current = [];
+      drawAdditionalPolylines(additionalPoints);
+    };
+
     // 공통 렌더링 함수
     const renderResults = (results: { coords: { lat: number; lng: number }[]; color: string }[]) => {
       results.forEach(({ coords, color }) => {
@@ -741,6 +755,8 @@ export default function MapPage() {
         polylinesRef.current.push(polyline);
         placeArrows(coords, null, map, naver);
       });
+      // 렌더 완료 후 추가지점 경로선 재적용
+      applyAdditionalAfterRoad();
     };
 
     // 직선 fallback 렌더링
@@ -753,6 +769,7 @@ export default function MapPage() {
         });
         polylinesRef.current.push(polyline);
       });
+      applyAdditionalAfterRoad();
     };
 
     // ① ORS 시도 (주 서비스 - 안정적)
@@ -861,12 +878,9 @@ export default function MapPage() {
       drawRoadLines(points, map, naver);
     } else {
       drawStraightLines(points, map, naver);
+      // 직선 모드는 동기적으로 완료되므로 즉시 재적용
+      setTimeout(() => drawAdditionalPolylines(additionalPoints), 50);
     }
-
-    // 경로선 재그리기 후 추가지점 경로선도 재적용
-    setTimeout(() => {
-      drawAdditionalPolylines(additionalPoints);
-    }, lineModeRef.current === 'road' ? 1000 : 100);
   };
 
   const drawRoute = () => {
@@ -991,6 +1005,8 @@ export default function MapPage() {
     const map = naverMapRef.current;
 
     const segIdx = markerIdx;
+    // 추가지점으로 숨겨진 구간이면 blink 건너뜀
+    if (hiddenPolylinesRef.current.includes(segIdx)) return;
     const polyline = polylinesRef.current[segIdx];
     if (!polyline) return;
 
