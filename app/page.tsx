@@ -1258,9 +1258,14 @@ export default function Home() {
                         })()}
 
                         {/* ★ 이 지점 다음에 삽입된 추가지점 카드 */}
-                        {insertedAfter.map((ap, apIdx) => {
+                        {insertedAfter.map((ap) => {
                           const apIdx2 = additionalPoints.findIndex(p => p.id === ap.id);
                           const label = `A${apIdx2 + 1}`;
+                          const addrPart = ap.address?.trim() || ap.destination?.trim() || '';
+                          const apKey = `${addrPart}:${(ap.complaint || '').trim()}:none`;
+                          const apSt = pointStatuses[apKey];
+                          const apDone = apSt && ['민원처리완료','기처리','확인불가'].includes(apSt.status);
+                          const apCardBg = apDone ? 'rgba(255,255,255,0.12)' : 'rgba(235,100,0,0.55)';
                           return (
                             <div key={`ap-${ap.id}`}>
                               <div className="flex justify-center py-1.5">
@@ -1271,39 +1276,61 @@ export default function Home() {
                                   </svg>
                                 </div>
                               </div>
-                              <div className="mx-2 rounded px-3 py-3" style={{ background: 'rgba(249,115,22,0.35)', border: '1px solid rgba(249,115,22,0.5)' }}>
+                              <div className="mx-2 rounded px-3 py-3"
+                                style={{ background: apCardBg, cursor: 'pointer' }}
+                                onClick={() => { setEditingAdditionalPoint(ap); setAdditionalForm({ address: ap.address, destination: ap.destination, complaint: ap.complaint, manager: ap.manager, photoUrl: ap.photoUrl }); setAdditionalCoordStatus(ap.lat && ap.lng ? 'success' : 'idle'); setAdditionalCoord({ lat: ap.lat || null, lng: ap.lng || null, placeName: ap.placeName || null, source: ap.source || null, coordMessage: ap.coordMessage || null }); setAdditionalInsertAfter(ap.insertAfterOrder ?? null); setShowAdditionalModal(true); document.body.style.overflow = 'hidden'; }}>
                                 <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
                                   {/* 마름모 배지 */}
-                                  <div style={{ flexShrink: 0, position: 'relative', width: '32px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                  <div style={{ flexShrink: 0, width: '32px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                                     <svg width="32" height="32" viewBox="0 0 32 32">
-                                      <polygon points="16,2 30,16 16,30 2,16" fill="#f97316" stroke="white" strokeWidth="1.5"/>
+                                      <polygon points="16,2 30,16 16,30 2,16" fill={apDone ? '#1565c0' : '#f97316'} stroke="white" strokeWidth="1.5"/>
                                       <text x="16" y="20" textAnchor="middle" fontSize="9" fontWeight="bold" fill="white" fontFamily="Arial,sans-serif">{label}</text>
                                     </svg>
                                   </div>
-                                  <div style={{ flex: 1 }}>
-                                    <p className="text-sm leading-snug font-medium">
-                                      <span style={{ color: '#fbbf77' }}>{ap.address}{ap.destination ? ` (${ap.destination})` : ''}</span>
-                                    </p>
-                                    {ap.complaint && (
+                                  <div style={{ flex: 1, display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
+                                    <div className="flex-1">
+                                      <p className="text-sm leading-snug font-medium">
+                                        <span style={{ color: '#a5d6a7' }}>{ap.address}{ap.destination ? ` (${ap.destination})` : ''}</span>
+                                      </p>
+                                      {ap.placeName && (
+                                        <div style={{ display: 'flex', gap: '6px', marginTop: '2px', color: '#a5d6a7', fontSize: '12px' }}>
+                                          <span style={{ flexShrink: 0 }}>🔍</span>
+                                          <span>{ap.placeName}</span>
+                                        </div>
+                                      )}
+                                      {ap.coordMessage && (
+                                        <div style={{ display: 'flex', gap: '6px', marginTop: '2px', fontSize: '12px' }}>
+                                          <span style={{ flexShrink: 0 }}>📍</span>
+                                          <span style={{ color: ap.coordMessage?.includes('⚠️') ? '#ffb74d' : '#fff176' }}>{ap.coordMessage}</span>
+                                        </div>
+                                      )}
+                                      <div style={{ borderTop: '1px solid rgba(255,255,255,0.15)', marginTop: 5, marginBottom: 4 }} />
                                       <div style={{ display: 'flex', gap: '6px', marginTop: '2px' }}>
                                         <span style={{ color: 'rgba(255,255,255,0.6)', fontSize: '12px', width: '4rem', flexShrink: 0 }}>민원내용:</span>
-                                        <span style={{ color: '#fde68a', fontSize: '12px' }}>{ap.complaint}</span>
+                                        <span style={{ color: '#a5d6a7', fontSize: '12px' }}>{ap.complaint || ''}</span>
                                       </div>
-                                    )}
-                                    {ap.manager && (
                                       <div style={{ display: 'flex', gap: '6px', marginTop: '2px' }}>
                                         <span style={{ color: 'rgba(255,255,255,0.6)', fontSize: '12px', width: '4rem', flexShrink: 0 }}>담당자:</span>
-                                        <span style={{ color: '#fde68a', fontSize: '12px' }}>{ap.manager}</span>
+                                        <span style={{ color: '#a5d6a7', fontSize: '12px' }}>{ap.manager || ''}</span>
                                       </div>
-                                    )}
-                                  </div>
-                                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', flexShrink: 0, justifyContent: 'flex-end', alignSelf: 'flex-end' }}>
-                                    <button
-                                      onClick={() => window.open(`tmap://route?goalname=${encodeURIComponent(ap.destination || ap.address)}&goaly=${ap.lat}&goalx=${ap.lng}`)}
-                                      className="text-xs text-white px-3 py-1.5 rounded font-bold" style={{ background: '#0a3d8f' }}>티맵</button>
-                                    <button
-                                      onClick={() => window.open(`nmap://navigation?dlat=${ap.lat}&dlng=${ap.lng}&dname=${encodeURIComponent(ap.destination || ap.address)}&appname=patrol-optimizer`)}
-                                      className="text-xs text-white px-3 py-1.5 rounded font-bold" style={{ background: '#1b5e20' }}>네이버</button>
+                                      <div style={{ borderTop: '1px solid rgba(255,255,255,0.2)', marginTop: 6, marginBottom: 4 }} />
+                                      <div style={{ display: 'flex', gap: '6px', marginTop: '2px' }}>
+                                        <span style={{ color: 'rgba(255,255,255,0.6)', fontSize: '12px', width: '4rem', flexShrink: 0 }}>작업상태:</span>
+                                        <span style={{ color: '#80cbc4', fontWeight: 'bold', fontSize: '12px' }}>{apSt?.status || ''}</span>
+                                      </div>
+                                      <div style={{ display: 'flex', gap: '6px', marginTop: '2px' }}>
+                                        <span style={{ color: 'rgba(255,255,255,0.6)', fontSize: '12px', width: '4rem', flexShrink: 0 }}>작업메모:</span>
+                                        <span style={{ color: '#a5d6a7', fontSize: '12px' }}>{apSt?.memo || ''}</span>
+                                      </div>
+                                    </div>
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', flexShrink: 0, justifyContent: 'flex-end', alignSelf: 'flex-end' }}>
+                                      <button
+                                        onClick={(e) => { e.stopPropagation(); window.open(`tmap://route?goalname=${encodeURIComponent(ap.destination || ap.address)}&goaly=${ap.lat}&goalx=${ap.lng}`); }}
+                                        className="text-xs text-white px-3 py-1.5 rounded font-bold" style={{ background: '#0a3d8f' }}>티맵</button>
+                                      <button
+                                        onClick={(e) => { e.stopPropagation(); window.open(`nmap://navigation?dlat=${ap.lat}&dlng=${ap.lng}&dname=${encodeURIComponent(ap.destination || ap.address)}&appname=patrol-optimizer`); }}
+                                        className="text-xs text-white px-3 py-1.5 rounded font-bold" style={{ background: '#1b5e20' }}>네이버</button>
+                                    </div>
                                   </div>
                                 </div>
                               </div>
