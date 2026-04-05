@@ -104,6 +104,12 @@ export default function MapPage() {
   const additionalMarkersRef = useRef<naver.maps.Marker[]>([]);
   const [showInsertModal, setShowInsertModal] = useState(false);
   const [selectedAdditional, setSelectedAdditional] = useState<AdditionalPoint | null>(null);
+  // ★ 지도뷰 추가지점 입력 팝업
+  const [showMapAddModal, setShowMapAddModal] = useState(false);
+  const [mapAddForm, setMapAddForm] = useState({ address: '', destination: '', complaint: '', manager: '' });
+  const [mapAddCoordStatus, setMapAddCoordStatus] = useState<'idle'|'loading'|'success'|'error'>('idle');
+  const [mapAddCoord, setMapAddCoord] = useState<{ lat: number|null; lng: number|null; placeName: string|null; source: string|null; coordMessage: string|null }>({ lat: null, lng: null, placeName: null, source: null, coordMessage: null });
+  const [mapAddSaving, setMapAddSaving] = useState(false);
 
   // ★ 내 위치 추적
   const [isTracking, setIsTracking] = useState(false);
@@ -1650,6 +1656,64 @@ export default function MapPage() {
     drawAdditionalMarkers(updated);
   };
 
+  // ★ 지도뷰 추가지점 좌표 확인
+  const handleMapAddCoordCheck = async () => {
+    if (!mapAddForm.address && !mapAddForm.destination) return;
+    setMapAddCoordStatus('loading');
+    try {
+      const res = await fetch('/api/geocode', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ address: mapAddForm.address, destination: mapAddForm.destination }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setMapAddCoord({ lat: data.lat, lng: data.lng, placeName: data.placeName || null, source: data.source || null, coordMessage: data.coordMessage || null });
+        setMapAddCoordStatus('success');
+      } else {
+        setMapAddCoordStatus('error');
+      }
+    } catch {
+      setMapAddCoordStatus('error');
+    }
+  };
+
+  // ★ 지도뷰 추가지점 저장
+  const handleMapAddSave = async () => {
+    if (mapAddCoordStatus !== 'success') return;
+    setMapAddSaving(true);
+    const newPoint: AdditionalPoint = {
+      id: Date.now(),
+      ...mapAddForm,
+      photoUrl: '',
+      lat: mapAddCoord.lat,
+      lng: mapAddCoord.lng,
+      placeName: mapAddCoord.placeName,
+      source: mapAddCoord.source,
+      coordMessage: mapAddCoord.coordMessage,
+      isAdditional: true,
+      insertAfterOrder: null,
+    };
+    const updated = [...additionalPointsRef.current, newPoint];
+    setAdditionalPoints(updated);
+    additionalPointsRef.current = updated;
+    // localStorage + Redis 동기화
+    try {
+      const draft = JSON.parse(localStorage.getItem('draft-route') || '{}');
+      draft.additionalPoints = updated;
+      draft.lastModified = Date.now();
+      localStorage.setItem('draft-route', JSON.stringify(draft));
+    } catch {}
+    const today = routeRef.current?.date ?? new Date().toLocaleDateString('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/\. /g, '-').replace('.', '');
+    await fetch('/api/save-additional', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ date: today, points: updated }) }).catch(() => {});
+    drawAdditionalMarkers(updated);
+    setMapAddSaving(false);
+    setShowMapAddModal(false);
+    setMapAddForm({ address: '', destination: '', complaint: '', manager: '' });
+    setMapAddCoordStatus('idle');
+    setMapAddCoord({ lat: null, lng: null, placeName: null, source: null, coordMessage: null });
+  };
+
   // 작업상태 저장 (자동저장 - 카드리스트와 동일 방식)
   const handleSaveStatus = async (status: string, memo: string) => {
     if (!selectedPoint || !route) return;
@@ -1792,6 +1856,20 @@ export default function MapPage() {
               <div style={{ width: 9, height: 9, borderRadius: '50%', background: '#1565c0', border: '1px solid white' }} />
               <span style={{ color: 'rgba(255,255,255,0.7)', fontSize: '10px' }}>완료</span>
             </div>
+            {/* ★ 추가지점 버튼 */}
+            <button
+              onClick={() => setShowMapAddModal(true)}
+              style={{
+                background: 'rgba(249,115,22,0.85)',
+                border: '1px solid rgba(249,115,22,0.9)',
+                color: 'white', fontSize: '10px', fontWeight: 'bold',
+                padding: '3px 8px', borderRadius: '12px',
+                cursor: 'pointer',
+                display: 'flex', alignItems: 'center', gap: '3px',
+                flexShrink: 0,
+              }}>
+              <span style={{ fontSize: '12px' }}>+</span>추가지점
+            </button>
             {/* 보고서 버튼 */}
             <button
               onClick={handleGenerateReport}
@@ -1892,6 +1970,78 @@ export default function MapPage() {
         </div>
       )}
 
+      {/* ★ 지도뷰 추가지점 입력 팝업 */}
+      {showMapAddModal && (
+        <div style={{ position: 'fixed', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 300, background: 'rgba(0,0,0,0.65)' }}
+          onClick={() => setShowMapAddModal(false)}>
+          <div style={{ background: '#1a3a6e', borderRadius: '12px', padding: '20px', width: '88%', maxWidth: '400px', boxShadow: '0 8px 32px rgba(0,0,0,0.5)' }}
+            onClick={e => e.stopPropagation()}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
+              <h2 style={{ color: 'white', fontWeight: 'bold', fontSize: '14px', margin: 0 }}>추가지점 입력</h2>
+              <button onClick={() => setShowMapAddModal(false)} style={{ color: 'white', background: 'none', border: 'none', fontSize: '18px', cursor: 'pointer' }}>✕</button>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              {/* 주소 */}
+              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                <span style={{ color: '#90caf9', fontSize: '11px', width: '50px', flexShrink: 0 }}>주소</span>
+                <input value={mapAddForm.address} onChange={e => setMapAddForm(f => ({ ...f, address: e.target.value }))}
+                  placeholder="도로명/지번 주소"
+                  style={{ flex: 1, borderRadius: '4px', padding: '6px 8px', fontSize: '11px', color: 'white', background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.3)' }} />
+              </div>
+              {/* 목적지 */}
+              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                <span style={{ color: '#90caf9', fontSize: '11px', width: '50px', flexShrink: 0 }}>목적지</span>
+                <input value={mapAddForm.destination} onChange={e => setMapAddForm(f => ({ ...f, destination: e.target.value }))}
+                  placeholder="상호명, 건물명 등"
+                  style={{ flex: 1, borderRadius: '4px', padding: '6px 8px', fontSize: '11px', color: 'white', background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.3)' }} />
+              </div>
+              {/* 민원내용 */}
+              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                <span style={{ color: '#90caf9', fontSize: '11px', width: '50px', flexShrink: 0 }}>민원내용</span>
+                <input value={mapAddForm.complaint} onChange={e => setMapAddForm(f => ({ ...f, complaint: e.target.value }))}
+                  placeholder="불법현수막 등"
+                  style={{ flex: 1, borderRadius: '4px', padding: '6px 8px', fontSize: '11px', color: 'white', background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.3)' }} />
+              </div>
+              {/* 담당자 */}
+              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                <span style={{ color: '#90caf9', fontSize: '11px', width: '50px', flexShrink: 0 }}>담당자</span>
+                <input value={mapAddForm.manager} onChange={e => setMapAddForm(f => ({ ...f, manager: e.target.value }))}
+                  placeholder="이름"
+                  style={{ flex: 1, borderRadius: '4px', padding: '6px 8px', fontSize: '11px', color: 'white', background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.3)' }} />
+              </div>
+
+              {/* 좌표 확인 */}
+              <button onClick={handleMapAddCoordCheck}
+                disabled={(!mapAddForm.address && !mapAddForm.destination) || mapAddCoordStatus === 'loading'}
+                style={{ padding: '8px', borderRadius: '6px', border: 'none', background: '#0a3d8f', color: 'white', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer', marginTop: '4px' }}>
+                {mapAddCoordStatus === 'loading' ? '확인 중...' : '좌표 확인'}
+              </button>
+
+              {/* 좌표 결과 */}
+              {mapAddCoordStatus === 'success' && (
+                <div style={{ background: 'rgba(100,255,150,0.1)', border: '1px solid rgba(100,255,150,0.3)', borderRadius: '6px', padding: '8px', fontSize: '11px' }}>
+                  <div style={{ color: '#a5d6a7', fontWeight: 'bold', marginBottom: '2px' }}>✅ 좌표 확인 완료</div>
+                  {mapAddCoord.placeName && <div style={{ color: 'white' }}>📍 {mapAddCoord.placeName}</div>}
+                  {mapAddCoord.coordMessage && <div style={{ color: '#ffb74d', marginTop: '2px' }}>{mapAddCoord.coordMessage}</div>}
+                  <div style={{ color: 'rgba(255,255,255,0.6)', marginTop: '2px' }}>{mapAddCoord.lat?.toFixed(6)}, {mapAddCoord.lng?.toFixed(6)}</div>
+                </div>
+              )}
+              {mapAddCoordStatus === 'error' && (
+                <div style={{ color: '#ef9a9a', fontSize: '11px', textAlign: 'center' }}>좌표를 찾을 수 없습니다. 주소나 목적지를 확인해주세요.</div>
+              )}
+
+              {/* 저장 버튼 */}
+              <button onClick={handleMapAddSave}
+                disabled={mapAddCoordStatus !== 'success' || mapAddSaving}
+                style={{ padding: '10px', borderRadius: '8px', border: 'none', background: mapAddCoordStatus === 'success' ? '#f97316' : 'rgba(100,100,100,0.5)', color: 'white', fontSize: '13px', fontWeight: 'bold', cursor: mapAddCoordStatus === 'success' ? 'pointer' : 'default', marginTop: '4px' }}>
+                {mapAddSaving ? '저장 중...' : '추가지점 저장'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ★ 겹침 목록 팝업 */}
       {showOverlapModal && overlappingPoints.length > 0 && (
         <div
@@ -1973,19 +2123,10 @@ export default function MapPage() {
             alignItems: 'center',
             justifyContent: 'center',
             zIndex: 150,
+            fontSize: '22px',
             transition: 'background 0.2s',
           }}>
-          {isTracking ? (
-            // 추적 중 - 흰색 위치 아이콘
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="white">
-              <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/>
-            </svg>
-          ) : (
-            // 추적 꺼짐 - 파란색 위치 아이콘
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="#1976d2">
-              <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/>
-            </svg>
-          )}
+          🛻
         </button>
       )}
 
