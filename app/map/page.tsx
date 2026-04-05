@@ -393,14 +393,15 @@ export default function MapPage() {
   const makeAdditionalMarkerContent = (point: AdditionalPoint, index: number, isDone: boolean) => {
     const fillColor = isDone ? '#7b1fa2' : '#f97316';
     const label = `A${index + 1}`;
-    const name = point.destination || point.address.slice(0, 10);
+    const name = (point.destination || point.address).slice(0, 10);
+    // SVG를 data URL 이미지로 변환 — 모바일 WebView에서 가장 안정적
+    const svgStr = `<svg width="44" height="44" viewBox="0 0 44 44" xmlns="http://www.w3.org/2000/svg"><polygon points="22,3 41,22 22,41 3,22" fill="${fillColor}" stroke="white" stroke-width="2.5"/><text x="22" y="27" text-anchor="middle" font-size="11" font-weight="bold" fill="white" font-family="Arial,sans-serif">${label}</text></svg>`;
+    const encoded = encodeURIComponent(svgStr);
+    const dataUrl = `data:image/svg+xml,${encoded}`;
     return `
-      <div style="position:relative;width:44px;height:52px;cursor:pointer;user-select:none;-webkit-user-select:none;">
-        <div style="position:absolute;bottom:100%;left:50%;transform:translateX(-50%);background:rgba(0,0,0,0.45);color:white;font-size:9px;padding:2px 5px;border-radius:3px;white-space:nowrap;max-width:80px;overflow:hidden;text-overflow:ellipsis;pointer-events:none;margin-bottom:2px;">${name}</div>
-        <svg width="44" height="44" viewBox="0 0 44 44" xmlns="http://www.w3.org/2000/svg" style="display:block;filter:drop-shadow(0 2px 4px rgba(0,0,0,0.45));">
-          <polygon points="22,3 41,22 22,41 3,22" fill="${fillColor}" stroke="white" stroke-width="2.5"/>
-          <text x="22" y="22" text-anchor="middle" dominant-baseline="middle" font-size="10" font-weight="bold" fill="white" font-family="Arial,sans-serif">${label}</text>
-        </svg>
+      <div style="position:relative;width:44px;height:56px;cursor:pointer;">
+        <div style="position:absolute;bottom:48px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,0.5);color:#fff;font-size:9px;padding:1px 4px;border-radius:3px;white-space:nowrap;max-width:80px;overflow:hidden;text-overflow:ellipsis;">${name}</div>
+        <img src="${dataUrl}" width="44" height="44" style="display:block;position:absolute;top:0;left:0;" />
       </div>
     `;
   };
@@ -430,7 +431,7 @@ export default function MapPage() {
         position: new naver.maps.LatLng(point.lat, point.lng),
         icon: {
           content: makeAdditionalMarkerContent(point, idx, !!isDone),
-          anchor: new naver.maps.Point(22, 22), // 44x44 마커 중앙
+          anchor: new naver.maps.Point(22, 22),
         },
         zIndex: 10,
       });
@@ -785,7 +786,7 @@ export default function MapPage() {
         naver
       );
     }
-    // 직선 완료 후 추가지점 경로선 재적용
+    // 직선 모드 완료 후 추가지점 경로선 재적용
     drawAdditionalPolylines(additionalPointsRef.current);
   };
 
@@ -939,10 +940,11 @@ export default function MapPage() {
 
     const points = route.points;
     if (lineModeRef.current === 'road') {
+      // 도로 모드: renderResults 콜백에서 applyAdditionalAfterRoad 호출됨
       drawRoadLines(points, map, naver);
     } else {
+      // 직선 모드: drawStraightLines 완료 후 drawAdditionalPolylines 호출됨
       drawStraightLines(points, map, naver);
-      setTimeout(() => drawAdditionalPolylines(additionalPointsRef.current), 50);
     }
   };
 
@@ -1068,8 +1070,25 @@ export default function MapPage() {
     const map = naverMapRef.current;
 
     const segIdx = markerIdx;
+
     // 추가지점으로 숨겨진 구간이면 blink 건너뜀
-    if (hiddenPolylinesRef.current.includes(segIdx)) return;
+    // hiddenPolylinesRef는 route.points 배열 인덱스(fromIdx) 기준
+    if (hiddenPolylinesRef.current.includes(segIdx)) {
+      // 대신 추가지점 포함 구간 blink
+      const currentRoute = routeRef.current;
+      if (currentRoute) {
+        const fromOrder = currentRoute.points[segIdx]?.order;
+        const additionalInSegment = additionalPointsRef.current.find(
+          p => p.insertAfterOrder === fromOrder
+        );
+        if (additionalInSegment) {
+          blinkAdditionalSegment(additionalInSegment);
+          return;
+        }
+      }
+      return;
+    }
+
     const polyline = polylinesRef.current[segIdx];
     if (!polyline) return;
 
