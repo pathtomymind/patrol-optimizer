@@ -1988,9 +1988,10 @@ export default function Home() {
             {/* 현장사진 */}
             <div className="mb-3">
               <label className="text-blue-200 text-xs mb-1 block">현장사진</label>
-              {additionalForm.photoUrl && (
-                <img src={additionalForm.photoUrl} alt="현장사진" className="w-full rounded mb-2" />
-              )}
+              {additionalForm.photoUrl ? (
+                <img src={additionalForm.photoUrl} alt="현장사진" className="w-full rounded mb-2" crossOrigin="anonymous"
+                  onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+              ) : null}
               <label className="flex items-center justify-center w-full py-2 rounded cursor-pointer text-white text-xs font-medium gap-1"
                 style={{ background: 'rgba(255,255,255,0.15)' }}>
                 📷 사진 선택
@@ -2005,6 +2006,57 @@ export default function Home() {
                   }} />
               </label>
             </div>
+
+            {/* 작업상태 / 작업메모 — 수정 모드에서만 표시 */}
+            {editingAdditionalPoint && (() => {
+              const addrPart = editingAdditionalPoint.address?.trim() || editingAdditionalPoint.destination?.trim() || '';
+              const apKey = `${addrPart}:${(editingAdditionalPoint.complaint || '').trim()}:none`;
+              const apSt = pointStatuses[apKey];
+              const apStatus = apSt?.status || '';
+              const apMemo = apSt?.memo || '';
+              const apDone = ['민원처리완료','기처리','확인불가'].includes(apStatus);
+              return (
+                <div className="mb-3 rounded-lg p-3" style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.15)' }}>
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="text-blue-300 text-xs w-16 flex-shrink-0">작업상태</span>
+                    {isAuthenticated ? (
+                      <select className="flex-1 rounded px-2 py-1 text-xs font-bold text-white"
+                        style={{ background: apDone ? 'rgba(255,255,255,0.15)' : 'rgba(235,100,0,0.65)', border: '1px solid rgba(255,255,255,0.3)' }}
+                        value={apStatus}
+                        onChange={async (e) => {
+                          const newStatus = e.target.value;
+                          const today = new Date().toLocaleDateString('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/\. /g, '-').replace('.', '');
+                          await fetch('/api/save-status', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ date: today, address: editingAdditionalPoint.address, destination: editingAdditionalPoint.destination, complaint: editingAdditionalPoint.complaint?.trim() ?? '', originalId: null, status: newStatus, memo: apMemo }) }).catch(() => {});
+                          setPointStatuses(prev => ({ ...prev, [apKey]: { status: newStatus, memo: apMemo, updatedAt: Date.now() } }));
+                        }}>
+                        <option value="" style={{ background: '#1a3a6e' }}></option>
+                        <option value="민원처리완료" style={{ background: '#7a2800' }}>민원처리완료</option>
+                        <option value="기처리" style={{ background: '#7a2800' }}>기처리</option>
+                        <option value="확인불가" style={{ background: '#7a2800' }}>확인불가</option>
+                      </select>
+                    ) : (
+                      <span className="text-teal-300 text-xs font-bold">{apStatus}</span>
+                    )}
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <span className="text-blue-300 text-xs w-16 flex-shrink-0 pt-1">작업메모</span>
+                    {isAuthenticated ? (
+                      <textarea className="flex-1 rounded px-2 py-1 text-xs text-white resize-none"
+                        style={{ background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.25)' }}
+                        rows={2} placeholder="메모 입력..." defaultValue={apMemo}
+                        onBlur={async (e) => {
+                          if (e.target.value === apMemo) return;
+                          const today = new Date().toLocaleDateString('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/\. /g, '-').replace('.', '');
+                          await fetch('/api/save-status', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ date: today, address: editingAdditionalPoint.address, destination: editingAdditionalPoint.destination, complaint: editingAdditionalPoint.complaint?.trim() ?? '', originalId: null, status: apStatus, memo: e.target.value }) }).catch(() => {});
+                          setPointStatuses(prev => ({ ...prev, [apKey]: { status: apStatus, memo: e.target.value, updatedAt: Date.now() } }));
+                        }} />
+                    ) : (
+                      <span className="text-green-300 text-xs flex-1">{apMemo}</span>
+                    )}
+                  </div>
+                </div>
+              );
+            })()}
 
             {/* 경로 삽입 위치 선택 */}
             <div className="mb-4 rounded-lg p-3" style={{ background: 'rgba(249,115,22,0.15)', border: '1px solid rgba(249,115,22,0.35)' }}>
