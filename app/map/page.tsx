@@ -653,6 +653,7 @@ export default function MapPage() {
   // hiddenPolylinesRef: 추가지점 삽입으로 숨겨진 기존 경로선 인덱스 추적
   const hiddenPolylinesRef = useRef<number[]>([]);
   const additionalPolylinesRef = useRef<naver.maps.Polyline[]>([]);
+  const additionalArrowMarkersRef = useRef<naver.maps.Marker[]>([]); // ★ 추가지점 화살표 별도 추적
 
   const drawAdditionalPolylines = (points: AdditionalPoint[]) => {
     if (!naverMapRef.current || !routeRef.current) return;
@@ -662,9 +663,15 @@ export default function MapPage() {
 
     console.log('[additional] drawAdditionalPolylines 호출 - 추가지점:', points.length, '/ polylinesRef:', polylinesRef.current.length);
 
-    // 기존 추가지점 경로선 정리
+    // 기존 추가지점 경로선 + 화살표 정리
     additionalPolylinesRef.current.forEach(p => p.setMap(null));
     additionalPolylinesRef.current = [];
+    additionalArrowMarkersRef.current.forEach(a => {
+      a.setMap(null);
+      const i = arrowMarkersRef.current.indexOf(a);
+      if (i !== -1) arrowMarkersRef.current.splice(i, 1);
+    });
+    additionalArrowMarkersRef.current = [];
 
     // 이전에 숨겼던 기존 경로선 복원
     hiddenPolylinesRef.current.forEach(idx => {
@@ -730,7 +737,9 @@ export default function MapPage() {
                     strokeColor: '#FF6B35', strokeWeight: 6, strokeOpacity: 1, zIndex: 8,
                   });
                   additionalPolylinesRef.current.push(pl);
+                  const beforeCount = arrowMarkersRef.current.length;
                   placeArrows(coords, null, map, naver);
+                  additionalArrowMarkersRef.current.push(...arrowMarkersRef.current.slice(beforeCount));
                 });
                 return;
               }
@@ -745,13 +754,17 @@ export default function MapPage() {
             const coords1 = [{ lat: fromPoint.lat, lng: fromPoint.lng }, { lat: addLat, lng: addLng }];
             const line1 = new naver.maps.Polyline({ map, path: coords1.map(c => new naver.maps.LatLng(c.lat, c.lng)), strokeColor: '#FF6B35', strokeWeight: 6, strokeOpacity: 1, zIndex: 8 });
             additionalPolylinesRef.current.push(line1);
+            const b1 = arrowMarkersRef.current.length;
             placeArrows(coords1, null, map, naver);
+            additionalArrowMarkersRef.current.push(...arrowMarkersRef.current.slice(b1));
           }
           if (toPoint) {
             const coords2 = [{ lat: addLat, lng: addLng }, { lat: toPoint.lat, lng: toPoint.lng }];
             const line2 = new naver.maps.Polyline({ map, path: coords2.map(c => new naver.maps.LatLng(c.lat, c.lng)), strokeColor: '#FF6B35', strokeWeight: 6, strokeOpacity: 1, zIndex: 8 });
             additionalPolylinesRef.current.push(line2);
+            const b2 = arrowMarkersRef.current.length;
             placeArrows(coords2, null, map, naver);
+            additionalArrowMarkersRef.current.push(...arrowMarkersRef.current.slice(b2));
           }
         };
 
@@ -763,13 +776,17 @@ export default function MapPage() {
           const coords1 = [{ lat: fromPoint.lat, lng: fromPoint.lng }, { lat: addLat, lng: addLng }];
           const line1 = new naver.maps.Polyline({ map, path: coords1.map(c => new naver.maps.LatLng(c.lat, c.lng)), strokeColor: '#FF6B35', strokeWeight: 6, strokeOpacity: 1, zIndex: 8 });
           additionalPolylinesRef.current.push(line1);
+          const b1 = arrowMarkersRef.current.length;
           placeArrows(coords1, null, map, naver);
+          additionalArrowMarkersRef.current.push(...arrowMarkersRef.current.slice(b1));
         }
         if (toPoint) {
           const coords2 = [{ lat: addLat, lng: addLng }, { lat: toPoint.lat, lng: toPoint.lng }];
           const line2 = new naver.maps.Polyline({ map, path: coords2.map(c => new naver.maps.LatLng(c.lat, c.lng)), strokeColor: '#FF6B35', strokeWeight: 6, strokeOpacity: 1, zIndex: 8 });
           additionalPolylinesRef.current.push(line2);
+          const b2 = arrowMarkersRef.current.length;
           placeArrows(coords2, null, map, naver);
+          additionalArrowMarkersRef.current.push(...arrowMarkersRef.current.slice(b2));
         }
       }
     });
@@ -2203,32 +2220,50 @@ export default function MapPage() {
                 <button onClick={() => setShowInsertModal(false)} style={{ color: 'white', background: 'none', border: 'none', fontSize: '18px', cursor: 'pointer', flexShrink: 0 }}>✕</button>
               </div>
 
-              {/* 정보 목록 — 기존과 동일, 빈 항목도 표시 */}
+              {/* 정보 목록 */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                {[
-                  { label: '주소', value: selectedAdditional.address || '' },
-                  { label: '목적지', value: selectedAdditional.destination || '' },
-                  { label: '좌표메시지', value: selectedAdditional.coordMessage || '' },
-                ].map(({ label: lbl, value }) => (
-                  <div key={lbl} style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
-                    <span style={{ color: '#90caf9', fontSize: '11px', width: '60px', flexShrink: 0, paddingTop: '2px' }}>{lbl}</span>
-                    <span style={{ color: lbl === '좌표메시지' && value?.includes('⚠️') ? '#ffb74d' : 'white', fontSize: '11px', flex: 1 }}>{value || '-'}</span>
+                {/* 주소 */}
+                <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
+                  <span style={{ color: '#90caf9', fontSize: '11px', width: '60px', flexShrink: 0, paddingTop: '2px' }}>주소</span>
+                  <span style={{ color: 'white', fontSize: '11px', flex: 1 }}>{selectedAdditional.address || ''}</span>
+                </div>
+                {/* 목적지 */}
+                <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
+                  <span style={{ color: '#90caf9', fontSize: '11px', width: '60px', flexShrink: 0, paddingTop: '2px' }}>목적지</span>
+                  <span style={{ color: 'white', fontSize: '11px', flex: 1 }}>{selectedAdditional.destination || ''}</span>
+                </div>
+                {/* 플레이스명 */}
+                <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
+                  <span style={{ color: '#90caf9', fontSize: '11px', width: '60px', flexShrink: 0, paddingTop: '2px' }}>플레이스명</span>
+                  <span style={{ color: 'white', fontSize: '11px', flex: 1 }}>{selectedAdditional.placeName || ''}</span>
+                </div>
+                {/* 좌표메시지 */}
+                {selectedAdditional.coordMessage && (
+                  <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
+                    <span style={{ color: '#90caf9', fontSize: '11px', width: '60px', flexShrink: 0, paddingTop: '2px' }}>좌표메시지</span>
+                    <span style={{ color: selectedAdditional.coordMessage?.includes('⚠️') ? '#ffb74d' : 'white', fontSize: '11px', flex: 1 }}>{selectedAdditional.coordMessage}</span>
                   </div>
-                ))}
+                )}
 
-                <div style={{ borderTop: '1px solid rgba(255,255,255,0.2)', marginTop: '4px', marginBottom: '4px' }} />
+                <div style={{ borderTop: '1px solid rgba(255,255,255,0.2)', marginTop: '2px', marginBottom: '2px' }} />
 
-                {[
-                  { label: '민원내용', value: selectedAdditional.complaint || '' },
-                  { label: '담당자', value: selectedAdditional.manager || '' },
-                ].map(({ label: lbl, value }) => (
-                  <div key={lbl} style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
-                    <span style={{ color: '#90caf9', fontSize: '11px', width: '60px', flexShrink: 0, paddingTop: '2px' }}>{lbl}</span>
-                    <span style={{ color: 'white', fontSize: '11px', flex: 1 }}>{value || '-'}</span>
-                  </div>
-                ))}
+                {/* 민원번호 */}
+                <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
+                  <span style={{ color: '#90caf9', fontSize: '11px', width: '60px', flexShrink: 0, paddingTop: '2px' }}>민원번호</span>
+                  <span style={{ color: 'white', fontSize: '11px', flex: 1 }}>{(selectedAdditional as any).originalId ? `${(selectedAdditional as any).originalId}번` : ''}</span>
+                </div>
+                {/* 민원내용 */}
+                <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
+                  <span style={{ color: '#90caf9', fontSize: '11px', width: '60px', flexShrink: 0, paddingTop: '2px' }}>민원내용</span>
+                  <span style={{ color: 'white', fontSize: '11px', flex: 1 }}>{selectedAdditional.complaint || ''}</span>
+                </div>
+                {/* 담당자 */}
+                <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
+                  <span style={{ color: '#90caf9', fontSize: '11px', width: '60px', flexShrink: 0, paddingTop: '2px' }}>담당자</span>
+                  <span style={{ color: 'white', fontSize: '11px', flex: 1 }}>{selectedAdditional.manager || ''}</span>
+                </div>
 
-                {/* 현장사진 + 사진설명 */}
+                {/* 현장사진 */}
                 <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
                   <span style={{ color: '#90caf9', fontSize: '11px', width: '60px', flexShrink: 0, paddingTop: '2px' }}>현장사진</span>
                   <div style={{ flex: 1 }}>
@@ -2241,16 +2276,15 @@ export default function MapPage() {
                     )}
                   </div>
                 </div>
+                {/* 사진설명 — 레이블 없이 사진 아래 표시 */}
+                {(selectedAdditional as any).photoDescription && (
+                  <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
+                    <span style={{ width: '60px', flexShrink: 0 }} />
+                    <span style={{ color: 'rgba(255,255,255,0.65)', fontSize: '11px', flex: 1 }}>{(selectedAdditional as any).photoDescription}</span>
+                  </div>
+                )}
 
-                {/* 사진설명 — 사진 아래 */}
-                <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
-                  <span style={{ width: '60px', flexShrink: 0 }} />
-                  <span style={{ color: 'rgba(255,255,255,0.65)', fontSize: '11px', flex: 1 }}>
-                    {(selectedAdditional as any).photoDescription || ''}
-                  </span>
-                </div>
-
-                {/* 작업상태 — 관리자만 수정, 일반은 읽기 전용 */}
+                {/* 작업상태/메모 — 관리자: 수정 가능 / 일반: 읽기전용 */}
                 <div style={{ marginTop: '4px', paddingTop: '12px', borderTop: '1px solid rgba(255,255,255,0.2)' }}>
                   {isAdmin ? (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
@@ -2325,44 +2359,43 @@ export default function MapPage() {
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                       <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
                         <span style={{ color: '#90caf9', fontSize: '11px', width: '60px', flexShrink: 0 }}>작업상태</span>
-                        <span style={{ color: '#80cbc4', fontSize: '11px', fontWeight: 'bold' }}>{curStatus || '-'}</span>
+                        <span style={{ color: '#80cbc4', fontSize: '11px', fontWeight: 'bold' }}>{curStatus}</span>
                       </div>
                       <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
                         <span style={{ color: '#90caf9', fontSize: '11px', width: '60px', flexShrink: 0 }}>작업메모</span>
-                        <span style={{ color: 'white', fontSize: '11px', flex: 1 }}>{curMemo || '-'}</span>
+                        <span style={{ color: 'white', fontSize: '11px', flex: 1 }}>{curMemo}</span>
                       </div>
                     </div>
                   )}
                 </div>
 
-                {/* 경로 삽입 위치 설정 — 관리자만, select 형태 */}
+                {/* 삽입위치 + 지점 삭제 — 관리자만, 한 줄 */}
                 {isAdmin && (
-                  <div style={{ marginTop: '8px', padding: '10px 12px', borderRadius: '8px', background: 'rgba(249,115,22,0.15)', border: '1px solid rgba(249,115,22,0.35)', display: 'flex', gap: '8px', alignItems: 'center' }}>
-                    <span style={{ color: '#fbbf77', fontSize: '11px', flexShrink: 0 }}>📌 삽입위치</span>
-                    <select
-                      value={selectedAdditional.insertAfterOrder ?? ''}
-                      onChange={(e) => {
-                        const val = e.target.value === '' ? null : Number(e.target.value);
-                        handleInsertAfterSave(val);
-                      }}
-                      style={{ flex: 1, borderRadius: '4px', padding: '5px 8px', fontSize: '11px', color: 'white', background: 'rgba(255,255,255,0.12)', border: '1px solid rgba(249,115,22,0.5)' }}>
-                      <option value="" style={{ background: '#1a3a6e' }}>연결 안 함</option>
-                      {route?.points.filter(p => p.source === 'fixed' ? p.order === 0 : true).map(p => (
-                        <option key={p.order} value={p.order} style={{ background: '#1a3a6e' }}>
-                          {p.order === 0 ? '출발지(시청) 다음' : `${p.order}번 (${p.destination || p.address.slice(0, 10)}) 다음`}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                )}
-
-                {/* 삭제 버튼 — 관리자만 */}
-                {isAdmin && (
-                  <button
-                    onClick={() => handleAdditionalDelete(selectedAdditional.id)}
-                    style={{ width: '100%', padding: '10px', borderRadius: '8px', border: 'none', background: '#c62828', color: 'white', fontSize: '13px', fontWeight: 'bold', cursor: 'pointer', marginTop: '4px' }}>
-                    이 추가지점 삭제
-                  </button>
+                  <>
+                    <div style={{ borderTop: '1px solid rgba(255,255,255,0.2)', marginTop: '4px' }} />
+                    <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                      <span style={{ color: '#fbbf77', fontSize: '11px', flexShrink: 0 }}>📌 삽입위치</span>
+                      <select
+                        value={selectedAdditional.insertAfterOrder ?? ''}
+                        onChange={(e) => {
+                          const val = e.target.value === '' ? null : Number(e.target.value);
+                          handleInsertAfterSave(val);
+                        }}
+                        style={{ flex: 1, borderRadius: '4px', padding: '5px 6px', fontSize: '10px', color: 'white', background: 'rgba(255,255,255,0.12)', border: '1px solid rgba(249,115,22,0.5)' }}>
+                        <option value="" style={{ background: '#1a3a6e' }}>연결 안 함</option>
+                        {route?.points.filter(p => p.source === 'fixed' ? p.order === 0 : true).map(p => (
+                          <option key={p.order} value={p.order} style={{ background: '#1a3a6e' }}>
+                            {p.order === 0 ? '출발지 다음' : `${p.order}번 다음`}
+                          </option>
+                        ))}
+                      </select>
+                      <button
+                        onClick={() => handleAdditionalDelete(selectedAdditional.id)}
+                        style={{ padding: '5px 10px', borderRadius: '6px', border: 'none', background: '#c62828', color: 'white', fontSize: '11px', fontWeight: 'bold', cursor: 'pointer', flexShrink: 0 }}>
+                        지점 삭제
+                      </button>
+                    </div>
+                  </>
                 )}
               </div>
 
