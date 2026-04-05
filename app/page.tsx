@@ -139,6 +139,9 @@ export default function Home() {
     draft.additionalPoints = updated;
     draft.lastModified = Date.now();
     localStorage.setItem('draft-route', JSON.stringify(draft));
+    // Redis 동기화
+    const today = new Date().toLocaleDateString('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/\. /g, '-').replace('.', '');
+    fetch('/api/save-additional', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ date: today, points: updated }) }).catch(() => {});
     setDeletingId(null);
   };
 
@@ -189,6 +192,9 @@ export default function Home() {
     draft.additionalPoints = updatedPoints;
     draft.lastModified = Date.now();
     localStorage.setItem('draft-route', JSON.stringify(draft));
+    // Redis 동기화
+    const today = new Date().toLocaleDateString('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/\. /g, '-').replace('.', '');
+    fetch('/api/save-additional', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ date: today, points: updatedPoints }) }).catch(() => {});
     setIsSaving(false);
     setShowAdditionalModal(false);
   };
@@ -205,6 +211,9 @@ export default function Home() {
     delete draft.additionalPoints;
     draft.lastModified = Date.now();
     localStorage.setItem('draft-route', JSON.stringify(draft));
+    // Redis 동기화
+    const today = new Date().toLocaleDateString('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/\. /g, '-').replace('.', '');
+    fetch('/api/save-additional', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ date: today, points: [] }) }).catch(() => {});
   };
 
   const handleDirectSave = async () => {

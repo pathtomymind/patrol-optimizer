@@ -190,14 +190,32 @@ export default function MapPage() {
 
   // 2. 네이버 지도 SDK 로드
   useEffect(() => {
-    // additionalPoints localStorage 로드
-    try {
-      const draft = JSON.parse(localStorage.getItem('draft-route') || '{}');
-      if (draft.additionalPoints?.length > 0) {
-        setAdditionalPoints(draft.additionalPoints);
-        additionalPointsRef.current = draft.additionalPoints;
+    // additionalPoints Redis API로 로드 (localStorage는 기기간 공유 안 됨)
+    const loadAdditionalPoints = async () => {
+      try {
+        const today = new Date().toLocaleDateString('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/\. /g, '-').replace('.', '');
+        const res = await fetch(`/api/get-additional?date=${today}`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.points?.length > 0) {
+            setAdditionalPoints(data.points);
+            additionalPointsRef.current = data.points;
+            console.log('[additional] Redis에서 추가지점 로드:', data.points.length, '개');
+          }
+        }
+      } catch (e) {
+        // Redis 실패 시 localStorage fallback
+        try {
+          const draft = JSON.parse(localStorage.getItem('draft-route') || '{}');
+          if (draft.additionalPoints?.length > 0) {
+            setAdditionalPoints(draft.additionalPoints);
+            additionalPointsRef.current = draft.additionalPoints;
+            console.log('[additional] localStorage fallback:', draft.additionalPoints.length, '개');
+          }
+        } catch {}
       }
-    } catch {}
+    };
+    loadAdditionalPoints();
   }, []);
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -1503,13 +1521,15 @@ export default function MapPage() {
     );
     setAdditionalPoints(updated);
     additionalPointsRef.current = updated;
-    // localStorage 업데이트
+    // localStorage + Redis 동기화
     try {
       const draft = JSON.parse(localStorage.getItem('draft-route') || '{}');
       draft.additionalPoints = updated;
       draft.lastModified = Date.now();
       localStorage.setItem('draft-route', JSON.stringify(draft));
     } catch {}
+    const today = routeRef.current?.date ?? new Date().toLocaleDateString('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/\. /g, '-').replace('.', '');
+    fetch('/api/save-additional', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ date: today, points: updated }) }).catch(() => {});
     setShowInsertModal(false);
     // 경로선 즉시 재적용
     drawAdditionalMarkers(updated);
@@ -1525,12 +1545,15 @@ export default function MapPage() {
     const updated = additionalPoints.filter(p => p.id !== id);
     setAdditionalPoints(updated);
     additionalPointsRef.current = updated;
+    // localStorage + Redis 동기화
     try {
       const draft = JSON.parse(localStorage.getItem('draft-route') || '{}');
       draft.additionalPoints = updated;
       draft.lastModified = Date.now();
       localStorage.setItem('draft-route', JSON.stringify(draft));
     } catch {}
+    const today = routeRef.current?.date ?? new Date().toLocaleDateString('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/\. /g, '-').replace('.', '');
+    fetch('/api/save-additional', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ date: today, points: updated }) }).catch(() => {});
     setShowInsertModal(false);
     drawAdditionalMarkers(updated);
   };
