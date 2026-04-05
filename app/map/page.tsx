@@ -390,37 +390,52 @@ export default function MapPage() {
   };
 
   // ★ 추가 지점 마름모 마커 콘텐츠 생성
-  // ★ Canvas로 마름모 마커 PNG 생성 — 모바일 완전 호환
-  const makeAdditionalMarkerDataUrl = (label: string, isDone: boolean): string => {
+  // ★ 추가지점 마커 data URL 캐시 (Canvas는 브라우저에서만 작동)
+  const additionalMarkerUrlsRef = useRef<Record<string, string>>({});
+
+  const getAdditionalMarkerUrl = (label: string, isDone: boolean): string => {
+    const cacheKey = `${label}_${isDone}`;
+    if (additionalMarkerUrlsRef.current[cacheKey]) {
+      return additionalMarkerUrlsRef.current[cacheKey];
+    }
+    if (typeof window === 'undefined' || typeof document === 'undefined') return '';
     const size = 48;
-    const canvas = document.createElement('canvas');
-    canvas.width = size;
-    canvas.height = size;
-    const ctx = canvas.getContext('2d')!;
-    const cx = size / 2;
-    const cy = size / 2;
-    const r = size / 2 - 3;
-    ctx.beginPath();
-    ctx.moveTo(cx, cy - r);
-    ctx.lineTo(cx + r, cy);
-    ctx.lineTo(cx, cy + r);
-    ctx.lineTo(cx - r, cy);
-    ctx.closePath();
-    ctx.shadowColor = 'rgba(0,0,0,0.4)';
-    ctx.shadowBlur = 4;
-    ctx.shadowOffsetY = 2;
-    ctx.fillStyle = isDone ? '#7b1fa2' : '#f97316';
-    ctx.fill();
-    ctx.shadowColor = 'transparent';
-    ctx.strokeStyle = 'white';
-    ctx.lineWidth = 2.5;
-    ctx.stroke();
-    ctx.fillStyle = 'white';
-    ctx.font = `bold 11px Arial, sans-serif`;
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(label, cx, cy + 1);
-    return canvas.toDataURL('image/png');
+    try {
+      const canvas = document.createElement('canvas');
+      canvas.width = size;
+      canvas.height = size;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return '';
+      const cx = size / 2;
+      const cy = size / 2;
+      const r = size / 2 - 3;
+      ctx.beginPath();
+      ctx.moveTo(cx, cy - r);
+      ctx.lineTo(cx + r, cy);
+      ctx.lineTo(cx, cy + r);
+      ctx.lineTo(cx - r, cy);
+      ctx.closePath();
+      ctx.shadowColor = 'rgba(0,0,0,0.4)';
+      ctx.shadowBlur = 4;
+      ctx.shadowOffsetY = 2;
+      ctx.fillStyle = isDone ? '#7b1fa2' : '#f97316';
+      ctx.fill();
+      ctx.shadowColor = 'transparent';
+      ctx.strokeStyle = 'white';
+      ctx.lineWidth = 2.5;
+      ctx.stroke();
+      ctx.fillStyle = 'white';
+      ctx.font = `bold 11px Arial, sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(label, cx, cy + 1);
+      const url = canvas.toDataURL('image/png');
+      additionalMarkerUrlsRef.current[cacheKey] = url;
+      return url;
+    } catch (e) {
+      console.error('[additional] Canvas 마커 생성 실패:', e);
+      return '';
+    }
   };
 
   // ★ 추가 지점 마커 전체 그리기 + insertAfterOrder 경로선 연결
@@ -441,7 +456,7 @@ export default function MapPage() {
       const st = statusesRef.current[key];
       const isDone = !!(st && DONE_STATUSES.includes(st.status));
       const label = `A${idx + 1}`;
-      const dataUrl = makeAdditionalMarkerDataUrl(label, isDone);
+      const dataUrl = getAdditionalMarkerUrl(label, isDone);
       const name = (point.destination || point.address).slice(0, 10);
 
       // ★ icon.url 방식 — 모바일 네이버 지도 SDK에서 가장 안정적
@@ -551,7 +566,7 @@ export default function MapPage() {
 
     console.log('[additional] drawAdditionalPolylines 호출 - 추가지점:', points.length, '/ polylinesRef:', polylinesRef.current.length);
 
-    // 기존 추가지점 경로선 + 화살표 제거
+    // 기존 추가지점 경로선 정리
     additionalPolylinesRef.current.forEach(p => p.setMap(null));
     additionalPolylinesRef.current = [];
 
@@ -562,13 +577,15 @@ export default function MapPage() {
     });
     hiddenPolylinesRef.current = [];
 
+    const isRoadMode = lineModeRef.current === 'road';
+
     points.forEach(point => {
       if (!point.lat || !point.lng || point.insertAfterOrder == null) return;
 
       const fromOrder = point.insertAfterOrder;
       const toOrder = fromOrder + 1;
 
-      // fromPoint → toPoint 사이의 기존 경로선 숨기기
+      // 숨길 기존 경로선 찾기 (fromOrder → toOrder 사이)
       const fromIdx = routePoints.findIndex(p => p.order === fromOrder);
       if (fromIdx >= 0 && fromIdx < polylinesRef.current.length) {
         const existingPl = polylinesRef.current[fromIdx];
@@ -585,40 +602,79 @@ export default function MapPage() {
       const addLat = point.lat!;
       const addLng = point.lng!;
 
-      // fromPoint → 추가지점 경로선 (실선, 기존과 동일 스타일)
-      if (fromPoint) {
-        const coords1 = [
-          { lat: fromPoint.lat, lng: fromPoint.lng },
-          { lat: addLat, lng: addLng },
-        ];
-        const line1 = new naver.maps.Polyline({
-          map,
-          path: coords1.map(c => new naver.maps.LatLng(c.lat, c.lng)),
-          strokeColor: '#FF6B35',
-          strokeWeight: 6,
-          strokeOpacity: 1,
-          zIndex: 8,
-        });
-        additionalPolylinesRef.current.push(line1);
-        placeArrows(coords1, null, map, naver);
-      }
+      if (isRoadMode) {
+        // 도로 모드: ORS로 실제 도로 경로 요청
+        const drawRoadSegments = async () => {
+          const segPairs = [];
+          if (fromPoint) segPairs.push({ fromLng: fromPoint.lng, fromLat: fromPoint.lat, toLng: addLng, toLat: addLat });
+          if (toPoint) segPairs.push({ fromLng: addLng, fromLat: addLat, toLng: toPoint.lng, toLat: toPoint.lat });
 
-      // 추가지점 → toPoint 경로선 (실선, 기존과 동일 스타일)
-      if (toPoint) {
-        const coords2 = [
-          { lat: addLat, lng: addLng },
-          { lat: toPoint.lat, lng: toPoint.lng },
-        ];
-        const line2 = new naver.maps.Polyline({
-          map,
-          path: coords2.map(c => new naver.maps.LatLng(c.lat, c.lng)),
-          strokeColor: '#FF6B35',
-          strokeWeight: 6,
-          strokeOpacity: 1,
-          zIndex: 8,
-        });
-        additionalPolylinesRef.current.push(line2);
-        placeArrows(coords2, null, map, naver);
+          try {
+            const res = await fetch('/api/ors-route', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                date: routeRef.current?.date ?? '',
+                version: `additional_${point.id}`,
+                segments: segPairs,
+              }),
+            });
+            if (res.ok) {
+              const data = await res.json();
+              if (data.results?.length) {
+                data.results.forEach((r: { ok: boolean; coords?: { lat: number; lng: number }[] }, i: number) => {
+                  const fallback = i === 0
+                    ? (fromPoint ? [{ lat: fromPoint.lat, lng: fromPoint.lng }, { lat: addLat, lng: addLng }] : [])
+                    : (toPoint ? [{ lat: addLat, lng: addLng }, { lat: toPoint.lat, lng: toPoint.lng }] : []);
+                  const coords = (r.ok && r.coords && r.coords.length > 1) ? r.coords : fallback;
+                  if (coords.length < 2) return;
+                  const pl = new naver.maps.Polyline({
+                    map,
+                    path: coords.map((c: { lat: number; lng: number }) => new naver.maps.LatLng(c.lat, c.lng)),
+                    strokeColor: '#FF6B35', strokeWeight: 6, strokeOpacity: 1, zIndex: 8,
+                  });
+                  additionalPolylinesRef.current.push(pl);
+                  placeArrows(coords, null, map, naver);
+                });
+                return;
+              }
+            }
+          } catch {}
+          // ORS 실패 시 직선 fallback
+          drawStraightAdditionalLines();
+        };
+
+        const drawStraightAdditionalLines = () => {
+          if (fromPoint) {
+            const coords1 = [{ lat: fromPoint.lat, lng: fromPoint.lng }, { lat: addLat, lng: addLng }];
+            const line1 = new naver.maps.Polyline({ map, path: coords1.map(c => new naver.maps.LatLng(c.lat, c.lng)), strokeColor: '#FF6B35', strokeWeight: 6, strokeOpacity: 1, zIndex: 8 });
+            additionalPolylinesRef.current.push(line1);
+            placeArrows(coords1, null, map, naver);
+          }
+          if (toPoint) {
+            const coords2 = [{ lat: addLat, lng: addLng }, { lat: toPoint.lat, lng: toPoint.lng }];
+            const line2 = new naver.maps.Polyline({ map, path: coords2.map(c => new naver.maps.LatLng(c.lat, c.lng)), strokeColor: '#FF6B35', strokeWeight: 6, strokeOpacity: 1, zIndex: 8 });
+            additionalPolylinesRef.current.push(line2);
+            placeArrows(coords2, null, map, naver);
+          }
+        };
+
+        drawRoadSegments();
+
+      } else {
+        // 직선 모드
+        if (fromPoint) {
+          const coords1 = [{ lat: fromPoint.lat, lng: fromPoint.lng }, { lat: addLat, lng: addLng }];
+          const line1 = new naver.maps.Polyline({ map, path: coords1.map(c => new naver.maps.LatLng(c.lat, c.lng)), strokeColor: '#FF6B35', strokeWeight: 6, strokeOpacity: 1, zIndex: 8 });
+          additionalPolylinesRef.current.push(line1);
+          placeArrows(coords1, null, map, naver);
+        }
+        if (toPoint) {
+          const coords2 = [{ lat: addLat, lng: addLng }, { lat: toPoint.lat, lng: toPoint.lng }];
+          const line2 = new naver.maps.Polyline({ map, path: coords2.map(c => new naver.maps.LatLng(c.lat, c.lng)), strokeColor: '#FF6B35', strokeWeight: 6, strokeOpacity: 1, zIndex: 8 });
+          additionalPolylinesRef.current.push(line2);
+          placeArrows(coords2, null, map, naver);
+        }
       }
     });
   };
