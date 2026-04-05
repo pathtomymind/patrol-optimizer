@@ -399,44 +399,28 @@ export default function MapPage() {
     const ctx = canvas.getContext('2d')!;
     const cx = size / 2;
     const cy = size / 2;
-    const r = size / 2 - 2;
-    // 마름모 경로
+    const r = size / 2 - 3;
     ctx.beginPath();
     ctx.moveTo(cx, cy - r);
     ctx.lineTo(cx + r, cy);
     ctx.lineTo(cx, cy + r);
     ctx.lineTo(cx - r, cy);
     ctx.closePath();
-    // 그림자
     ctx.shadowColor = 'rgba(0,0,0,0.4)';
     ctx.shadowBlur = 4;
     ctx.shadowOffsetY = 2;
     ctx.fillStyle = isDone ? '#7b1fa2' : '#f97316';
     ctx.fill();
     ctx.shadowColor = 'transparent';
-    // 테두리
     ctx.strokeStyle = 'white';
     ctx.lineWidth = 2.5;
     ctx.stroke();
-    // 텍스트
     ctx.fillStyle = 'white';
     ctx.font = `bold 11px Arial, sans-serif`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText(label, cx, cy + 1);
     return canvas.toDataURL('image/png');
-  };
-
-  const makeAdditionalMarkerContent = (point: AdditionalPoint, index: number, isDone: boolean) => {
-    const label = `A${index + 1}`;
-    const name = (point.destination || point.address).slice(0, 10);
-    const dataUrl = makeAdditionalMarkerDataUrl(label, isDone);
-    return `
-      <div style="position:relative;width:48px;height:60px;cursor:pointer;">
-        <div style="position:absolute;bottom:50px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,0.5);color:#fff;font-size:9px;padding:1px 4px;border-radius:3px;white-space:nowrap;max-width:80px;overflow:hidden;text-overflow:ellipsis;">${name}</div>
-        <img src="${dataUrl}" width="48" height="48" style="position:absolute;top:0;left:0;display:block;" />
-      </div>
-    `;
   };
 
   // ★ 추가 지점 마커 전체 그리기 + insertAfterOrder 경로선 연결
@@ -446,30 +430,33 @@ export default function MapPage() {
     const map = naverMapRef.current;
     const showMarkers = currentZoomRef.current >= ZOOM_THRESHOLD;
 
-    // 기존 추가지점 마커 제거
     additionalMarkersRef.current.forEach(m => m.setMap(null));
     additionalMarkersRef.current = [];
 
     points.forEach((point, idx) => {
       if (!point.lat || !point.lng) return;
 
-      // 완료 상태 확인
       const addrPart = point.address?.trim() || point.destination?.trim() || '';
       const key = `${addrPart}:${(point.complaint || '').trim()}:none`;
       const st = statusesRef.current[key];
-      const isDone = st && DONE_STATUSES.includes(st.status);
+      const isDone = !!(st && DONE_STATUSES.includes(st.status));
+      const label = `A${idx + 1}`;
+      const dataUrl = makeAdditionalMarkerDataUrl(label, isDone);
+      const name = (point.destination || point.address).slice(0, 10);
 
+      // ★ icon.url 방식 — 모바일 네이버 지도 SDK에서 가장 안정적
       const marker = new naver.maps.Marker({
         map: showMarkers ? map : null,
         position: new naver.maps.LatLng(point.lat, point.lng),
         icon: {
-          content: makeAdditionalMarkerContent(point, idx, !!isDone),
+          url: dataUrl,
+          size: new naver.maps.Size(48, 48),
           anchor: new naver.maps.Point(24, 24),
         },
+        title: name,
         zIndex: 10,
       });
 
-      // 탭 시 상세 팝업
       naver.maps.Event.addListener(marker, 'click', () => {
         if (currentZoomRef.current >= PULSE_THRESHOLD) {
           setSelectedAdditional(point);
@@ -477,7 +464,6 @@ export default function MapPage() {
         }
       });
 
-      // ★ 롱프레스 — 추가지점 경로선 초록 깜박임
       const startLongPress = () => {
         longPressTimerRef.current = setTimeout(() => {
           blinkAdditionalSegment(point);
@@ -494,7 +480,6 @@ export default function MapPage() {
       additionalMarkersRef.current.push(marker);
     });
 
-    // insertAfterOrder가 설정된 추가지점 경로선 연결
     drawAdditionalPolylines(points);
   };
 
@@ -825,7 +810,7 @@ export default function MapPage() {
       );
     }
     // 직선 모드 완료 후 추가지점 경로선 재적용
-    drawAdditionalPolylines(additionalPointsRef.current);
+    setTimeout(() => drawAdditionalPolylines(additionalPointsRef.current), 0);
   };
 
   const drawRoadLines = async (points: RoutePoint[], map: any, naver: any) => {
@@ -844,11 +829,15 @@ export default function MapPage() {
     const applyAdditionalAfterRoad = () => {
       const pts = additionalPointsRef.current;
       console.log('[additional] applyAdditionalAfterRoad 호출 - 추가지점 수:', pts.length, '/ polylinesRef 수:', polylinesRef.current.length);
+      // 기존 추가지점 경로선 완전 정리
       additionalPolylinesRef.current.forEach(p => p.setMap(null));
       additionalPolylinesRef.current = [];
       hiddenPolylinesRef.current = [];
       if (pts.length > 0) {
-        drawAdditionalPolylines(pts);
+        // setTimeout 0으로 현재 렌더링 사이클 완료 후 실행 보장
+        setTimeout(() => {
+          drawAdditionalPolylines(pts);
+        }, 0);
       }
     };
 
