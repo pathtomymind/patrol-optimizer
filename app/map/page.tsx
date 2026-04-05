@@ -516,18 +516,12 @@ export default function MapPage() {
     drawAdditionalPolylines(points);
   };
 
-  // ★ 추가지점 경로선 초록 깜박임 (롱프레스) — A1→10번 구간만
-  const blinkAdditionalSegment = (point: AdditionalPoint) => {
-    if (!naverMapRef.current || !point.lat || !point.lng || point.insertAfterOrder == null) return;
+  // ★ fromPoint → 추가지점 구간 blink (14번 롱프레스용)
+  const blinkFromPointToAdditional = (fromPoint: RoutePoint, addPoint: AdditionalPoint) => {
+    if (!naverMapRef.current || !addPoint.lat || !addPoint.lng) return;
     const naver = (window as any).naver;
     const map = naverMapRef.current;
-    const routePoints = routeRef.current?.points ?? [];
 
-    // A1 → toPoint (insertAfterOrder + 1) 구간만
-    const toPoint = routePoints.find(p => p.order === (point.insertAfterOrder! + 1));
-    if (!toPoint) return;
-
-    // 기존 blink 정리
     const cleanupBlink = () => {
       if (blinkIntervalRef.current) { clearInterval(blinkIntervalRef.current); blinkIntervalRef.current = null; }
       if (blinkRestoreRef.current) { clearTimeout(blinkRestoreRef.current); blinkRestoreRef.current = null; }
@@ -541,10 +535,28 @@ export default function MapPage() {
     };
     cleanupBlink();
 
-    const coords: { lat: number; lng: number }[] = [
-      { lat: point.lat!, lng: point.lng! },
-      { lat: toPoint.lat, lng: toPoint.lng },
-    ];
+    // 도로 모드: additionalPolylinesRef에서 fromPoint→A1 구간 경로 추출
+    let coords: { lat: number; lng: number }[] = [];
+    if (lineModeRef.current === 'road' && additionalPolylinesRef.current.length > 0) {
+      // additionalPolylinesRef[0]이 fromPoint→A1, [1]이 A1→toPoint (순서 기반)
+      const firstPl = additionalPolylinesRef.current[0];
+      try {
+        const path = (firstPl as any).getPath();
+        if (path && path.getLength) {
+          for (let i = 0; i < path.getLength(); i++) {
+            const pt = path.getAt(i);
+            coords.push({ lat: pt.lat(), lng: pt.lng() });
+          }
+        }
+      } catch {}
+    }
+    // 직선 모드 또는 도로 경로 추출 실패 시 직선
+    if (coords.length < 2) {
+      coords = [
+        { lat: fromPoint.lat, lng: fromPoint.lng },
+        { lat: addPoint.lat!, lng: addPoint.lng! },
+      ];
+    }
 
     blinkPolylineRef.current = new naver.maps.Polyline({
       map,
@@ -566,9 +578,75 @@ export default function MapPage() {
       blinkArrowsRef.current.forEach(a => a.setMap(visible ? map : null));
     }, 300);
 
-    blinkRestoreRef.current = setTimeout(() => {
-      cleanupBlink();
-    }, 5000);
+    blinkRestoreRef.current = setTimeout(() => { cleanupBlink(); }, 5000);
+  };
+
+  // ★ 추가지점 경로선 초록 깜박임 (A1 롱프레스용) — A1→10번 구간만
+  const blinkAdditionalSegment = (point: AdditionalPoint) => {
+    if (!naverMapRef.current || !point.lat || !point.lng || point.insertAfterOrder == null) return;
+    const naver = (window as any).naver;
+    const map = naverMapRef.current;
+    const routePoints = routeRef.current?.points ?? [];
+
+    const toPoint = routePoints.find(p => p.order === (point.insertAfterOrder! + 1));
+    if (!toPoint) return;
+
+    const cleanupBlink = () => {
+      if (blinkIntervalRef.current) { clearInterval(blinkIntervalRef.current); blinkIntervalRef.current = null; }
+      if (blinkRestoreRef.current) { clearTimeout(blinkRestoreRef.current); blinkRestoreRef.current = null; }
+      if (blinkPolylineRef.current) { blinkPolylineRef.current.setMap(null); blinkPolylineRef.current = null; }
+      blinkArrowsRef.current.forEach(a => {
+        a.setMap(null);
+        const i = arrowMarkersRef.current.indexOf(a);
+        if (i !== -1) arrowMarkersRef.current.splice(i, 1);
+      });
+      blinkArrowsRef.current = [];
+    };
+    cleanupBlink();
+
+    // 도로 모드: additionalPolylinesRef[1]이 A1→toPoint 구간 경로
+    let coords: { lat: number; lng: number }[] = [];
+    if (lineModeRef.current === 'road' && additionalPolylinesRef.current.length > 1) {
+      const secondPl = additionalPolylinesRef.current[1];
+      try {
+        const path = (secondPl as any).getPath();
+        if (path && path.getLength) {
+          for (let i = 0; i < path.getLength(); i++) {
+            const pt = path.getAt(i);
+            coords.push({ lat: pt.lat(), lng: pt.lng() });
+          }
+        }
+      } catch {}
+    }
+    // 직선 모드 또는 경로 추출 실패
+    if (coords.length < 2) {
+      coords = [
+        { lat: point.lat!, lng: point.lng! },
+        { lat: toPoint.lat, lng: toPoint.lng },
+      ];
+    }
+
+    blinkPolylineRef.current = new naver.maps.Polyline({
+      map,
+      path: coords.map(c => new naver.maps.LatLng(c.lat, c.lng)),
+      strokeColor: '#1b5e20',
+      strokeWeight: 8,
+      strokeOpacity: 1,
+      zIndex: 100,
+    });
+
+    const countBefore = arrowMarkersRef.current.length;
+    placeArrows(coords, null, map, naver);
+    blinkArrowsRef.current = arrowMarkersRef.current.slice(countBefore);
+
+    let visible = true;
+    blinkIntervalRef.current = setInterval(() => {
+      visible = !visible;
+      if (blinkPolylineRef.current) blinkPolylineRef.current.setOptions({ strokeOpacity: visible ? 1 : 0 });
+      blinkArrowsRef.current.forEach(a => a.setMap(visible ? map : null));
+    }, 300);
+
+    blinkRestoreRef.current = setTimeout(() => { cleanupBlink(); }, 5000);
   };
 
   // ★ 추가지점 경로선 연결 (insertAfterOrder 기반)
@@ -1176,18 +1254,15 @@ export default function MapPage() {
 
     const segIdx = markerIdx;
 
-    // 추가지점으로 숨겨진 구간이면 A1→toPoint 구간만 blink
-    if (hiddenPolylinesRef.current.includes(segIdx)) {
-      const currentRoute = routeRef.current;
-      if (currentRoute) {
-        const fromOrder = currentRoute.points[segIdx]?.order;
-        const additionalInSegment = additionalPointsRef.current.find(
-          p => p.insertAfterOrder === fromOrder
-        );
-        if (additionalInSegment) {
-          blinkAdditionalSegment(additionalInSegment);
-        }
-      }
+    // ★ 이 구간(segIdx → segIdx+1)에 추가지점이 삽입되어 있는지 order 기반으로 확인
+    const fromPointOrder = routeRef.current?.points[segIdx]?.order;
+    const additionalInSegment = fromPointOrder != null
+      ? additionalPointsRef.current.find(p => p.insertAfterOrder === fromPointOrder)
+      : undefined;
+
+    if (additionalInSegment && hiddenPolylinesRef.current.includes(segIdx)) {
+      // 이 구간에 A1이 삽입됨 → 14번→A1 방향을 blink
+      blinkFromPointToAdditional(routeRef.current!.points[segIdx], additionalInSegment);
       return;
     }
 

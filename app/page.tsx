@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 
 const dummyRoute = {
   version: '2026-03-01 버전1',
@@ -32,6 +32,15 @@ export default function Home() {
   }[]>([]);
   const [additionalOpen, setAdditionalOpen] = useState(false);
   const [showAdditionalModal, setShowAdditionalModal] = useState(false);
+  // 추가지점 포함 여부 다이얼로그 (포함/미포함/취소 3버튼)
+  const [showAdditionalConfirm, setShowAdditionalConfirm] = useState(false);
+  const additionalConfirmResolveRef = useRef<((v: 'include' | 'exclude' | 'cancel') => void) | null>(null);
+  const showAdditionalConfirmDialog = (): Promise<'include' | 'exclude' | 'cancel'> => {
+    return new Promise((resolve) => {
+      additionalConfirmResolveRef.current = resolve;
+      setShowAdditionalConfirm(true);
+    });
+  };
   const [editingAdditionalPoint, setEditingAdditionalPoint] = useState<{
     id: number; address: string; destination: string; complaint: string; manager: string; photoUrl: string;
     lat?: number | null; lng?: number | null; placeName?: string | null; source?: string | null; coordMessage?: string | null;
@@ -794,9 +803,9 @@ export default function Home() {
     // 추가지점 포함 여부 확인
     let includeAdditional = false;
     if (additionalPoints.filter(p => p.lat && p.lng).length > 0) {
-      includeAdditional = window.confirm(
-        `추가지점 ${additionalPoints.filter(p => p.lat && p.lng).length}개가 있습니다.\n최적화 경로 생성에 포함하시겠습니까?\n\n확인: 추가지점 포함하여 전체 재최적화\n취소: 추가지점 제외하고 기존 지점만 최적화`
-      );
+      const answer = await showAdditionalConfirmDialog();
+      if (answer === 'cancel') return;
+      includeAdditional = answer === 'include';
     }
 
     const basePoints = [
@@ -2295,6 +2304,35 @@ export default function Home() {
               ].map((text, i) => (
                 <p key={i} style={{ color: 'rgba(255,255,255,0.75)', fontSize: '11px', lineHeight: '1.6' }}>{text}</p>
               ))}
+            </div>
+          </div>
+        </div>
+      )}
+      {/* ★ 추가지점 포함 여부 3버튼 다이얼로그 */}
+      {showAdditionalConfirm && (
+        <div style={{ position: 'fixed', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999, background: 'rgba(0,0,0,0.65)' }}>
+          <div style={{ background: '#1a3a6e', borderRadius: '12px', padding: '24px 20px', width: '88%', maxWidth: '360px', boxShadow: '0 8px 32px rgba(0,0,0,0.5)' }}>
+            <p style={{ color: 'white', fontWeight: 'bold', fontSize: '14px', marginBottom: '8px' }}>추가지점 처리</p>
+            <p style={{ color: 'rgba(200,220,255,0.85)', fontSize: '12px', marginBottom: '20px', lineHeight: '1.6' }}>
+              추가지점 {additionalPoints.filter(p => p.lat && p.lng).length}개가 있습니다.<br />
+              최적화 경로 생성에 포함하시겠습니까?
+            </p>
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <button
+                onClick={() => { setShowAdditionalConfirm(false); additionalConfirmResolveRef.current?.('include'); }}
+                style={{ flex: 1, padding: '10px', borderRadius: '8px', border: 'none', background: '#0a3d8f', color: 'white', fontSize: '13px', fontWeight: 'bold', cursor: 'pointer' }}>
+                포함
+              </button>
+              <button
+                onClick={() => { setShowAdditionalConfirm(false); additionalConfirmResolveRef.current?.('exclude'); }}
+                style={{ flex: 1, padding: '10px', borderRadius: '8px', border: 'none', background: '#455a64', color: 'white', fontSize: '13px', fontWeight: 'bold', cursor: 'pointer' }}>
+                미포함
+              </button>
+              <button
+                onClick={() => { setShowAdditionalConfirm(false); additionalConfirmResolveRef.current?.('cancel'); }}
+                style={{ flex: 1, padding: '10px', borderRadius: '8px', border: 'none', background: '#7a2800', color: 'white', fontSize: '13px', fontWeight: 'bold', cursor: 'pointer' }}>
+                취소
+              </button>
             </div>
           </div>
         </div>
