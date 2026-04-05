@@ -790,6 +790,20 @@ export default function Home() {
       } else {
         setCurrentRoute(null);
       }
+      // ★ 추가지점 Redis에서 로드 (기기간 공유)
+      try {
+        const addRes = await fetch(`/api/get-additional?date=${today}`);
+        if (addRes.ok) {
+          const addData = await addRes.json();
+          if (addData.points?.length > 0) {
+            setAdditionalPoints(addData.points);
+            // localStorage에도 동기화
+            const draft = JSON.parse(localStorage.getItem('draft-route') || '{}');
+            draft.additionalPoints = addData.points;
+            localStorage.setItem('draft-route', JSON.stringify(draft));
+          }
+        }
+      } catch {}
     } catch (e) {
       console.error(e);
     } finally {
@@ -1133,7 +1147,12 @@ export default function Home() {
                   </button>
                   {cardListOpen && (
                     <div className="pt-0 pb-2">
-                      {currentRoute.points.map((point, idx) => (
+                      {currentRoute.points.map((point, idx) => {
+                        // 이 지점 다음에 삽입된 추가지점 찾기
+                        const insertedAfter = additionalPoints.filter(
+                          ap => ap.insertAfterOrder === point.order && ap.lat && ap.lng
+                        );
+                        return (
                         <div key={point.order} style={idx === 0 ? { marginTop: '28px' } : {}}>
                         {(() => {
                           const st = pointStatuses[statusKey(point)];
@@ -1237,6 +1256,61 @@ export default function Home() {
                         </div>
                           );
                         })()}
+
+                        {/* ★ 이 지점 다음에 삽입된 추가지점 카드 */}
+                        {insertedAfter.map((ap, apIdx) => {
+                          const apIdx2 = additionalPoints.findIndex(p => p.id === ap.id);
+                          const label = `A${apIdx2 + 1}`;
+                          return (
+                            <div key={`ap-${ap.id}`}>
+                              <div className="flex justify-center py-1.5">
+                                <div className="flex flex-col items-center">
+                                  <div style={{ width: 6, height: 10, background: 'rgba(249,115,22,0.6)', borderRadius: 3 }} />
+                                  <svg width="20" height="12" viewBox="0 0 20 12" fill="none">
+                                    <path d="M10 12C9.6 12 9.2 11.8 9 11.5L0.5 1.5C0.1 1 0.4 0 1 0H19C19.6 0 19.9 1 19.5 1.5L11 11.5C10.8 11.8 10.4 12 10 12Z" fill="rgba(249,115,22,0.8)" />
+                                  </svg>
+                                </div>
+                              </div>
+                              <div className="mx-2 rounded px-3 py-3" style={{ background: 'rgba(249,115,22,0.35)', border: '1px solid rgba(249,115,22,0.5)' }}>
+                                <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
+                                  {/* 마름모 배지 */}
+                                  <div style={{ flexShrink: 0, position: 'relative', width: '32px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                    <svg width="32" height="32" viewBox="0 0 32 32">
+                                      <polygon points="16,2 30,16 16,30 2,16" fill="#f97316" stroke="white" strokeWidth="1.5"/>
+                                      <text x="16" y="20" textAnchor="middle" fontSize="9" fontWeight="bold" fill="white" fontFamily="Arial,sans-serif">{label}</text>
+                                    </svg>
+                                  </div>
+                                  <div style={{ flex: 1 }}>
+                                    <p className="text-sm leading-snug font-medium">
+                                      <span style={{ color: '#fbbf77' }}>{ap.address}{ap.destination ? ` (${ap.destination})` : ''}</span>
+                                    </p>
+                                    {ap.complaint && (
+                                      <div style={{ display: 'flex', gap: '6px', marginTop: '2px' }}>
+                                        <span style={{ color: 'rgba(255,255,255,0.6)', fontSize: '12px', width: '4rem', flexShrink: 0 }}>민원내용:</span>
+                                        <span style={{ color: '#fde68a', fontSize: '12px' }}>{ap.complaint}</span>
+                                      </div>
+                                    )}
+                                    {ap.manager && (
+                                      <div style={{ display: 'flex', gap: '6px', marginTop: '2px' }}>
+                                        <span style={{ color: 'rgba(255,255,255,0.6)', fontSize: '12px', width: '4rem', flexShrink: 0 }}>담당자:</span>
+                                        <span style={{ color: '#fde68a', fontSize: '12px' }}>{ap.manager}</span>
+                                      </div>
+                                    )}
+                                  </div>
+                                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', flexShrink: 0, justifyContent: 'flex-end', alignSelf: 'flex-end' }}>
+                                    <button
+                                      onClick={() => window.open(`tmap://route?goalname=${encodeURIComponent(ap.destination || ap.address)}&goaly=${ap.lat}&goalx=${ap.lng}`)}
+                                      className="text-xs text-white px-3 py-1.5 rounded font-bold" style={{ background: '#0a3d8f' }}>티맵</button>
+                                    <button
+                                      onClick={() => window.open(`nmap://navigation?dlat=${ap.lat}&dlng=${ap.lng}&dname=${encodeURIComponent(ap.destination || ap.address)}&appname=patrol-optimizer`)}
+                                      className="text-xs text-white px-3 py-1.5 rounded font-bold" style={{ background: '#1b5e20' }}>네이버</button>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+
                           <div className="flex justify-center py-1.5">
                             <div className="flex flex-col items-center">
                               {idx < currentRoute.points.length - 1 && (
@@ -1250,7 +1324,8 @@ export default function Home() {
                             </div>
                           </div>
                         </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   )}
                 </div>

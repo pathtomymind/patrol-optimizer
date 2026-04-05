@@ -1138,6 +1138,7 @@ export default function MapPage() {
     arrowMarkersRef.current.forEach(m => m.setMap(null));
     polylinesRef.current = [];
     arrowMarkersRef.current = [];
+    additionalArrowMarkersRef.current = []; // ★ 추가지점 화살표 추적도 리셋
 
     // 추가지점 경로선도 초기화 (기존 숨김 복원 후 재그리기)
     additionalPolylinesRef.current.forEach(p => p.setMap(null));
