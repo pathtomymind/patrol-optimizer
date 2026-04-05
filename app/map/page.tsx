@@ -390,18 +390,51 @@ export default function MapPage() {
   };
 
   // ★ 추가 지점 마름모 마커 콘텐츠 생성
+  // ★ Canvas로 마름모 마커 PNG 생성 — 모바일 완전 호환
+  const makeAdditionalMarkerDataUrl = (label: string, isDone: boolean): string => {
+    const size = 48;
+    const canvas = document.createElement('canvas');
+    canvas.width = size;
+    canvas.height = size;
+    const ctx = canvas.getContext('2d')!;
+    const cx = size / 2;
+    const cy = size / 2;
+    const r = size / 2 - 2;
+    // 마름모 경로
+    ctx.beginPath();
+    ctx.moveTo(cx, cy - r);
+    ctx.lineTo(cx + r, cy);
+    ctx.lineTo(cx, cy + r);
+    ctx.lineTo(cx - r, cy);
+    ctx.closePath();
+    // 그림자
+    ctx.shadowColor = 'rgba(0,0,0,0.4)';
+    ctx.shadowBlur = 4;
+    ctx.shadowOffsetY = 2;
+    ctx.fillStyle = isDone ? '#7b1fa2' : '#f97316';
+    ctx.fill();
+    ctx.shadowColor = 'transparent';
+    // 테두리
+    ctx.strokeStyle = 'white';
+    ctx.lineWidth = 2.5;
+    ctx.stroke();
+    // 텍스트
+    ctx.fillStyle = 'white';
+    ctx.font = `bold 11px Arial, sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(label, cx, cy + 1);
+    return canvas.toDataURL('image/png');
+  };
+
   const makeAdditionalMarkerContent = (point: AdditionalPoint, index: number, isDone: boolean) => {
-    const fillColor = isDone ? '#7b1fa2' : '#f97316';
     const label = `A${index + 1}`;
     const name = (point.destination || point.address).slice(0, 10);
-    // SVG를 data URL 이미지로 변환 — 모바일 WebView에서 가장 안정적
-    const svgStr = `<svg width="44" height="44" viewBox="0 0 44 44" xmlns="http://www.w3.org/2000/svg"><polygon points="22,3 41,22 22,41 3,22" fill="${fillColor}" stroke="white" stroke-width="2.5"/><text x="22" y="27" text-anchor="middle" font-size="11" font-weight="bold" fill="white" font-family="Arial,sans-serif">${label}</text></svg>`;
-    const encoded = encodeURIComponent(svgStr);
-    const dataUrl = `data:image/svg+xml,${encoded}`;
+    const dataUrl = makeAdditionalMarkerDataUrl(label, isDone);
     return `
-      <div style="position:relative;width:44px;height:56px;cursor:pointer;">
-        <div style="position:absolute;bottom:48px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,0.5);color:#fff;font-size:9px;padding:1px 4px;border-radius:3px;white-space:nowrap;max-width:80px;overflow:hidden;text-overflow:ellipsis;">${name}</div>
-        <img src="${dataUrl}" width="44" height="44" style="display:block;position:absolute;top:0;left:0;" />
+      <div style="position:relative;width:48px;height:60px;cursor:pointer;">
+        <div style="position:absolute;bottom:50px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,0.5);color:#fff;font-size:9px;padding:1px 4px;border-radius:3px;white-space:nowrap;max-width:80px;overflow:hidden;text-overflow:ellipsis;">${name}</div>
+        <img src="${dataUrl}" width="48" height="48" style="position:absolute;top:0;left:0;display:block;" />
       </div>
     `;
   };
@@ -431,7 +464,7 @@ export default function MapPage() {
         position: new naver.maps.LatLng(point.lat, point.lng),
         icon: {
           content: makeAdditionalMarkerContent(point, idx, !!isDone),
-          anchor: new naver.maps.Point(22, 22),
+          anchor: new naver.maps.Point(24, 24),
         },
         zIndex: 10,
       });
@@ -465,32 +498,35 @@ export default function MapPage() {
     drawAdditionalPolylines(points);
   };
 
-  // ★ 추가지점 경로선 초록 깜박임 (롱프레스)
+  // ★ 추가지점 경로선 초록 깜박임 (롱프레스) — A1→10번 구간만
   const blinkAdditionalSegment = (point: AdditionalPoint) => {
     if (!naverMapRef.current || !point.lat || !point.lng || point.insertAfterOrder == null) return;
     const naver = (window as any).naver;
     const map = naverMapRef.current;
     const routePoints = routeRef.current?.points ?? [];
 
-    const fromPoint = routePoints.find(p => p.order === point.insertAfterOrder);
+    // A1 → toPoint (insertAfterOrder + 1) 구간만
     const toPoint = routePoints.find(p => p.order === (point.insertAfterOrder! + 1));
+    if (!toPoint) return;
 
     // 기존 blink 정리
     const cleanupBlink = () => {
       if (blinkIntervalRef.current) { clearInterval(blinkIntervalRef.current); blinkIntervalRef.current = null; }
       if (blinkRestoreRef.current) { clearTimeout(blinkRestoreRef.current); blinkRestoreRef.current = null; }
       if (blinkPolylineRef.current) { blinkPolylineRef.current.setMap(null); blinkPolylineRef.current = null; }
+      blinkArrowsRef.current.forEach(a => {
+        a.setMap(null);
+        const i = arrowMarkersRef.current.indexOf(a);
+        if (i !== -1) arrowMarkersRef.current.splice(i, 1);
+      });
       blinkArrowsRef.current = [];
     };
     cleanupBlink();
 
-    // 추가지점 전후 구간 coords
-    const coords: { lat: number; lng: number }[] = [];
-    if (fromPoint) coords.push({ lat: fromPoint.lat, lng: fromPoint.lng });
-    coords.push({ lat: point.lat!, lng: point.lng! });
-    if (toPoint) coords.push({ lat: toPoint.lat, lng: toPoint.lng });
-
-    if (coords.length < 2) return;
+    const coords: { lat: number; lng: number }[] = [
+      { lat: point.lat!, lng: point.lng! },
+      { lat: toPoint.lat, lng: toPoint.lng },
+    ];
 
     blinkPolylineRef.current = new naver.maps.Polyline({
       map,
@@ -527,6 +563,8 @@ export default function MapPage() {
     const naver = (window as any).naver;
     const map = naverMapRef.current;
     const routePoints = routeRef.current.points;
+
+    console.log('[additional] drawAdditionalPolylines 호출 - 추가지점:', points.length, '/ polylinesRef:', polylinesRef.current.length);
 
     // 기존 추가지점 경로선 + 화살표 제거
     additionalPolylinesRef.current.forEach(p => p.setMap(null));
@@ -804,10 +842,14 @@ export default function MapPage() {
 
     // ★ 도로 경로 렌더 완료 후 추가지점 경로선 재적용 헬퍼
     const applyAdditionalAfterRoad = () => {
+      const pts = additionalPointsRef.current;
+      console.log('[additional] applyAdditionalAfterRoad 호출 - 추가지점 수:', pts.length, '/ polylinesRef 수:', polylinesRef.current.length);
       additionalPolylinesRef.current.forEach(p => p.setMap(null));
       additionalPolylinesRef.current = [];
       hiddenPolylinesRef.current = [];
-      drawAdditionalPolylines(additionalPointsRef.current);
+      if (pts.length > 0) {
+        drawAdditionalPolylines(pts);
+      }
     };
 
     // 공통 렌더링 함수
@@ -1071,10 +1113,8 @@ export default function MapPage() {
 
     const segIdx = markerIdx;
 
-    // 추가지점으로 숨겨진 구간이면 blink 건너뜀
-    // hiddenPolylinesRef는 route.points 배열 인덱스(fromIdx) 기준
+    // 추가지점으로 숨겨진 구간이면 A1→toPoint 구간만 blink
     if (hiddenPolylinesRef.current.includes(segIdx)) {
-      // 대신 추가지점 포함 구간 blink
       const currentRoute = routeRef.current;
       if (currentRoute) {
         const fromOrder = currentRoute.points[segIdx]?.order;
@@ -1083,7 +1123,6 @@ export default function MapPage() {
         );
         if (additionalInSegment) {
           blinkAdditionalSegment(additionalInSegment);
-          return;
         }
       }
       return;
