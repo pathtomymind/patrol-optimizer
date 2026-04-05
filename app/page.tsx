@@ -1036,7 +1036,7 @@ export default function Home() {
     <div className="min-h-screen" style={{ background: 'linear-gradient(180deg, #1a3a6e 0%, #1565c0 40%, #1976d2 100%)' }}>
       {/* 헤더 */}
       <header className="px-4 py-3 text-white" style={{ background: 'linear-gradient(180deg, #0d2444 0%, #1a3a6e 100%)' }}>
-        <h1 className="text-lg font-bold text-center">길도사 정비반 <span className="text-xs font-normal">(No헤맴 보장)</span></h1>
+        <h1 className="text-lg font-bold text-center">길도사 2.0 <span className="text-xs font-normal">(No헤맴 보장)</span></h1>
         <p className="text-xs text-blue-200 mt-1 text-center leading-relaxed">
           최적화 순회 경로는 인공지능 클로드가 네이버 클라우드의 지리정보를 기반으로 동선 낭비 없는 루프형 동선으로 설계한 것입니다.
         </p>

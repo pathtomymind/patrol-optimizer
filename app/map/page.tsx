@@ -106,7 +106,7 @@ export default function MapPage() {
   const [selectedAdditional, setSelectedAdditional] = useState<AdditionalPoint | null>(null);
   // ★ 지도뷰 추가지점 입력 팝업
   const [showMapAddModal, setShowMapAddModal] = useState(false);
-  const [mapAddForm, setMapAddForm] = useState({ address: '', destination: '', complaint: '', manager: '' });
+  const [mapAddForm, setMapAddForm] = useState<{ address: string; destination: string; complaint: string; manager: string; insertAfterOrder: number | null }>({ address: '', destination: '', complaint: '', manager: '', insertAfterOrder: null });
   const [mapAddCoordStatus, setMapAddCoordStatus] = useState<'idle'|'loading'|'success'|'error'>('idle');
   const [mapAddCoord, setMapAddCoord] = useState<{ lat: number|null; lng: number|null; placeName: string|null; source: string|null; coordMessage: string|null }>({ lat: null, lng: null, placeName: null, source: null, coordMessage: null });
   const [mapAddSaving, setMapAddSaving] = useState(false);
@@ -1684,7 +1684,10 @@ export default function MapPage() {
     setMapAddSaving(true);
     const newPoint: AdditionalPoint = {
       id: Date.now(),
-      ...mapAddForm,
+      address: mapAddForm.address,
+      destination: mapAddForm.destination,
+      complaint: mapAddForm.complaint,
+      manager: mapAddForm.manager,
       photoUrl: '',
       lat: mapAddCoord.lat,
       lng: mapAddCoord.lng,
@@ -1692,7 +1695,7 @@ export default function MapPage() {
       source: mapAddCoord.source,
       coordMessage: mapAddCoord.coordMessage,
       isAdditional: true,
-      insertAfterOrder: null,
+      insertAfterOrder: mapAddForm.insertAfterOrder ?? null,
     };
     const updated = [...additionalPointsRef.current, newPoint];
     setAdditionalPoints(updated);
@@ -1709,7 +1712,7 @@ export default function MapPage() {
     drawAdditionalMarkers(updated);
     setMapAddSaving(false);
     setShowMapAddModal(false);
-    setMapAddForm({ address: '', destination: '', complaint: '', manager: '' });
+    setMapAddForm({ address: '', destination: '', complaint: '', manager: '', insertAfterOrder: null });
     setMapAddCoordStatus('idle');
     setMapAddCoord({ lat: null, lng: null, placeName: null, source: null, coordMessage: null });
   };
@@ -1779,7 +1782,7 @@ export default function MapPage() {
               cursor: 'pointer',
               flexShrink: 0,
             }}>
-            ← 카드 리스트
+            ← 메인화면
           </button>
           <div style={{ color: 'white', fontWeight: 'bold', fontSize: '15px', flex: 1 }}>순회 경로 지도</div>
           <button
@@ -1819,10 +1822,11 @@ export default function MapPage() {
               background: is3D ? 'rgba(100,220,180,0.35)' : 'rgba(255,255,255,0.08)',
               color: is3D ? '#a0ffd8' : 'rgba(255,255,255,0.5)',
               flexShrink: 0,
+              whiteSpace: 'nowrap',
             }}>
             {is3D ? '일반' : '위성'}
           </button>
-          <div style={{ display: 'flex', borderRadius: '6px', overflow: 'hidden', border: '1px solid rgba(255,255,255,0.25)' }}>
+          <div style={{ display: 'flex', borderRadius: '6px', overflow: 'hidden', border: '1px solid rgba(255,255,255,0.25)', flexShrink: 0 }}>
             <button
               onClick={() => setLineMode('straight')}
               style={{
@@ -1831,6 +1835,7 @@ export default function MapPage() {
                 fontWeight: 'bold',
                 cursor: 'pointer',
                 border: 'none',
+                whiteSpace: 'nowrap',
                 background: lineMode === 'straight' ? 'rgba(100,180,255,0.4)' : 'rgba(255,255,255,0.08)',
                 color: lineMode === 'straight' ? 'white' : 'rgba(255,255,255,0.5)',
               }}>직선</button>
@@ -1843,18 +1848,19 @@ export default function MapPage() {
                 cursor: 'pointer',
                 border: 'none',
                 borderLeft: '1px solid rgba(255,255,255,0.25)',
+                whiteSpace: 'nowrap',
                 background: lineMode === 'road' ? 'rgba(100,180,255,0.4)' : 'rgba(255,255,255,0.08)',
                 color: lineMode === 'road' ? 'white' : 'rgba(255,255,255,0.5)',
               }}>도로</button>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-              <div style={{ width: 9, height: 9, borderRadius: '50%', background: '#FF6B35', border: '1px solid white' }} />
-              <span style={{ color: 'rgba(255,255,255,0.7)', fontSize: '10px' }}>미완료</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
+              <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#FF6B35', border: '1px solid white', flexShrink: 0 }} />
+              <span style={{ color: 'rgba(255,255,255,0.7)', fontSize: '10px', whiteSpace: 'nowrap' }}>미완료</span>
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-              <div style={{ width: 9, height: 9, borderRadius: '50%', background: '#1565c0', border: '1px solid white' }} />
-              <span style={{ color: 'rgba(255,255,255,0.7)', fontSize: '10px' }}>완료</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
+              <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#1565c0', border: '1px solid white', flexShrink: 0 }} />
+              <span style={{ color: 'rgba(255,255,255,0.7)', fontSize: '10px', whiteSpace: 'nowrap' }}>완료</span>
             </div>
             {/* ★ 추가지점 버튼 */}
             <button
@@ -1863,12 +1869,11 @@ export default function MapPage() {
                 background: 'rgba(249,115,22,0.85)',
                 border: '1px solid rgba(249,115,22,0.9)',
                 color: 'white', fontSize: '10px', fontWeight: 'bold',
-                padding: '3px 8px', borderRadius: '12px',
-                cursor: 'pointer',
-                display: 'flex', alignItems: 'center', gap: '3px',
+                padding: '3px 7px', borderRadius: '12px',
+                cursor: 'pointer', whiteSpace: 'nowrap',
                 flexShrink: 0,
               }}>
-              <span style={{ fontSize: '12px' }}>+</span>추가지점
+              +추가지점
             </button>
             {/* 보고서 버튼 */}
             <button
@@ -1878,16 +1883,11 @@ export default function MapPage() {
                 background: isGeneratingReport ? 'rgba(100,100,100,0.5)' : 'rgba(255,255,255,0.15)',
                 border: '1px solid rgba(255,255,255,0.35)',
                 color: 'white', fontSize: '10px', fontWeight: 'bold',
-                padding: '3px 8px', borderRadius: '12px',
+                padding: '3px 7px', borderRadius: '12px',
                 cursor: isGeneratingReport ? 'default' : 'pointer',
-                display: 'flex', alignItems: 'center', gap: '3px',
-                flexShrink: 0,
+                whiteSpace: 'nowrap', flexShrink: 0,
               }}>
-              {isGeneratingReport ? (
-                <>⏳ 생성중</>
-              ) : (
-                <><svg width="10" height="12" viewBox="0 0 10 12" fill="white"><path d="M6 0H1C0.45 0 0 0.45 0 1V11C0 11.55 0.45 12 1 12H9C9.55 12 10 11.55 10 11V4L6 0ZM8.5 10.5H1.5V1.5H5.5V4.5H8.5V10.5Z"/></svg>보고서</>
-              )}
+              {isGeneratingReport ? '⏳생성중' : '보고서'}
             </button>
           </div>
         </div>
@@ -1970,72 +1970,106 @@ export default function MapPage() {
         </div>
       )}
 
-      {/* ★ 지도뷰 추가지점 입력 팝업 */}
+      {/* ★ 지도뷰 추가지점 입력 팝업 — page.tsx와 동일한 구조 */}
       {showMapAddModal && (
-        <div style={{ position: 'fixed', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 300, background: 'rgba(0,0,0,0.65)' }}
+        <div style={{ position: 'fixed', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 300, background: 'rgba(0,0,0,0.6)' }}
           onClick={() => setShowMapAddModal(false)}>
-          <div style={{ background: '#1a3a6e', borderRadius: '12px', padding: '20px', width: '88%', maxWidth: '400px', boxShadow: '0 8px 32px rgba(0,0,0,0.5)' }}
+          <div style={{ background: '#1a3a6e', border: '2px solid rgba(249,115,22,0.5)', borderRadius: '12px', padding: '20px', width: '320px', maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 8px 32px rgba(0,0,0,0.5)' }}
             onClick={e => e.stopPropagation()}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
-              <h2 style={{ color: 'white', fontWeight: 'bold', fontSize: '14px', margin: 0 }}>추가지점 입력</h2>
+
+            {/* 헤더 */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+              <h2 style={{ color: 'white', fontWeight: 'bold', fontSize: '15px', display: 'flex', alignItems: 'center', gap: '8px', margin: 0 }}>
+                <svg width="28" height="28" viewBox="0 0 28 28">
+                  <polygon points="14,1 27,14 14,27 1,14" fill="#f97316" stroke="none"/>
+                  <text x="14" y="18" textAnchor="middle" fontSize="9" fontWeight="bold" fill="white">
+                    {`A${additionalPoints.length + 1}`}
+                  </text>
+                </svg>
+                추가지점 입력
+              </h2>
               <button onClick={() => setShowMapAddModal(false)} style={{ color: 'white', background: 'none', border: 'none', fontSize: '18px', cursor: 'pointer' }}>✕</button>
             </div>
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              {/* 주소 */}
-              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                <span style={{ color: '#90caf9', fontSize: '11px', width: '50px', flexShrink: 0 }}>주소</span>
-                <input value={mapAddForm.address} onChange={e => setMapAddForm(f => ({ ...f, address: e.target.value }))}
-                  placeholder="도로명/지번 주소"
-                  style={{ flex: 1, borderRadius: '4px', padding: '6px 8px', fontSize: '11px', color: 'white', background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.3)' }} />
+            {/* 위치정보 묶음 */}
+            <div style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.15)', borderRadius: '8px', padding: '12px', marginBottom: '12px' }}>
+              <div style={{ marginBottom: '8px' }}>
+                <label style={{ color: '#90caf9', fontSize: '11px', display: 'block', marginBottom: '4px' }}>주소</label>
+                <input type="text" value={mapAddForm.address} placeholder=""
+                  onChange={e => { setMapAddForm(f => ({ ...f, address: e.target.value })); setMapAddCoordStatus('idle'); }}
+                  style={{ width: '100%', padding: '8px 12px', borderRadius: '4px', fontSize: '13px', outline: 'none', background: 'rgba(255,255,255,0.15)', color: mapAddCoordStatus === 'success' ? '#fbbf77' : 'white', border: 'none', boxSizing: 'border-box' }} />
               </div>
-              {/* 목적지 */}
-              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                <span style={{ color: '#90caf9', fontSize: '11px', width: '50px', flexShrink: 0 }}>목적지</span>
-                <input value={mapAddForm.destination} onChange={e => setMapAddForm(f => ({ ...f, destination: e.target.value }))}
-                  placeholder="상호명, 건물명 등"
-                  style={{ flex: 1, borderRadius: '4px', padding: '6px 8px', fontSize: '11px', color: 'white', background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.3)' }} />
+              <div style={{ marginBottom: '8px' }}>
+                <label style={{ color: '#90caf9', fontSize: '11px', display: 'block', marginBottom: '4px' }}>목적지</label>
+                <input type="text" value={mapAddForm.destination} placeholder=""
+                  onChange={e => { setMapAddForm(f => ({ ...f, destination: e.target.value })); setMapAddCoordStatus('idle'); }}
+                  style={{ width: '100%', padding: '8px 12px', borderRadius: '4px', fontSize: '13px', outline: 'none', background: 'rgba(255,255,255,0.15)', color: mapAddCoordStatus === 'success' ? '#fbbf77' : 'white', border: 'none', boxSizing: 'border-box' }} />
               </div>
-              {/* 민원내용 */}
-              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                <span style={{ color: '#90caf9', fontSize: '11px', width: '50px', flexShrink: 0 }}>민원내용</span>
-                <input value={mapAddForm.complaint} onChange={e => setMapAddForm(f => ({ ...f, complaint: e.target.value }))}
-                  placeholder="불법현수막 등"
-                  style={{ flex: 1, borderRadius: '4px', padding: '6px 8px', fontSize: '11px', color: 'white', background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.3)' }} />
-              </div>
-              {/* 담당자 */}
-              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                <span style={{ color: '#90caf9', fontSize: '11px', width: '50px', flexShrink: 0 }}>담당자</span>
-                <input value={mapAddForm.manager} onChange={e => setMapAddForm(f => ({ ...f, manager: e.target.value }))}
-                  placeholder="이름"
-                  style={{ flex: 1, borderRadius: '4px', padding: '6px 8px', fontSize: '11px', color: 'white', background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.3)' }} />
-              </div>
-
-              {/* 좌표 확인 */}
               <button onClick={handleMapAddCoordCheck}
                 disabled={(!mapAddForm.address && !mapAddForm.destination) || mapAddCoordStatus === 'loading'}
-                style={{ padding: '8px', borderRadius: '6px', border: 'none', background: '#0a3d8f', color: 'white', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer', marginTop: '4px' }}>
-                {mapAddCoordStatus === 'loading' ? '확인 중...' : '좌표 확인'}
+                style={{ width: '100%', padding: '8px', borderRadius: '4px', fontSize: '13px', fontWeight: 'bold', color: 'white', border: 'none', cursor: 'pointer', marginBottom: '8px', background: mapAddCoordStatus === 'loading' ? '#555' : '#7b2d00' }}>
+                {mapAddCoordStatus === 'loading' ? '확인 중...' : '좌표 확인하기'}
               </button>
-
-              {/* 좌표 결과 */}
+              <p style={{ fontSize: '11px', margin: 0, color: mapAddCoordStatus === 'success' ? '#fbbf77' : mapAddCoordStatus === 'error' ? '#ef9a9a' : 'rgba(255,255,255,0.5)' }}>
+                {mapAddCoordStatus === 'idle' && '주소나 목적지를 입력한 후 좌표 확인 버튼을 누르세요.'}
+                {mapAddCoordStatus === 'loading' && '좌표를 검색하는 중입니다...'}
+                {mapAddCoordStatus === 'success' && '✅ 좌표가 확인되었습니다.'}
+                {mapAddCoordStatus === 'error' && '❌ 좌표를 찾지 못했습니다.'}
+              </p>
+              {mapAddCoordStatus === 'success' && mapAddCoord.placeName && (
+                <p style={{ fontSize: '11px', marginTop: '4px', color: '#fbbf77' }}>🔍 {mapAddCoord.placeName}</p>
+              )}
               {mapAddCoordStatus === 'success' && (
-                <div style={{ background: 'rgba(100,255,150,0.1)', border: '1px solid rgba(100,255,150,0.3)', borderRadius: '6px', padding: '8px', fontSize: '11px' }}>
-                  <div style={{ color: '#a5d6a7', fontWeight: 'bold', marginBottom: '2px' }}>✅ 좌표 확인 완료</div>
-                  {mapAddCoord.placeName && <div style={{ color: 'white' }}>📍 {mapAddCoord.placeName}</div>}
-                  {mapAddCoord.coordMessage && <div style={{ color: '#ffb74d', marginTop: '2px' }}>{mapAddCoord.coordMessage}</div>}
-                  <div style={{ color: 'rgba(255,255,255,0.6)', marginTop: '2px' }}>{mapAddCoord.lat?.toFixed(6)}, {mapAddCoord.lng?.toFixed(6)}</div>
-                </div>
+                <p style={{ fontSize: '11px', marginTop: '4px', color: mapAddCoord.coordMessage?.includes('⚠️') ? '#ffb74d' : '#fde68a' }}>📍 {mapAddCoord.coordMessage || ''}</p>
               )}
-              {mapAddCoordStatus === 'error' && (
-                <div style={{ color: '#ef9a9a', fontSize: '11px', textAlign: 'center' }}>좌표를 찾을 수 없습니다. 주소나 목적지를 확인해주세요.</div>
-              )}
+            </div>
 
-              {/* 저장 버튼 */}
+            {/* 민원내용 */}
+            <div style={{ marginBottom: '12px' }}>
+              <label style={{ color: '#90caf9', fontSize: '11px', display: 'block', marginBottom: '4px' }}>민원내용</label>
+              <input type="text" value={mapAddForm.complaint}
+                onChange={e => setMapAddForm(f => ({ ...f, complaint: e.target.value }))}
+                style={{ width: '100%', padding: '8px 12px', borderRadius: '4px', fontSize: '13px', outline: 'none', background: 'rgba(255,255,255,0.15)', color: '#fbbf77', border: 'none', boxSizing: 'border-box' }} />
+            </div>
+
+            {/* 담당자 */}
+            <div style={{ marginBottom: '12px' }}>
+              <label style={{ color: '#90caf9', fontSize: '11px', display: 'block', marginBottom: '4px' }}>담당자</label>
+              <input type="text" value={mapAddForm.manager}
+                onChange={e => setMapAddForm(f => ({ ...f, manager: e.target.value }))}
+                style={{ width: '100%', padding: '8px 12px', borderRadius: '4px', fontSize: '13px', outline: 'none', background: 'rgba(255,255,255,0.15)', color: '#fbbf77', border: 'none', boxSizing: 'border-box' }} />
+            </div>
+
+            {/* 경로 삽입 위치 */}
+            <div style={{ background: 'rgba(249,115,22,0.15)', border: '1px solid rgba(249,115,22,0.35)', borderRadius: '8px', padding: '12px', marginBottom: '16px' }}>
+              <label style={{ color: '#fbbf77', fontSize: '11px', display: 'block', marginBottom: '6px', fontWeight: 'bold' }}>📌 경로 삽입 위치 (선택)</label>
+              <p style={{ color: 'rgba(255,200,150,0.8)', fontSize: '11px', marginBottom: '8px' }}>현재 경로의 어느 지점 다음에 넣을지 선택하세요. 선택하지 않으면 지도에만 표시됩니다.</p>
+              <select
+                value={mapAddForm.insertAfterOrder ?? ''}
+                onChange={e => {
+                  const val = e.target.value === '' ? null : Number(e.target.value);
+                  setMapAddForm(f => ({ ...f, insertAfterOrder: val }));
+                }}
+                style={{ width: '100%', padding: '8px 12px', borderRadius: '4px', fontSize: '12px', color: 'white', background: 'rgba(255,255,255,0.15)', border: '1px solid rgba(249,115,22,0.5)' }}>
+                <option value="" style={{ background: '#1a3a6e' }}>선택 안 함 (지도에만 표시)</option>
+                {route?.points.filter(p => p.source === 'fixed' ? p.order === 0 : true).map(p => (
+                  <option key={p.order} value={p.order} style={{ background: '#1a3a6e' }}>
+                    {p.order === 0 ? '출발지(시청) 다음' : `${p.order}번 (${p.destination || p.address}) 다음`}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* 취소/저장 버튼 */}
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <button onClick={() => { setShowMapAddModal(false); setMapAddForm({ address: '', destination: '', complaint: '', manager: '', insertAfterOrder: null }); setMapAddCoordStatus('idle'); }}
+                style={{ flex: 1, padding: '10px', borderRadius: '8px', border: 'none', background: '#455a64', color: 'white', fontSize: '13px', fontWeight: 'bold', cursor: 'pointer' }}>
+                취소
+              </button>
               <button onClick={handleMapAddSave}
                 disabled={mapAddCoordStatus !== 'success' || mapAddSaving}
-                style={{ padding: '10px', borderRadius: '8px', border: 'none', background: mapAddCoordStatus === 'success' ? '#f97316' : 'rgba(100,100,100,0.5)', color: 'white', fontSize: '13px', fontWeight: 'bold', cursor: mapAddCoordStatus === 'success' ? 'pointer' : 'default', marginTop: '4px' }}>
-                {mapAddSaving ? '저장 중...' : '추가지점 저장'}
+                style={{ flex: 1, padding: '10px', borderRadius: '8px', border: 'none', background: mapAddCoordStatus === 'success' && !mapAddSaving ? '#7b2d00' : 'rgba(100,100,100,0.5)', color: 'white', fontSize: '13px', fontWeight: 'bold', cursor: mapAddCoordStatus === 'success' ? 'pointer' : 'default' }}>
+                {mapAddSaving ? '저장 중...' : '저장'}
               </button>
             </div>
           </div>
