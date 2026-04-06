@@ -854,6 +854,10 @@ export default function MapPage() {
     additionalPolylinesRef.current.forEach(p => {
       p.setMap(showMarkers ? naverMapRef.current : null);
     });
+    // ★ 추가지점 화살표도 줌에 따라 가시성 업데이트
+    additionalArrowMarkersRef.current.forEach(a => {
+      a.setMap(showMarkers ? naverMapRef.current : null);
+    });
   };
 
   // ★ 마커 콘텐츠 - showPulse: JS 인라인 애니메이션으로 펄스 구현
@@ -1300,6 +1304,37 @@ export default function MapPage() {
     }
   };
 
+  // ★ 추가지점 경로선 색상만 업데이트 (재생성/화살표 변경 없이)
+  const updateAdditionalPolylineColors = () => {
+    if (!routeRef.current || additionalPointsRef.current.length === 0) return;
+    const routePoints = routeRef.current.points;
+    let plIdx = 0;
+
+    additionalPointsRef.current.forEach(point => {
+      if (!point.lat || !point.lng || point.insertAfterOrder == null) return;
+
+      const fromOrder = point.insertAfterOrder;
+      const toOrder = fromOrder + 1;
+      const fromPoint = routePoints.find(p => p.order === fromOrder);
+      const toPoint = routePoints.find(p => p.order === toOrder);
+
+      // fromPoint → A1 구간
+      if (fromPoint && additionalPolylinesRef.current[plIdx]) {
+        additionalPolylinesRef.current[plIdx].setOptions({
+          strokeColor: getAdditionalLineColor(point, true),
+        });
+        plIdx++;
+      }
+      // A1 → toPoint 구간
+      if (toPoint && additionalPolylinesRef.current[plIdx]) {
+        additionalPolylinesRef.current[plIdx].setOptions({
+          strokeColor: getAdditionalLineColor(point, false, toPoint),
+        });
+        plIdx++;
+      }
+    });
+  };
+
   const updateMarkerColors = () => {
     if (!route || !naverMapRef.current) return;
     const naver = (window as any).naver;
@@ -1326,10 +1361,8 @@ export default function MapPage() {
       polyline.setOptions({ strokeColor: getLineColor(from, to) });
     });
 
-    // ★ 추가지점 경로선도 색상 업데이트
-    if (additionalPointsRef.current.length > 0) {
-      drawAdditionalPolylines(additionalPointsRef.current);
-    }
+    // ★ 추가지점 경로선 색상만 업데이트 (재생성 없이)
+    updateAdditionalPolylineColors();
   };
 
   // ★ 특정 구간 폴리라인 초록 깜박임 (롱프레스)
