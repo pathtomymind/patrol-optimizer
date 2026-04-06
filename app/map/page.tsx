@@ -408,9 +408,35 @@ export default function MapPage() {
     return '#FF6B35';
   };
 
-  const getLineColor = (_fromPoint: RoutePoint, toPoint: RoutePoint) => {
+  const getLineColor = (fromPoint: RoutePoint, toPoint: RoutePoint) => {
+    // toPoint가 fixed(종점)이면 fromPoint 완료 여부로 결정
+    if (toPoint.source === 'fixed') {
+      const fromSt = statusesRef.current[statusKey(fromPoint)];
+      return fromSt && DONE_STATUSES.includes(fromSt.status) ? '#1565c0' : '#FF6B35';
+    }
+    // fromPoint가 fixed(기점)이면 toPoint 완료 여부로 결정 (일반 로직과 동일)
     const toSt = statusesRef.current[statusKey(toPoint)];
     return toSt && DONE_STATUSES.includes(toSt.status) ? '#1565c0' : '#FF6B35';
+  };
+
+  // ★ 추가지점 경로선 색상 결정 (추가지점 완료 + toPoint 완료 모두 체크)
+  const getAdditionalLineColor = (point: AdditionalPoint, isFromSegment: boolean, toPoint?: RoutePoint) => {
+    const addrPart = point.address?.trim() || point.destination?.trim() || '';
+    const key = `${addrPart}:${(point.complaint || '').trim()}:none`;
+    const addSt = statusesRef.current[key];
+    const addDone = addSt && DONE_STATUSES.includes(addSt.status);
+    if (isFromSegment) {
+      // fromPoint → A1 구간: A1 완료 여부
+      return addDone ? '#1565c0' : '#FF6B35';
+    } else {
+      // A1 → toPoint 구간: A1 완료 + toPoint 완료 모두 되어야 파란색
+      if (!addDone) return '#FF6B35';
+      if (toPoint) {
+        const toSt = statusesRef.current[statusKey(toPoint)];
+        return toSt && DONE_STATUSES.includes(toSt.status) ? '#1565c0' : '#FF6B35';
+      }
+      return '#FF6B35';
+    }
   };
 
   // ★ 추가 지점 마름모 마커 콘텐츠 생성
@@ -755,10 +781,13 @@ export default function MapPage() {
                     : (toPoint ? [{ lat: addLat, lng: addLng }, { lat: toPoint.lat, lng: toPoint.lng }] : []);
                   const coords = (r.ok && r.coords && r.coords.length > 1) ? r.coords : fallback;
                   if (coords.length < 2) return;
+                  const segColor = i === 0
+                    ? getAdditionalLineColor(point, true)
+                    : getAdditionalLineColor(point, false, toPoint);
                   const pl = new naver.maps.Polyline({
                     map,
                     path: coords.map((c: { lat: number; lng: number }) => new naver.maps.LatLng(c.lat, c.lng)),
-                    strokeColor: '#FF6B35', strokeWeight: 6, strokeOpacity: 1, zIndex: 8,
+                    strokeColor: segColor, strokeWeight: 6, strokeOpacity: 1, zIndex: 8,
                   });
                   additionalPolylinesRef.current.push(pl);
                   const beforeCount = arrowMarkersRef.current.length;
@@ -776,7 +805,7 @@ export default function MapPage() {
         const drawStraightAdditionalLines = () => {
           if (fromPoint) {
             const coords1 = [{ lat: fromPoint.lat, lng: fromPoint.lng }, { lat: addLat, lng: addLng }];
-            const line1 = new naver.maps.Polyline({ map, path: coords1.map(c => new naver.maps.LatLng(c.lat, c.lng)), strokeColor: '#FF6B35', strokeWeight: 6, strokeOpacity: 1, zIndex: 8 });
+            const line1 = new naver.maps.Polyline({ map, path: coords1.map(c => new naver.maps.LatLng(c.lat, c.lng)), strokeColor: getAdditionalLineColor(point, true), strokeWeight: 6, strokeOpacity: 1, zIndex: 8 });
             additionalPolylinesRef.current.push(line1);
             const b1 = arrowMarkersRef.current.length;
             placeArrows(coords1, null, map, naver);
@@ -784,7 +813,7 @@ export default function MapPage() {
           }
           if (toPoint) {
             const coords2 = [{ lat: addLat, lng: addLng }, { lat: toPoint.lat, lng: toPoint.lng }];
-            const line2 = new naver.maps.Polyline({ map, path: coords2.map(c => new naver.maps.LatLng(c.lat, c.lng)), strokeColor: '#FF6B35', strokeWeight: 6, strokeOpacity: 1, zIndex: 8 });
+            const line2 = new naver.maps.Polyline({ map, path: coords2.map(c => new naver.maps.LatLng(c.lat, c.lng)), strokeColor: getAdditionalLineColor(point, false, toPoint), strokeWeight: 6, strokeOpacity: 1, zIndex: 8 });
             additionalPolylinesRef.current.push(line2);
             const b2 = arrowMarkersRef.current.length;
             placeArrows(coords2, null, map, naver);
@@ -798,7 +827,7 @@ export default function MapPage() {
         // 직선 모드
         if (fromPoint) {
           const coords1 = [{ lat: fromPoint.lat, lng: fromPoint.lng }, { lat: addLat, lng: addLng }];
-          const line1 = new naver.maps.Polyline({ map, path: coords1.map(c => new naver.maps.LatLng(c.lat, c.lng)), strokeColor: '#FF6B35', strokeWeight: 6, strokeOpacity: 1, zIndex: 8 });
+          const line1 = new naver.maps.Polyline({ map, path: coords1.map(c => new naver.maps.LatLng(c.lat, c.lng)), strokeColor: getAdditionalLineColor(point, true), strokeWeight: 6, strokeOpacity: 1, zIndex: 8 });
           additionalPolylinesRef.current.push(line1);
           const b1 = arrowMarkersRef.current.length;
           placeArrows(coords1, null, map, naver);
@@ -806,7 +835,7 @@ export default function MapPage() {
         }
         if (toPoint) {
           const coords2 = [{ lat: addLat, lng: addLng }, { lat: toPoint.lat, lng: toPoint.lng }];
-          const line2 = new naver.maps.Polyline({ map, path: coords2.map(c => new naver.maps.LatLng(c.lat, c.lng)), strokeColor: '#FF6B35', strokeWeight: 6, strokeOpacity: 1, zIndex: 8 });
+          const line2 = new naver.maps.Polyline({ map, path: coords2.map(c => new naver.maps.LatLng(c.lat, c.lng)), strokeColor: getAdditionalLineColor(point, false, toPoint), strokeWeight: 6, strokeOpacity: 1, zIndex: 8 });
           additionalPolylinesRef.current.push(line2);
           const b2 = arrowMarkersRef.current.length;
           placeArrows(coords2, null, map, naver);
@@ -1296,6 +1325,11 @@ export default function MapPage() {
       const to = point;
       polyline.setOptions({ strokeColor: getLineColor(from, to) });
     });
+
+    // ★ 추가지점 경로선도 색상 업데이트
+    if (additionalPointsRef.current.length > 0) {
+      drawAdditionalPolylines(additionalPointsRef.current);
+    }
   };
 
   // ★ 특정 구간 폴리라인 초록 깜박임 (롱프레스)
