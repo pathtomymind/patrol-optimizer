@@ -1116,7 +1116,7 @@ export default function Home() {
                       <button
                         onClick={() => { sessionStorage.setItem('map-entry', '1'); window.location.href = '/map'; }}
                         style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '2px 4px', color: 'white', fontSize: '14px', lineHeight: 1 }}>
-                        ▶
+                        ▼
                       </button>
                     </span>
                   </div>
@@ -1567,7 +1567,7 @@ export default function Home() {
               <button
                 onClick={() => setAdditionalOpen(!additionalOpen)}
                 className="w-full flex justify-between items-center px-4 py-3 text-white font-medium text-sm"
-                style={{ background: 'linear-gradient(180deg, #6a3fa0 0%, #4a2080 100%)' }}
+                style={{ background: 'linear-gradient(180deg, #b0bec5 0%, #78909c 100%)' }}
               >
                 <span className="flex items-center gap-2">
                   <svg width="14" height="14" viewBox="0 0 14 14" style={{ flexShrink: 0 }}>
@@ -1575,7 +1575,7 @@ export default function Home() {
                   </svg>
                   추가 지점 입력하기
                   {additionalPoints.length > 0 && (
-                    <span className="text-xs px-1.5 py-0.5 rounded-full font-bold" style={{ background: '#f97316', color: 'white' }}>
+                    <span className="text-xs px-1.5 py-0.5 rounded-full font-bold" style={{ background: '#78909c', color: 'white', border: '1px solid rgba(255,255,255,0.4)' }}>
                       {additionalPoints.length}
                     </span>
                   )}
@@ -1585,14 +1585,14 @@ export default function Home() {
                     <div
                       onClick={(e) => { e.stopPropagation(); handleAdditionalReset(); }}
                       className="text-white text-xs px-2 py-1 rounded cursor-pointer"
-                      style={{ background: '#7b1fa2' }}
+                      style={{ background: '#2e7d32' }}
                     >초기화</div>
                   )}
                   <span>{additionalOpen ? '▲' : '▼'}</span>
                 </span>
               </button>
               {additionalOpen && (
-                <div className="px-3 py-3 space-y-2" style={{ background: 'rgba(106,63,160,0.15)' }}>
+                <div className="px-3 py-3 space-y-2" style={{ background: 'rgba(255,255,255,0.08)' }}>
                   {/* 추가지점 설명 */}
                   <p className="text-xs px-1" style={{ color: 'rgba(200,160,255,0.85)' }}>
                     최적화 경로 완성 후 현장에서 추가되는 민원 지점입니다. 지점을 입력하면 지도에 마름모 마커로 표시됩니다.
@@ -1645,7 +1645,7 @@ export default function Home() {
                   <div
                     onClick={handleAdditionalAdd}
                     className="flex items-center justify-center w-10 h-10 rounded-full cursor-pointer mx-auto mt-1"
-                    style={{ background: 'rgba(249,115,22,0.3)', border: '2px dashed rgba(249,115,22,0.7)' }}
+                    style={{ background: 'rgba(120,144,156,0.3)', border: '2px dashed rgba(120,144,156,0.7)' }}
                   >
                     <span className="text-white text-xl font-bold">+</span>
                   </div>

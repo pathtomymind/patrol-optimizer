@@ -1897,9 +1897,9 @@ export default function MapPage() {
               onClick={() => setShowMapAddModal(true)}
               style={{
                 background: 'rgba(249,115,22,0.85)',
-                border: '1px solid rgba(249,115,22,0.9)',
+                border: '1px solid rgba(255,255,255,0.25)',
                 color: 'white', fontSize: '10px', fontWeight: 'bold',
-                padding: '3px 7px', borderRadius: '12px',
+                padding: '3px 7px', borderRadius: '6px',
                 cursor: 'pointer', whiteSpace: 'nowrap',
                 flexShrink: 0,
               }}>
@@ -1910,10 +1910,11 @@ export default function MapPage() {
               onClick={handleGenerateReport}
               disabled={isGeneratingReport || !route}
               style={{
-                background: isGeneratingReport ? 'rgba(100,100,100,0.5)' : 'rgba(255,255,255,0.15)',
-                border: '1px solid rgba(255,255,255,0.35)',
-                color: 'white', fontSize: '10px', fontWeight: 'bold',
-                padding: '3px 7px', borderRadius: '12px',
+                background: isGeneratingReport ? 'rgba(100,100,100,0.5)' : 'rgba(255,255,255,0.08)',
+                border: '1px solid rgba(255,255,255,0.25)',
+                color: isGeneratingReport ? 'rgba(255,255,255,0.5)' : 'rgba(255,255,255,0.7)',
+                fontSize: '10px', fontWeight: 'bold',
+                padding: '3px 7px', borderRadius: '6px',
                 cursor: isGeneratingReport ? 'default' : 'pointer',
                 whiteSpace: 'nowrap', flexShrink: 0,
               }}>
