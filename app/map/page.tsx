@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
+import AdditionalPointModal, { type InsertOption } from '@/app/components/AdditionalPointModal';
 
 type RoutePoint = {
   order: number;
@@ -2531,10 +2532,19 @@ export default function MapPage() {
             apSt={apSt}
             insertOptions={insertOptions}
             onClose={() => setShowInsertModal(false)}
-            onSave={async (insertAfterOrder, status, memo, photoUrl) => {
+            onSave={async (data) => {
               const updated = additionalPoints.map(p =>
                 p.id === selectedAdditional.id
-                  ? { ...p, insertAfterOrder, ...(photoUrl ? { photoUrl } : {}) }
+                  ? { ...p,
+                      address: data.address, destination: data.destination,
+                      complaint: data.complaint, manager: data.manager,
+                      photoUrl: data.photoUrl || p.photoUrl,
+                      lat: data.lat ?? p.lat, lng: data.lng ?? p.lng,
+                      placeName: data.placeName ?? p.placeName,
+                      source: data.source ?? p.source,
+                      coordMessage: data.coordMessage ?? p.coordMessage,
+                      insertAfterOrder: data.insertAfterOrder,
+                    }
                   : p
               );
               setAdditionalPoints(updated);
@@ -2547,10 +2557,10 @@ export default function MapPage() {
               } catch {}
               const today = routeRef.current?.date ?? new Date().toLocaleDateString('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/\. /g, '-').replace('.', '');
               fetch('/api/save-additional', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ date: today, points: updated }) }).catch(() => {});
-              if (status !== undefined) {
-                await fetch('/api/save-status', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ date: route?.date ?? today, address: selectedAdditional.address, destination: selectedAdditional.destination, complaint: selectedAdditional.complaint?.trim() ?? '', originalId: null, status, memo }) });
-                statusesRef.current = { ...statusesRef.current, [apKey]: { status, memo, updatedAt: Date.now() } };
-                setStatuses(prev => ({ ...prev, [apKey]: { status, memo, updatedAt: Date.now() } }));
+              if (data.status !== undefined) {
+                await fetch('/api/save-status', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ date: route?.date ?? today, address: data.address, destination: data.destination, complaint: data.complaint?.trim() ?? '', originalId: null, status: data.status, memo: data.memo }) });
+                statusesRef.current = { ...statusesRef.current, [apKey]: { status: data.status, memo: data.memo, updatedAt: Date.now() } };
+                setStatuses(prev => ({ ...prev, [apKey]: { status: data.status, memo: data.memo, updatedAt: Date.now() } }));
               }
               setShowInsertModal(false);
               drawAdditionalMarkers(updated);
@@ -2662,191 +2672,3 @@ export default function MapPage() {
   );
 }
 
-// ★ 추가지점 팝업 컴포넌트 (지도뷰 마커 클릭 시 표시)
-function AdditionalPointModal({ label, point, apSt, insertOptions, onClose, onSave, onDelete, onPhotoUpload }: {
-  label: string;
-  point: AdditionalPoint;
-  apSt: PointStatus | undefined;
-  insertOptions: { value: number | string | null; label: string }[];
-  onClose: () => void;
-  onSave: (insertAfterOrder: number | string | null, status: string, memo: string, photoUrl: string | null) => Promise<void>;
-  onDelete: () => void;
-  onPhotoUpload: (file: File) => Promise<string | null>;
-}) {
-  const [localInsert, setLocalInsert] = useState<number | string | null>(point.insertAfterOrder ?? null);
-  const [localStatus, setLocalStatus] = useState(apSt?.status || '');
-  const [localMemo, setLocalMemo] = useState(apSt?.memo || '');
-  const [localPhoto, setLocalPhoto] = useState(point.photoUrl || '');
-  const [saving, setSaving] = useState(false);
-
-  // 변경 시 자동저장
-  const autoSave = async (insertAfterOrder: number | string | null, status: string, memo: string, photo: string) => {
-    setSaving(true);
-    await onSave(insertAfterOrder, status, memo, photo || null);
-    setSaving(false);
-  };
-
-  const isDone = ['민원처리완료', '기처리', '확인불가'].includes(localStatus);
-
-  return (
-    <div style={{ position: 'fixed', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 400, background: 'rgba(0,0,0,0.65)' }} onClick={onClose}>
-      <div style={{ background: '#1a3a6e', border: '2px solid rgba(249,115,22,0.6)', borderRadius: '12px', padding: '20px', width: '88%', maxWidth: '400px', maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 8px 32px rgba(0,0,0,0.6)' }} onClick={e => e.stopPropagation()}>
-
-        {/* 헤더 */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-          <h2 style={{ color: 'white', fontWeight: 'bold', fontSize: '15px', display: 'flex', alignItems: 'center', gap: '8px', margin: 0 }}>
-            <svg width="28" height="28" viewBox="0 0 28 28">
-              <polygon points="14,1 27,14 14,27 1,14" fill="#f97316" stroke="white" strokeWidth="1.5"/>
-              <text x="14" y="18" textAnchor="middle" fontSize="9" fontWeight="bold" fill="white" fontFamily="Arial,sans-serif">{label}</text>
-            </svg>
-            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {point.destination ? `${point.address} (${point.destination})` : point.address}
-            </span>
-          </h2>
-          <button onClick={onClose} style={{ color: 'white', background: 'none', border: 'none', fontSize: '18px', cursor: 'pointer', flexShrink: 0 }}>✕</button>
-        </div>
-
-        {/* 정보 목록 */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-          <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
-            <span style={{ color: '#90caf9', fontSize: '11px', width: '60px', flexShrink: 0, paddingTop: '2px' }}>주소</span>
-            <span style={{ color: 'white', fontSize: '11px', flex: 1 }}>{point.address}</span>
-          </div>
-          <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
-            <span style={{ color: '#90caf9', fontSize: '11px', width: '60px', flexShrink: 0, paddingTop: '2px' }}>목적지</span>
-            <span style={{ color: 'white', fontSize: '11px', flex: 1 }}>{point.destination || ''}</span>
-          </div>
-          {point.placeName && (
-            <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
-              <span style={{ color: '#90caf9', fontSize: '11px', width: '60px', flexShrink: 0, paddingTop: '2px' }}>플레이스명</span>
-              <span style={{ color: 'white', fontSize: '11px', flex: 1 }}>{point.placeName}</span>
-            </div>
-          )}
-          {point.coordMessage && (
-            <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
-              <span style={{ color: '#90caf9', fontSize: '11px', width: '60px', flexShrink: 0, paddingTop: '2px' }}>좌표</span>
-              <span style={{ color: point.coordMessage.includes('⚠️') ? '#ffb74d' : 'white', fontSize: '11px', flex: 1 }}>{point.coordMessage}</span>
-            </div>
-          )}
-
-          <div style={{ borderTop: '1px solid rgba(255,255,255,0.2)', marginTop: '4px', marginBottom: '4px' }} />
-
-          <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
-            <span style={{ color: '#90caf9', fontSize: '11px', width: '60px', flexShrink: 0, paddingTop: '2px' }}>민원내용</span>
-            <span style={{ color: 'white', fontSize: '11px', flex: 1 }}>{point.complaint || ''}</span>
-          </div>
-          <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
-            <span style={{ color: '#90caf9', fontSize: '11px', width: '60px', flexShrink: 0, paddingTop: '2px' }}>담당자</span>
-            <span style={{ color: 'white', fontSize: '11px', flex: 1 }}>{point.manager || ''}</span>
-          </div>
-
-          {/* 현장사진 */}
-          <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
-            <span style={{ color: '#90caf9', fontSize: '11px', width: '60px', flexShrink: 0, paddingTop: '2px' }}>현장사진</span>
-            <div style={{ flex: 1 }}>
-              {localPhoto ? (
-                <div style={{ position: 'relative' }}>
-                  <img src={localPhoto} style={{ width: '100%', borderRadius: '6px', objectFit: 'cover', maxHeight: '140px' }} />
-                  <button onClick={() => { setLocalPhoto(''); autoSave(localInsert, localStatus, localMemo, ''); }}
-                    style={{ position: 'absolute', top: 4, right: 4, background: 'rgba(0,0,0,0.6)', border: 'none', borderRadius: '50%', color: 'white', width: 24, height: 24, cursor: 'pointer', fontSize: '12px' }}>✕</button>
-                </div>
-              ) : (
-                <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', background: 'rgba(255,255,255,0.1)', border: '1px dashed rgba(255,255,255,0.3)', borderRadius: '6px', padding: '8px', cursor: 'pointer', color: 'rgba(255,255,255,0.7)', fontSize: '11px' }}>
-                  📷 사진 선택
-                  <input type="file" accept="image/*" capture="environment" style={{ display: 'none' }}
-                    onChange={async e => {
-                      const file = e.target.files?.[0];
-                      if (!file) return;
-                      setLocalPhoto(URL.createObjectURL(file));
-                      const url = await onPhotoUpload(file);
-                      if (url) { setLocalPhoto(url); autoSave(localInsert, localStatus, localMemo, url); }
-                    }} />
-                </label>
-              )}
-            </div>
-          </div>
-
-          <div style={{ borderTop: '1px solid rgba(255,255,255,0.2)', marginTop: '4px', marginBottom: '4px' }} />
-
-          {/* 작업상태 */}
-          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-            <span style={{ color: '#90caf9', fontSize: '11px', width: '60px', flexShrink: 0 }}>작업상태</span>
-            <select
-              value={localStatus}
-              onChange={async e => {
-                const v = e.target.value;
-                setLocalStatus(v);
-                await autoSave(localInsert, v, localMemo, localPhoto);
-              }}
-              style={{ flex: 1, borderRadius: '4px', padding: '6px 8px', fontSize: '11px', color: 'white', fontWeight: 'bold', background: isDone ? 'rgba(255,255,255,0.15)' : 'rgba(235,100,0,0.65)', border: '1px solid rgba(255,255,255,0.3)' }}>
-              <option value='' style={{ background: '#1a3a6e' }}>미완료</option>
-              <option value='민원처리완료' style={{ background: '#1a3a6e' }}>민원처리완료</option>
-              <option value='기처리' style={{ background: '#1a3a6e' }}>기처리</option>
-              <option value='확인불가' style={{ background: '#1a3a6e' }}>확인불가</option>
-            </select>
-          </div>
-
-          {/* 작업메모 */}
-          <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
-            <span style={{ color: '#90caf9', fontSize: '11px', width: '60px', flexShrink: 0, paddingTop: '6px' }}>작업메모</span>
-            <textarea
-              value={localMemo}
-              onChange={e => setLocalMemo(e.target.value)}
-              onBlur={async e => { await autoSave(localInsert, localStatus, e.target.value, localPhoto); }}
-              rows={2}
-              placeholder='메모 입력...'
-              style={{ flex: 1, borderRadius: '4px', padding: '6px 8px', fontSize: '11px', color: 'white', background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.3)', resize: 'none', boxSizing: 'border-box' }} />
-          </div>
-
-          <div style={{ borderTop: '1px solid rgba(255,255,255,0.2)', marginTop: '4px', marginBottom: '4px' }} />
-
-          {/* 경로 삽입 위치 + 지점 삭제 */}
-          <div>
-            <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '4px' }}>
-              <span style={{ color: '#fbbf77', fontSize: '11px', flexShrink: 0 }}>📌 경로 삽입 위치 (선택)</span>
-              <button onClick={onDelete}
-                style={{ marginLeft: 'auto', padding: '4px 10px', borderRadius: '6px', border: 'none', background: '#c62828', color: 'white', fontSize: '11px', fontWeight: 'bold', cursor: 'pointer', flexShrink: 0 }}>
-                지점 삭제
-              </button>
-            </div>
-            <p style={{ color: 'rgba(255,255,255,0.55)', fontSize: '10px', margin: '0 0 6px 0' }}>현재 경로의 어느 지점 다음에 넣을지 선택하세요. 선택하지 않으면 지도에만 표시됩니다.</p>
-            <select
-              value={localInsert === null ? '' : String(localInsert)}
-              onChange={async e => {
-                const v = e.target.value;
-                const newInsert = v === '' ? null : v.startsWith('add_') ? v : Number(v);
-                setLocalInsert(newInsert);
-                await autoSave(newInsert, localStatus, localMemo, localPhoto);
-              }}
-              style={{ width: '100%', borderRadius: '4px', padding: '6px 8px', fontSize: '11px', color: 'white', background: 'rgba(255,255,255,0.12)', border: '1px solid rgba(249,115,22,0.5)' }}>
-              {insertOptions.map(opt => (
-                <option key={String(opt.value)} value={opt.value === null ? '' : String(opt.value)} style={{ background: '#1a3a6e' }}>{opt.label}</option>
-              ))}
-            </select>
-          </div>
-        </div>
-
-        {/* 하단 버튼 — 카메라, 티맵, 네이버 */}
-        <div style={{ display: 'flex', gap: '8px', marginTop: '20px', paddingTop: '16px', borderTop: '1px solid rgba(255,255,255,0.15)' }}>
-          <button
-            onClick={() => window.location.href = 'timemarkcamera://'}
-            title="타임마크 촬영"
-            style={{ background: '#f9d835', width: '48px', flexShrink: 0, borderRadius: '8px', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '10px 0' }}>
-            <svg width="24" height="22" viewBox="0 0 24 22" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M9 2L7.17 4H4C2.9 4 2 4.9 2 6V18C2 19.1 2.9 20 4 20H20C21.1 20 22 19.1 22 18V6C22 4.9 21.1 4 20 4H16.83L15 2H9ZM12 17C9.24 17 7 14.76 7 12C7 9.24 9.24 7 12 7C14.76 7 17 9.24 17 12C17 14.76 14.76 17 12 17Z" fill="#1a1a1a"/>
-              <circle cx="12" cy="12" r="3.5" fill="#1a1a1a"/>
-            </svg>
-          </button>
-          <button
-            onClick={() => window.open(`tmap://route?goalname=${encodeURIComponent(point.destination || point.address)}&goaly=${point.lat}&goalx=${point.lng}`)}
-            style={{ flex: 1, padding: '10px', borderRadius: '8px', background: '#0a3d8f', color: 'white', fontSize: '14px', fontWeight: 'bold', border: 'none', cursor: 'pointer' }}>티맵</button>
-          <button
-            onClick={() => window.open(`nmap://navigation?dlat=${point.lat}&dlng=${point.lng}&dname=${encodeURIComponent(point.destination || point.address)}&appname=patrol-optimizer`)}
-            style={{ flex: 1, padding: '10px', borderRadius: '8px', background: '#1b5e20', color: 'white', fontSize: '14px', fontWeight: 'bold', border: 'none', cursor: 'pointer' }}>네이버지도</button>
-        </div>
-
-        {saving && <div style={{ textAlign: 'center', color: 'rgba(255,255,255,0.5)', fontSize: '11px', marginTop: '8px' }}>저장 중...</div>}
-      </div>
-    </div>
-  );
-}

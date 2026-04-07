@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
+import AdditionalPointModal, { type InsertOption, type AdditionalPointData } from '@/app/components/AdditionalPointModal';
 
 const dummyRoute = {
   version: '2026-03-01 버전1',
@@ -1893,209 +1894,105 @@ export default function Home() {
       )}
 
       {/* 추가 지점 입력/수정 모달 */}
-      {showAdditionalModal && (
-        <div className="fixed inset-0 flex items-center justify-center z-50"
-          style={{ background: 'rgba(0,0,0,0.6)' }}>
-          <div className="rounded-lg px-5 py-5 w-80 max-h-screen overflow-y-auto" style={{ background: '#1a3a6e', border: '2px solid rgba(249,115,22,0.5)' }}>
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-white font-bold text-base flex items-center gap-2">
-                <svg width="28" height="28" viewBox="0 0 28 28">
-                  <polygon points="14,1 27,14 14,27 1,14" fill="#f97316" stroke="none"/>
-                  <text x="14" y="18" textAnchor="middle" fontSize="9" fontWeight="bold" fill="white">
-                    {editingAdditionalPoint
-                      ? `A${additionalPoints.findIndex(p => p.id === editingAdditionalPoint.id) + 1}`
-                      : `A${additionalPoints.length + 1}`}
-                  </text>
-                </svg>
-                추가지점 {editingAdditionalPoint ? '수정' : '입력'}
-              </h2>
-              <span className="text-white cursor-pointer text-lg" onClick={() => setShowAdditionalModal(false)}>✕</span>
-            </div>
+      {showAdditionalModal && (() => {
+        const addIdx = editingAdditionalPoint
+          ? additionalPoints.findIndex(p => p.id === editingAdditionalPoint.id)
+          : additionalPoints.length;
+        const label = `A${addIdx + 1}`;
+        const apSt = editingAdditionalPoint ? (() => {
+          const addrPart = editingAdditionalPoint.address?.trim() || editingAdditionalPoint.destination?.trim() || '';
+          const apKey = `${addrPart}:${(editingAdditionalPoint.complaint || '').trim()}:none`;
+          return pointStatuses[apKey];
+        })() : undefined;
 
-            {/* 위치정보 묶음 */}
-            <div className="rounded-lg p-3 mb-3" style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.15)' }}>
-              <div className="mb-2">
-                <label className="text-blue-200 text-xs mb-1 block">주소</label>
-                <input type="text" value={additionalForm.address} placeholder=""
-                  onChange={(e) => { setAdditionalForm((prev) => ({ ...prev, address: e.target.value })); setAdditionalCoordStatus('idle'); }}
-                  className="w-full px-3 py-2 rounded text-sm outline-none"
-                  style={{ background: 'rgba(255,255,255,0.15)', color: additionalCoordStatus === 'success' ? '#fbbf77' : 'white' }} />
-              </div>
-              <div className="mb-2">
-                <label className="text-blue-200 text-xs mb-1 block">목적지</label>
-                <input type="text" value={additionalForm.destination} placeholder=""
-                  onChange={(e) => { setAdditionalForm((prev) => ({ ...prev, destination: e.target.value })); setAdditionalCoordStatus('idle'); }}
-                  className="w-full px-3 py-2 rounded text-sm outline-none"
-                  style={{ background: 'rgba(255,255,255,0.15)', color: additionalCoordStatus === 'success' ? '#fbbf77' : 'white' }} />
-              </div>
-              <button
-                onClick={async () => {
-                  setAdditionalCoordStatus('loading');
-                  try {
-                    const res = await fetch('/api/geocode', {
-                      method: 'POST',
-                      headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({ address: additionalForm.address, destination: additionalForm.destination }),
-                    });
-                    const data = await res.json();
-                    if (res.ok && data.lat && data.lng) {
-                      setAdditionalCoord({ lat: data.lat, lng: data.lng, placeName: data.placeName || null, source: data.source || null, coordMessage: data.coordMessage || null });
-                      setAdditionalCoordStatus('success');
-                    } else {
-                      setAdditionalCoordStatus('fail');
-                    }
-                  } catch { setAdditionalCoordStatus('fail'); }
-                }}
-                disabled={additionalCoordStatus === 'loading'}
-                className="w-full py-2 rounded text-sm font-bold text-white mb-2"
-                style={{ background: additionalCoordStatus === 'loading' ? '#555' : '#7b2d00' }}
-              >
-                {additionalCoordStatus === 'loading' ? '확인 중...' : '좌표 확인하기'}
-              </button>
-              <p className="text-xs mt-1"
-                style={{ color: additionalCoordStatus === 'success' ? '#fbbf77' : additionalCoordStatus === 'fail' ? '#ef9a9a' : 'rgba(255,255,255,0.5)' }}>
-                {additionalCoordStatus === 'idle' && '주소나 목적지를 입력한 후 좌표 확인 버튼을 누르세요.'}
-                {additionalCoordStatus === 'loading' && '좌표를 검색하는 중입니다...'}
-                {additionalCoordStatus === 'success' && '✅ 좌표가 확인되었습니다.'}
-                {additionalCoordStatus === 'fail' && '❌ 좌표를 찾지 못했습니다.'}
-              </p>
-              {additionalCoordStatus === 'success' && additionalCoord.placeName && (
-                <p className="text-xs mt-1" style={{ color: '#fbbf77' }}>🔍 {additionalCoord.placeName}</p>
-              )}
-              {additionalCoordStatus === 'success' && (
-                <p className="text-xs mt-1" style={{ color: additionalCoord.coordMessage?.includes('⚠️') ? '#ffb74d' : '#fde68a' }}>📍 {additionalCoord.coordMessage || ''}</p>
-              )}
-            </div>
+        const insertOptions: InsertOption[] = [
+          { value: null, label: '선택 안 함 (지도에만 표시)' },
+        ];
+        if (currentRoute) {
+          currentRoute.points
+            .filter(p => p.source !== 'fixed' || p.order === 0)
+            .forEach(p => {
+              insertOptions.push({ value: p.order, label: p.order === 0 ? '출발지(시청) 다음' : `${p.order}번 (${p.destination || p.address}) 다음` });
+            });
+        }
+        // 다른 추가지점 "An 다음" 옵션
+        additionalPoints.forEach((ap, i) => {
+          if (!editingAdditionalPoint || ap.id !== editingAdditionalPoint.id) {
+            if (ap.lat && ap.lng) {
+              insertOptions.push({ value: `add_${ap.id}`, label: `A${i + 1} 다음` });
+            }
+          }
+        });
 
-            {/* 민원내용 */}
-            <div className="mb-3">
-              <label className="text-blue-200 text-xs mb-1 block">민원내용</label>
-              <input type="text" value={additionalForm.complaint}
-                onChange={(e) => setAdditionalForm((prev) => ({ ...prev, complaint: e.target.value }))}
-                className="w-full px-3 py-2 rounded text-sm outline-none"
-                style={{ background: 'rgba(255,255,255,0.15)', color: '#fbbf77' }} />
-            </div>
+        const pointForModal: AdditionalPointData = editingAdditionalPoint
+          ? { ...editingAdditionalPoint, insertAfterOrder: additionalInsertAfter ?? editingAdditionalPoint.insertAfterOrder }
+          : { id: 0, address: additionalForm.address, destination: additionalForm.destination, complaint: additionalForm.complaint, manager: additionalForm.manager, photoUrl: additionalForm.photoUrl, lat: additionalCoord.lat, lng: additionalCoord.lng, placeName: additionalCoord.placeName, source: additionalCoord.source, coordMessage: additionalCoord.coordMessage, isAdditional: true, insertAfterOrder: additionalInsertAfter };
 
-            {/* 담당자 */}
-            <div className="mb-3">
-              <label className="text-blue-200 text-xs mb-1 block">담당자</label>
-              <input type="text" value={additionalForm.manager}
-                onChange={(e) => setAdditionalForm((prev) => ({ ...prev, manager: e.target.value }))}
-                className="w-full px-3 py-2 rounded text-sm outline-none"
-                style={{ background: 'rgba(255,255,255,0.15)', color: '#fbbf77' }} />
-            </div>
+        return (
+          <AdditionalPointModal
+            key={editingAdditionalPoint?.id ?? 'new'}
+            label={label}
+            point={pointForModal}
+            apSt={apSt}
+            insertOptions={insertOptions}
+            isNew={!editingAdditionalPoint}
+            onClose={() => setShowAdditionalModal(false)}
+            onSave={async (data) => {
+              if (isSaving) return;
+              setIsSaving(true);
+              const coordData = { lat: data.lat, lng: data.lng, placeName: data.placeName, source: data.source, coordMessage: data.coordMessage };
+              let photoUrl = data.photoUrl;
+              if (photoUrl && photoUrl.startsWith('blob:')) {
+                try {
+                  const res = await fetch(photoUrl);
+                  const blob = await res.blob();
+                  const reader = new FileReader();
+                  const base64 = await new Promise<string>((resolve) => { reader.onload = () => resolve(reader.result as string); reader.readAsDataURL(blob); });
+                  const uploadRes = await fetch('/api/upload-photo', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ imageData: base64, filename: `additional-${Date.now()}.jpg` }) });
+                  if (uploadRes.ok) { const uploadData = await uploadRes.json(); photoUrl = uploadData.url; }
+                } catch {}
+              }
+              let updatedPoints;
+              if (editingAdditionalPoint) {
+                updatedPoints = additionalPoints.map(p =>
+                  p.id === editingAdditionalPoint.id
+                    ? { ...p, address: data.address, destination: data.destination, complaint: data.complaint, manager: data.manager, photoUrl, ...coordData, isAdditional: true as const, insertAfterOrder: data.insertAfterOrder }
+                    : p
+                );
+                // 작업상태 저장
+                if (data.status !== undefined) {
+                  const addrPart = data.address?.trim() || data.destination?.trim() || '';
+                  const apKey = `${addrPart}:${(data.complaint || '').trim()}:none`;
+                  const today = new Date().toLocaleDateString('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/\. /g, '-').replace('.', '');
+                  await fetch('/api/save-status', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ date: today, address: data.address, destination: data.destination, complaint: data.complaint?.trim() ?? '', originalId: null, status: data.status, memo: data.memo }) }).catch(() => {});
+                  setPointStatuses(prev => ({ ...prev, [apKey]: { status: data.status, memo: data.memo, updatedAt: Date.now() } }));
+                }
+              } else {
+                updatedPoints = [...additionalPoints, { id: Date.now(), address: data.address, destination: data.destination, complaint: data.complaint, manager: data.manager, photoUrl, ...coordData, isAdditional: true as const, insertAfterOrder: data.insertAfterOrder }];
+              }
+              setAdditionalPoints(updatedPoints);
+              const draft = JSON.parse(localStorage.getItem('draft-route') || '{}');
+              draft.additionalPoints = updatedPoints;
+              draft.lastModified = Date.now();
+              localStorage.setItem('draft-route', JSON.stringify(draft));
+              const today = new Date().toLocaleDateString('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/\. /g, '-').replace('.', '');
+              fetch('/api/save-additional', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ date: today, points: updatedPoints }) }).catch(() => {});
+              setIsSaving(false);
+              setShowAdditionalModal(false);
+            }}
+            onDelete={editingAdditionalPoint ? () => handleAdditionalDelete(editingAdditionalPoint.id) : undefined}
+            onPhotoUpload={async (file) => {
+              const reader = new FileReader();
+              const base64 = await new Promise<string>(res => { reader.onload = () => res(reader.result as string); reader.readAsDataURL(file); });
+              const uploadRes = await fetch('/api/upload-photo', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ imageData: base64, filename: `additional-${Date.now()}.jpg` }) });
+              if (uploadRes.ok) { const { url } = await uploadRes.json(); return url as string; }
+              return null;
+            }}
+          />
+        );
+      })()}
 
-            {/* 현장사진 */}
-            <div className="mb-3">
-              <label className="text-blue-200 text-xs mb-1 block">현장사진</label>
-              {additionalForm.photoUrl ? (
-                <img src={additionalForm.photoUrl} alt="현장사진" className="w-full rounded mb-2" crossOrigin="anonymous"
-                  onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
-              ) : null}
-              <label className="flex items-center justify-center w-full py-2 rounded cursor-pointer text-white text-xs font-medium gap-1"
-                style={{ background: 'rgba(255,255,255,0.15)' }}>
-                📷 사진 선택
-                <input type="file" accept="image/*" className="hidden"
-                  onChange={(e) => {
-                    const file = e.target.files?.[0];
-                    if (file) {
-                      const url = URL.createObjectURL(file);
-                      setAdditionalForm((prev) => ({ ...prev, photoUrl: url }));
-                    }
-                    e.target.value = '';
-                  }} />
-              </label>
-            </div>
-
-            {/* 작업상태 / 작업메모 — 수정 모드에서만 표시 */}
-            {editingAdditionalPoint && (() => {
-              const addrPart = editingAdditionalPoint.address?.trim() || editingAdditionalPoint.destination?.trim() || '';
-              const apKey = `${addrPart}:${(editingAdditionalPoint.complaint || '').trim()}:none`;
-              const apSt = pointStatuses[apKey];
-              const apStatus = apSt?.status || '';
-              const apMemo = apSt?.memo || '';
-              const apDone = ['민원처리완료','기처리','확인불가'].includes(apStatus);
-              return (
-                <div className="mb-3 rounded-lg p-3" style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.15)' }}>
-                  <div className="flex items-center gap-2 mb-2">
-                    <span className="text-blue-300 text-xs w-16 flex-shrink-0">작업상태</span>
-                    {isAuthenticated ? (
-                      <select className="flex-1 rounded px-2 py-1 text-xs font-bold text-white"
-                        style={{ background: apDone ? 'rgba(255,255,255,0.15)' : 'rgba(235,100,0,0.65)', border: '1px solid rgba(255,255,255,0.3)' }}
-                        value={apStatus}
-                        onChange={async (e) => {
-                          const newStatus = e.target.value;
-                          const today = new Date().toLocaleDateString('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/\. /g, '-').replace('.', '');
-                          await fetch('/api/save-status', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ date: today, address: editingAdditionalPoint.address, destination: editingAdditionalPoint.destination, complaint: editingAdditionalPoint.complaint?.trim() ?? '', originalId: null, status: newStatus, memo: apMemo }) }).catch(() => {});
-                          setPointStatuses(prev => ({ ...prev, [apKey]: { status: newStatus, memo: apMemo, updatedAt: Date.now() } }));
-                        }}>
-                        <option value="" style={{ background: '#1a3a6e' }}></option>
-                        <option value="민원처리완료" style={{ background: '#7a2800' }}>민원처리완료</option>
-                        <option value="기처리" style={{ background: '#7a2800' }}>기처리</option>
-                        <option value="확인불가" style={{ background: '#7a2800' }}>확인불가</option>
-                      </select>
-                    ) : (
-                      <span className="text-teal-300 text-xs font-bold">{apStatus}</span>
-                    )}
-                  </div>
-                  <div className="flex items-start gap-2">
-                    <span className="text-blue-300 text-xs w-16 flex-shrink-0 pt-1">작업메모</span>
-                    {isAuthenticated ? (
-                      <textarea className="flex-1 rounded px-2 py-1 text-xs text-white resize-none"
-                        style={{ background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.25)' }}
-                        rows={2} placeholder="메모 입력..." defaultValue={apMemo}
-                        onBlur={async (e) => {
-                          if (e.target.value === apMemo) return;
-                          const today = new Date().toLocaleDateString('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/\. /g, '-').replace('.', '');
-                          await fetch('/api/save-status', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ date: today, address: editingAdditionalPoint.address, destination: editingAdditionalPoint.destination, complaint: editingAdditionalPoint.complaint?.trim() ?? '', originalId: null, status: apStatus, memo: e.target.value }) }).catch(() => {});
-                          setPointStatuses(prev => ({ ...prev, [apKey]: { status: apStatus, memo: e.target.value, updatedAt: Date.now() } }));
-                        }} />
-                    ) : (
-                      <span className="text-green-300 text-xs flex-1">{apMemo}</span>
-                    )}
-                  </div>
-                </div>
-              );
-            })()}
-
-            {/* 경로 삽입 위치 선택 */}
-            <div className="mb-4 rounded-lg p-3" style={{ background: 'rgba(249,115,22,0.15)', border: '1px solid rgba(249,115,22,0.35)' }}>
-              <label className="text-orange-200 text-xs mb-2 block font-bold">📌 경로 삽입 위치 (선택)</label>
-              <p className="text-xs mb-2" style={{ color: 'rgba(255,200,150,0.8)' }}>
-                현재 경로의 어느 지점 다음에 넣을지 선택하세요. 선택하지 않으면 지도에만 표시됩니다.
-              </p>
-              <select
-                value={additionalInsertAfter ?? ''}
-                onChange={(e) => setAdditionalInsertAfter(e.target.value === '' ? null : Number(e.target.value))}
-                className="w-full px-3 py-2 rounded text-sm text-white"
-                style={{ background: 'rgba(255,255,255,0.15)', border: '1px solid rgba(249,115,22,0.5)' }}>
-                <option value="" style={{ background: '#1a3a6e' }}>선택 안 함 (지도에만 표시)</option>
-                {currentRoute?.points
-                  .filter(p => p.source !== 'fixed' || p.order === 0)
-                  .map(p => (
-                    <option key={p.order} value={p.order} style={{ background: '#1a3a6e' }}>
-                      {p.order === 0 ? '출발지(시청) 다음' : `${p.order}번 (${p.destination || p.address}) 다음`}
-                    </option>
-                  ))}
-              </select>
-            </div>
-
-            <div className="flex gap-2 mt-2">
-              <button onClick={() => setShowAdditionalModal(false)}
-                className="flex-1 py-2 rounded text-sm text-white font-medium"
-                style={{ background: '#455a64' }}>취소</button>
-              <button onClick={handleAdditionalSave}
-                disabled={isSaving}
-                className="flex-1 py-2 rounded text-sm text-white font-bold"
-                style={{ background: isSaving ? '#555' : '#7b2d00' }}>
-                {isSaving ? '저장 중...' : '저장'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* 추출지점 수정 모달 */}
+      {/* 추출지점 수정 모달 */}}
       {showExtractEditModal && extractEditTarget && (
         <div className="fixed inset-0 flex items-center justify-center z-50"
           style={{ background: 'rgba(0,0,0,0.6)' }}>
