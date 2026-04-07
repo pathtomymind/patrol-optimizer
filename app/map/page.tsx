@@ -638,7 +638,7 @@ export default function MapPage() {
     const map = naverMapRef.current;
     const routePoints = routeRef.current?.points ?? [];
 
-    const toPoint = routePoints.find(p => p.order === (point.insertAfterOrder! + 1));
+    const toPoint = routePoints.find(p => p.order === (typeof point.insertAfterOrder === 'number' ? point.insertAfterOrder + 1 : -1));
     if (!toPoint) return;
 
     const cleanupBlink = () => {
