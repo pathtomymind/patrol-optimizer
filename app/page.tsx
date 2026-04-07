@@ -44,10 +44,10 @@ export default function Home() {
   const [editingAdditionalPoint, setEditingAdditionalPoint] = useState<{
     id: number; address: string; destination: string; complaint: string; manager: string; photoUrl: string;
     lat?: number | null; lng?: number | null; placeName?: string | null; source?: string | null; coordMessage?: string | null;
-    isAdditional: true; insertAfterOrder?: number | null;
+    isAdditional: true; insertAfterOrder?: number | string | null;
   } | null>(null);
   const [additionalForm, setAdditionalForm] = useState({ address: '', destination: '', complaint: '', manager: '', photoUrl: '' });
-  const [additionalInsertAfter, setAdditionalInsertAfter] = useState<number | null>(null);
+  const [additionalInsertAfter, setAdditionalInsertAfter] = useState<number | string | null>(null);
   const [additionalCoordStatus, setAdditionalCoordStatus] = useState<'idle' | 'loading' | 'success' | 'fail'>('idle');
   const [additionalCoord, setAdditionalCoord] = useState<{ lat: number | null; lng: number | null; placeName: string | null; source: string | null; coordMessage: string | null }>({ lat: null, lng: null, placeName: null, source: null, coordMessage: null });
 
