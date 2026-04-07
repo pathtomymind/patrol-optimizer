@@ -32,7 +32,7 @@ type AdditionalPoint = {
   source?: string | null;
   coordMessage?: string | null;
   isAdditional: true;
-  insertAfterOrder?: number | null;
+  insertAfterOrder?: number | string | null; // ★ "add_${id}" 형식으로 추가지점 참조 가능
 };
 
 type PointStatus = {
@@ -732,34 +732,69 @@ export default function MapPage() {
 
     const isRoadMode = lineModeRef.current === 'road';
 
-    points.forEach(point => {
+    // ★ 앞 지점이 route point인 추가지점부터 처리 후, add_X 참조 추가지점 처리
+    const sortedPoints = [...points].sort((a, b) => {
+      const aIsAfterAdd = typeof a.insertAfterOrder === 'string';
+      const bIsAfterAdd = typeof b.insertAfterOrder === 'string';
+      if (aIsAfterAdd && !bIsAfterAdd) return 1;
+      if (!aIsAfterAdd && bIsAfterAdd) return -1;
+      return 0;
+    });
+
+    sortedPoints.forEach(point => {
       if (!point.lat || !point.lng || point.insertAfterOrder == null) return;
 
-      const fromOrder = point.insertAfterOrder;
-      const toOrder = fromOrder + 1;
+      const isAfterAdditional = typeof point.insertAfterOrder === 'string' && (point.insertAfterOrder as string).startsWith('add_');
 
-      // 숨길 기존 경로선 찾기 (fromOrder → toOrder 사이)
-      const fromIdx = routePoints.findIndex(p => p.order === fromOrder);
-      if (fromIdx >= 0 && fromIdx < polylinesRef.current.length) {
-        const existingPl = polylinesRef.current[fromIdx];
-        if (existingPl) {
-          existingPl.setMap(null);
-          if (!hiddenPolylinesRef.current.includes(fromIdx)) {
-            hiddenPolylinesRef.current.push(fromIdx);
+      let fromLat: number;
+      let fromLng: number;
+      let toPoint: RoutePoint | undefined;
+
+      if (isAfterAdditional) {
+        // ★ 앞 지점이 추가지점인 경우 — "add_${id}" 파싱
+        const prevAddId = parseInt((point.insertAfterOrder as string).replace('add_', ''));
+        const prevAdd = points.find(p => p.id === prevAddId);
+        if (!prevAdd?.lat || !prevAdd?.lng) return;
+        fromLat = prevAdd.lat!;
+        fromLng = prevAdd.lng!;
+        // toPoint: prevAdd의 insertAfterOrder 기준으로 다음 route point 찾기
+        if (typeof prevAdd.insertAfterOrder === 'number') {
+          toPoint = routePoints.find(p => p.order === (prevAdd.insertAfterOrder as number) + 1);
+        } else if (typeof prevAdd.insertAfterOrder === 'string') {
+          const prevPrevId = parseInt((prevAdd.insertAfterOrder as string).replace('add_', ''));
+          const prevPrevAdd = points.find(p => p.id === prevPrevId);
+          if (prevPrevAdd && typeof prevPrevAdd.insertAfterOrder === 'number') {
+            toPoint = routePoints.find(p => p.order === (prevPrevAdd.insertAfterOrder as number) + 1);
           }
         }
+      } else {
+        // ★ 앞 지점이 일반 route point인 경우 (기존 로직)
+        const fromOrder = point.insertAfterOrder as number;
+        const toOrder = fromOrder + 1;
+        const fromIdx = routePoints.findIndex(p => p.order === fromOrder);
+        if (fromIdx >= 0 && fromIdx < polylinesRef.current.length) {
+          const existingPl = polylinesRef.current[fromIdx];
+          if (existingPl) {
+            existingPl.setMap(null);
+            if (!hiddenPolylinesRef.current.includes(fromIdx)) {
+              hiddenPolylinesRef.current.push(fromIdx);
+            }
+          }
+        }
+        const fromPoint = routePoints.find(p => p.order === fromOrder);
+        if (!fromPoint) return;
+        fromLat = fromPoint.lat;
+        fromLng = fromPoint.lng;
+        toPoint = routePoints.find(p => p.order === toOrder);
       }
 
-      const fromPoint = routePoints.find(p => p.order === fromOrder);
-      const toPoint = routePoints.find(p => p.order === toOrder);
       const addLat = point.lat!;
       const addLng = point.lng!;
 
       if (isRoadMode) {
-        // 도로 모드: ORS로 실제 도로 경로 요청
         const drawRoadSegments = async () => {
           const segPairs = [];
-          if (fromPoint) segPairs.push({ fromLng: fromPoint.lng, fromLat: fromPoint.lat, toLng: addLng, toLat: addLat });
+          segPairs.push({ fromLng, fromLat, toLng: addLng, toLat: addLat });
           if (toPoint) segPairs.push({ fromLng: addLng, fromLat: addLat, toLng: toPoint.lng, toLat: toPoint.lat });
 
           try {
@@ -777,7 +812,7 @@ export default function MapPage() {
               if (data.results?.length) {
                 data.results.forEach((r: { ok: boolean; coords?: { lat: number; lng: number }[] }, i: number) => {
                   const fallback = i === 0
-                    ? (fromPoint ? [{ lat: fromPoint.lat, lng: fromPoint.lng }, { lat: addLat, lng: addLng }] : [])
+                    ? [{ lat: fromLat, lng: fromLng }, { lat: addLat, lng: addLng }]
                     : (toPoint ? [{ lat: addLat, lng: addLng }, { lat: toPoint.lat, lng: toPoint.lng }] : []);
                   const coords = (r.ok && r.coords && r.coords.length > 1) ? r.coords : fallback;
                   if (coords.length < 2) return;
@@ -798,19 +833,16 @@ export default function MapPage() {
               }
             }
           } catch {}
-          // ORS 실패 시 직선 fallback
           drawStraightAdditionalLines();
         };
 
         const drawStraightAdditionalLines = () => {
-          if (fromPoint) {
-            const coords1 = [{ lat: fromPoint.lat, lng: fromPoint.lng }, { lat: addLat, lng: addLng }];
-            const line1 = new naver.maps.Polyline({ map, path: coords1.map(c => new naver.maps.LatLng(c.lat, c.lng)), strokeColor: getAdditionalLineColor(point, true), strokeWeight: 6, strokeOpacity: 1, zIndex: 8 });
-            additionalPolylinesRef.current.push(line1);
-            const b1 = arrowMarkersRef.current.length;
-            placeArrows(coords1, null, map, naver);
-            additionalArrowMarkersRef.current.push(...arrowMarkersRef.current.slice(b1));
-          }
+          const coords1 = [{ lat: fromLat, lng: fromLng }, { lat: addLat, lng: addLng }];
+          const line1 = new naver.maps.Polyline({ map, path: coords1.map(c => new naver.maps.LatLng(c.lat, c.lng)), strokeColor: getAdditionalLineColor(point, true), strokeWeight: 6, strokeOpacity: 1, zIndex: 8 });
+          additionalPolylinesRef.current.push(line1);
+          const b1 = arrowMarkersRef.current.length;
+          placeArrows(coords1, null, map, naver);
+          additionalArrowMarkersRef.current.push(...arrowMarkersRef.current.slice(b1));
           if (toPoint) {
             const coords2 = [{ lat: addLat, lng: addLng }, { lat: toPoint.lat, lng: toPoint.lng }];
             const line2 = new naver.maps.Polyline({ map, path: coords2.map(c => new naver.maps.LatLng(c.lat, c.lng)), strokeColor: getAdditionalLineColor(point, false, toPoint), strokeWeight: 6, strokeOpacity: 1, zIndex: 8 });
@@ -825,14 +857,12 @@ export default function MapPage() {
 
       } else {
         // 직선 모드
-        if (fromPoint) {
-          const coords1 = [{ lat: fromPoint.lat, lng: fromPoint.lng }, { lat: addLat, lng: addLng }];
-          const line1 = new naver.maps.Polyline({ map, path: coords1.map(c => new naver.maps.LatLng(c.lat, c.lng)), strokeColor: getAdditionalLineColor(point, true), strokeWeight: 6, strokeOpacity: 1, zIndex: 8 });
-          additionalPolylinesRef.current.push(line1);
-          const b1 = arrowMarkersRef.current.length;
-          placeArrows(coords1, null, map, naver);
-          additionalArrowMarkersRef.current.push(...arrowMarkersRef.current.slice(b1));
-        }
+        const coords1 = [{ lat: fromLat, lng: fromLng }, { lat: addLat, lng: addLng }];
+        const line1 = new naver.maps.Polyline({ map, path: coords1.map(c => new naver.maps.LatLng(c.lat, c.lng)), strokeColor: getAdditionalLineColor(point, true), strokeWeight: 6, strokeOpacity: 1, zIndex: 8 });
+        additionalPolylinesRef.current.push(line1);
+        const b1 = arrowMarkersRef.current.length;
+        placeArrows(coords1, null, map, naver);
+        additionalArrowMarkersRef.current.push(...arrowMarkersRef.current.slice(b1));
         if (toPoint) {
           const coords2 = [{ lat: addLat, lng: addLng }, { lat: toPoint.lat, lng: toPoint.lng }];
           const line2 = new naver.maps.Polyline({ map, path: coords2.map(c => new naver.maps.LatLng(c.lat, c.lng)), strokeColor: getAdditionalLineColor(point, false, toPoint), strokeWeight: 6, strokeOpacity: 1, zIndex: 8 });
@@ -1709,7 +1739,7 @@ export default function MapPage() {
 
 
   // ★ 추가지점 삽입 위치 저장
-  const handleInsertAfterSave = (insertAfterOrder: number | null) => {
+  const handleInsertAfterSave = (insertAfterOrder: number | string | null) => {
     if (!selectedAdditional) return;
     const updated = additionalPoints.map(p =>
       p.id === selectedAdditional.id ? { ...p, insertAfterOrder } : p
@@ -2458,289 +2488,74 @@ export default function MapPage() {
       {/* ★ 추가지점 상세 팝업 (기존 상세 팝업과 동일 구조) */}
       {showInsertModal && selectedAdditional && (() => {
         const addrPart = selectedAdditional.address?.trim() || selectedAdditional.destination?.trim() || '';
-        const key = `${addrPart}:${(selectedAdditional.complaint || '').trim()}:none`;
-        const st = statuses[key];
-        const curStatus = st?.status || '';
-        const curMemo = st?.memo || '';
-        const isDone = DONE_STATUSES.includes(curStatus);
-        const popupBg = isDone ? '#1a3a6e' : '#7a2800';
+        const apKey = `${addrPart}:${(selectedAdditional.complaint || '').trim()}:none`;
+        const apSt = statuses[apKey];
         const addIdx = additionalPoints.findIndex(p => p.id === selectedAdditional.id);
         const label = `A${addIdx + 1}`;
 
+        const insertOptions: { value: number | string | null; label: string }[] = [
+          { value: null, label: '연결 안 함' },
+        ];
+        if (route) {
+          route.points.forEach(p => {
+            if (p.source === 'fixed' && p.order === 0) {
+              insertOptions.push({ value: p.order, label: '출발지 다음' });
+            } else if (p.source !== 'fixed') {
+              insertOptions.push({ value: p.order, label: `${p.order}번 다음` });
+            }
+          });
+        }
+        additionalPoints.forEach((ap, i) => {
+          if (ap.id !== selectedAdditional.id && ap.lat && ap.lng) {
+            insertOptions.push({ value: `add_${ap.id}`, label: `A${i + 1} 다음` });
+          }
+        });
+
         return (
-          <div
-            style={{ position: 'fixed', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 200, background: 'rgba(0,0,0,0.6)' }}
-            onClick={() => setShowInsertModal(false)}>
-            <div
-              style={{ background: popupBg, borderRadius: '12px', padding: '20px', width: '88%', maxWidth: '400px', maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 8px 32px rgba(0,0,0,0.5)' }}
-              onClick={e => e.stopPropagation()}>
-
-              {/* 헤더 — 기존과 동일 구조, A1 마름모 + 주소명 */}
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-                <h2 style={{ color: 'white', fontWeight: 'bold', fontSize: '15px', display: 'flex', alignItems: 'center', gap: '8px', margin: 0, minWidth: 0 }}>
-                  <span style={{ position: 'relative', width: '28px', height: '28px', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <svg width="28" height="28" viewBox="0 0 28 28" xmlns="http://www.w3.org/2000/svg" style={{ position: 'absolute' }}>
-                      <polygon points="14,2 26,14 14,26 2,14" fill={isDone ? '#7b1fa2' : '#f97316'} stroke="white" stroke-width="1.5"/>
-                    </svg>
-                    <span style={{ position: 'relative', zIndex: 1, color: 'white', fontSize: '9px', fontWeight: 'bold' }}>{label}</span>
-                  </span>
-                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {selectedAdditional.destination
-                      ? `${selectedAdditional.address} (${selectedAdditional.destination})`
-                      : selectedAdditional.address}
-                  </span>
-                </h2>
-                <button onClick={() => setShowInsertModal(false)} style={{ color: 'white', background: 'none', border: 'none', fontSize: '18px', cursor: 'pointer', flexShrink: 0 }}>✕</button>
-              </div>
-
-              {/* 정보 목록 */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                {/* 주소 */}
-                <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
-                  <span style={{ color: '#90caf9', fontSize: '11px', width: '60px', flexShrink: 0, paddingTop: '2px' }}>주소</span>
-                  <span style={{ color: 'white', fontSize: '11px', flex: 1 }}>{selectedAdditional.address || ''}</span>
-                </div>
-                {/* 목적지 */}
-                <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
-                  <span style={{ color: '#90caf9', fontSize: '11px', width: '60px', flexShrink: 0, paddingTop: '2px' }}>목적지</span>
-                  <span style={{ color: 'white', fontSize: '11px', flex: 1 }}>{selectedAdditional.destination || ''}</span>
-                </div>
-                {/* 플레이스명 */}
-                <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
-                  <span style={{ color: '#90caf9', fontSize: '11px', width: '60px', flexShrink: 0, paddingTop: '2px' }}>플레이스명</span>
-                  <span style={{ color: 'white', fontSize: '11px', flex: 1 }}>{selectedAdditional.placeName || ''}</span>
-                </div>
-                {/* 좌표메시지 */}
-                {selectedAdditional.coordMessage && (
-                  <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
-                    <span style={{ color: '#90caf9', fontSize: '11px', width: '60px', flexShrink: 0, paddingTop: '2px' }}>좌표메시지</span>
-                    <span style={{ color: selectedAdditional.coordMessage?.includes('⚠️') ? '#ffb74d' : 'white', fontSize: '11px', flex: 1 }}>{selectedAdditional.coordMessage}</span>
-                  </div>
-                )}
-
-                <div style={{ borderTop: '1px solid rgba(255,255,255,0.2)', marginTop: '2px', marginBottom: '2px' }} />
-
-                {/* 민원번호 */}
-                <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
-                  <span style={{ color: '#90caf9', fontSize: '11px', width: '60px', flexShrink: 0, paddingTop: '2px' }}>민원번호</span>
-                  <span style={{ color: 'white', fontSize: '11px', flex: 1 }}>{(selectedAdditional as any).originalId ? `${(selectedAdditional as any).originalId}번` : ''}</span>
-                </div>
-                {/* 민원내용 */}
-                <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                  <span style={{ color: '#90caf9', fontSize: '11px', width: '60px', flexShrink: 0 }}>민원내용</span>
-                  {isAdmin ? (
-                    <input defaultValue={selectedAdditional.complaint || ''} onBlur={async (e) => {
-                      if (e.target.value === selectedAdditional.complaint) return;
-                      const updated = additionalPoints.map(p => p.id === selectedAdditional.id ? { ...p, complaint: e.target.value } : p);
-                      setAdditionalPoints(updated); additionalPointsRef.current = updated;
-                      const today = routeRef.current?.date ?? '';
-                      await fetch('/api/save-additional', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ date: today, points: updated }) }).catch(() => {});
-                    }} style={{ flex: 1, borderRadius: '4px', padding: '4px 6px', fontSize: '11px', color: 'white', background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.25)' }} />
-                  ) : (
-                    <span style={{ color: 'white', fontSize: '11px', flex: 1 }}>{selectedAdditional.complaint || ''}</span>
-                  )}
-                </div>
-                {/* 담당자 */}
-                <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                  <span style={{ color: '#90caf9', fontSize: '11px', width: '60px', flexShrink: 0 }}>담당자</span>
-                  {isAdmin ? (
-                    <input defaultValue={selectedAdditional.manager || ''} onBlur={async (e) => {
-                      if (e.target.value === selectedAdditional.manager) return;
-                      const updated = additionalPoints.map(p => p.id === selectedAdditional.id ? { ...p, manager: e.target.value } : p);
-                      setAdditionalPoints(updated); additionalPointsRef.current = updated;
-                      const today = routeRef.current?.date ?? '';
-                      await fetch('/api/save-additional', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ date: today, points: updated }) }).catch(() => {});
-                    }} style={{ flex: 1, borderRadius: '4px', padding: '4px 6px', fontSize: '11px', color: 'white', background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.25)' }} />
-                  ) : (
-                    <span style={{ color: 'white', fontSize: '11px', flex: 1 }}>{selectedAdditional.manager || ''}</span>
-                  )}
-                </div>
-
-                {/* 현장사진 */}
-                <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
-                  <span style={{ color: '#90caf9', fontSize: '11px', width: '60px', flexShrink: 0, paddingTop: '2px' }}>현장사진</span>
-                  <div style={{ flex: 1 }}>
-                    {selectedAdditional.photoUrl ? (
-                      <img src={selectedAdditional.photoUrl} alt="현장사진" style={{ width: '100%', borderRadius: '6px' }} />
-                    ) : (
-                      <div style={{ borderRadius: '6px', height: '60px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(255,255,255,0.1)', border: '1px dashed rgba(255,255,255,0.3)' }}>
-                        <span style={{ color: '#90caf9', fontSize: '11px' }}>사진 없음</span>
-                      </div>
-                    )}
-                    {isAdmin && (
-                      <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', padding: '6px', borderRadius: '4px', background: 'rgba(255,255,255,0.1)', color: 'white', fontSize: '11px', cursor: 'pointer', marginTop: '4px' }}>
-                        📷 사진 교체
-                        <input type="file" accept="image/*" style={{ display: 'none' }} onChange={async (e) => {
-                          const file = e.target.files?.[0];
-                          if (!file) return;
-                          const reader = new FileReader();
-                          reader.onload = async () => {
-                            try {
-                              const uploadRes = await fetch('/api/upload-photo', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ imageData: reader.result as string, filename: `additional-${Date.now()}.jpg` }) });
-                              if (uploadRes.ok) {
-                                const uploadData = await uploadRes.json();
-                                const updated = additionalPoints.map(p => p.id === selectedAdditional.id ? { ...p, photoUrl: uploadData.url } : p);
-                                setAdditionalPoints(updated); additionalPointsRef.current = updated;
-                                setSelectedAdditional(prev => prev ? { ...prev, photoUrl: uploadData.url } : prev);
-                                const today = routeRef.current?.date ?? '';
-                                await fetch('/api/save-additional', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ date: today, points: updated }) }).catch(() => {});
-                              }
-                            } catch {}
-                          };
-                          reader.readAsDataURL(file);
-                          e.target.value = '';
-                        }} />
-                      </label>
-                    )}
-                  </div>
-                </div>
-                {/* 사진설명 — 레이블 없이 사진 아래 표시 */}
-                {(selectedAdditional as any).photoDescription && (
-                  <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
-                    <span style={{ width: '60px', flexShrink: 0 }} />
-                    <span style={{ color: 'rgba(255,255,255,0.65)', fontSize: '11px', flex: 1 }}>{(selectedAdditional as any).photoDescription}</span>
-                  </div>
-                )}
-
-                {/* 작업상태/메모 — 관리자: 수정 가능 / 일반: 읽기전용 */}
-                <div style={{ marginTop: '4px', paddingTop: '12px', borderTop: '1px solid rgba(255,255,255,0.2)' }}>
-                  {isAdmin ? (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                      <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                        <span style={{ color: '#90caf9', fontSize: '11px', width: '60px', flexShrink: 0 }}>작업상태</span>
-                        <select
-                          style={{ flex: 1, borderRadius: '4px', padding: '6px 8px', fontSize: '11px', color: 'white', fontWeight: 'bold', background: isDone ? 'rgba(255,255,255,0.15)' : 'rgba(235,100,0,0.65)', border: '1px solid rgba(255,255,255,0.3)' }}
-                          value={curStatus}
-                          onChange={async (e) => {
-                            const newStatus = e.target.value;
-                            const key2 = `${addrPart}:${(selectedAdditional.complaint || '').trim()}:none`;
-                            setSavingStatus(true);
-                            try {
-                              await fetch('/api/save-status', {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({
-                                  date: routeRef.current?.date ?? new Date().toLocaleDateString('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/\. /g, '-').replace('.', ''),
-                                  address: selectedAdditional.address,
-                                  destination: selectedAdditional.destination,
-                                  complaint: selectedAdditional.complaint?.trim() ?? '',
-                                  originalId: null,
-                                  status: newStatus,
-                                  memo: curMemo,
-                                }),
-                              });
-                              setStatuses(prev => ({ ...prev, [key2]: { status: newStatus, memo: curMemo, updatedAt: Date.now() } }));
-                              statusesRef.current = { ...statusesRef.current, [key2]: { status: newStatus, memo: curMemo, updatedAt: Date.now() } };
-                              drawAdditionalMarkers(additionalPoints);
-                            } catch {}
-                            setSavingStatus(false);
-                          }}
-                          disabled={savingStatus}>
-                          <option value="" style={{ background: '#1a3a6e' }}></option>
-                          <option value="민원처리완료" style={{ background: '#7a2800' }}>민원처리완료</option>
-                          <option value="기처리" style={{ background: '#7a2800' }}>기처리</option>
-                          <option value="확인불가" style={{ background: '#7a2800' }}>확인불가</option>
-                        </select>
-                      </div>
-                      <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
-                        <span style={{ color: '#90caf9', fontSize: '11px', width: '60px', flexShrink: 0, paddingTop: '4px' }}>작업메모</span>
-                        <textarea
-                          style={{ flex: 1, borderRadius: '4px', padding: '6px 8px', fontSize: '11px', color: 'white', background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.3)', resize: 'none' }}
-                          rows={2}
-                          placeholder="메모 입력..."
-                          defaultValue={curMemo}
-                          onBlur={async (e) => {
-                            if (e.target.value === curMemo) return;
-                            const key2 = `${addrPart}:${(selectedAdditional.complaint || '').trim()}:none`;
-                            try {
-                              await fetch('/api/save-status', {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({
-                                  date: routeRef.current?.date ?? '',
-                                  address: selectedAdditional.address,
-                                  destination: selectedAdditional.destination,
-                                  complaint: selectedAdditional.complaint?.trim() ?? '',
-                                  originalId: null,
-                                  status: curStatus,
-                                  memo: e.target.value,
-                                }),
-                              });
-                              setStatuses(prev => ({ ...prev, [key2]: { status: curStatus, memo: e.target.value, updatedAt: Date.now() } }));
-                              statusesRef.current = { ...statusesRef.current, [key2]: { status: curStatus, memo: e.target.value, updatedAt: Date.now() } };
-                            } catch {}
-                          }}
-                        />
-                      </div>
-                    </div>
-                  ) : (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                      <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
-                        <span style={{ color: '#90caf9', fontSize: '11px', width: '60px', flexShrink: 0 }}>작업상태</span>
-                        <span style={{ color: '#80cbc4', fontSize: '11px', fontWeight: 'bold' }}>{curStatus}</span>
-                      </div>
-                      <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
-                        <span style={{ color: '#90caf9', fontSize: '11px', width: '60px', flexShrink: 0 }}>작업메모</span>
-                        <span style={{ color: 'white', fontSize: '11px', flex: 1 }}>{curMemo}</span>
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                {/* 삽입위치 + 지점 삭제 — 관리자만, 한 줄 */}
-                {isAdmin && (
-                  <>
-                    <div style={{ borderTop: '1px solid rgba(255,255,255,0.2)', marginTop: '4px' }} />
-                    <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
-                      <span style={{ color: '#fbbf77', fontSize: '11px', flexShrink: 0 }}>📌 삽입위치</span>
-                      <select
-                        value={selectedAdditional.insertAfterOrder ?? ''}
-                        onChange={(e) => {
-                          const val = e.target.value === '' ? null : Number(e.target.value);
-                          handleInsertAfterSave(val);
-                        }}
-                        style={{ flex: 1, borderRadius: '4px', padding: '5px 6px', fontSize: '10px', color: 'white', background: 'rgba(255,255,255,0.12)', border: '1px solid rgba(249,115,22,0.5)' }}>
-                        <option value="" style={{ background: '#1a3a6e' }}>연결 안 함</option>
-                        {route?.points.filter(p => p.source === 'fixed' ? p.order === 0 : true).map(p => (
-                          <option key={p.order} value={p.order} style={{ background: '#1a3a6e' }}>
-                            {p.order === 0 ? '출발지 다음' : `${p.order}번 다음`}
-                          </option>
-                        ))}
-                      </select>
-                      <button
-                        onClick={() => handleAdditionalDelete(selectedAdditional.id)}
-                        style={{ padding: '5px 10px', borderRadius: '6px', border: 'none', background: '#c62828', color: 'white', fontSize: '11px', fontWeight: 'bold', cursor: 'pointer', flexShrink: 0 }}>
-                        지점 삭제
-                      </button>
-                    </div>
-                  </>
-                )}
-              </div>
-
-              {/* 하단 버튼 — 기존과 동일 */}
-              <div style={{ display: 'flex', gap: '8px', marginTop: '20px', paddingTop: '16px', borderTop: '1px solid rgba(255,255,255,0.15)' }}>
-                <button
-                  onClick={() => window.location.href = 'timemarkcamera://'}
-                  title="타임마크 촬영"
-                  style={{ background: '#f9d835', width: '48px', flexShrink: 0, borderRadius: '8px', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <svg width="24" height="22" viewBox="0 0 24 22" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <path d="M9 2L7.17 4H4C2.9 4 2 4.9 2 6V18C2 19.1 2.9 20 4 20H20C21.1 20 22 19.1 22 18V6C22 4.9 21.1 4 20 4H16.83L15 2H9ZM12 17C9.24 17 7 14.76 7 12C7 9.24 9.24 7 12 7C14.76 7 17 9.24 17 12C17 14.76 14.76 17 12 17Z" fill="#1a1a1a"/>
-                    <circle cx="12" cy="12" r="3.5" fill="#1a1a1a"/>
-                  </svg>
-                </button>
-                <button
-                  onClick={() => window.open(`tmap://route?goalname=${encodeURIComponent(selectedAdditional.destination || selectedAdditional.address)}&goaly=${selectedAdditional.lat}&goalx=${selectedAdditional.lng}`)}
-                  style={{ flex: 1, padding: '10px', borderRadius: '8px', background: '#0a3d8f', color: 'white', fontSize: '14px', fontWeight: 'bold', border: 'none', cursor: 'pointer' }}>티맵</button>
-                <button
-                  onClick={() => window.open(`nmap://navigation?dlat=${selectedAdditional.lat}&dlng=${selectedAdditional.lng}&dname=${encodeURIComponent(selectedAdditional.destination || selectedAdditional.address)}&appname=patrol-optimizer`)}
-                  style={{ flex: 1, padding: '10px', borderRadius: '8px', background: '#1b5e20', color: 'white', fontSize: '14px', fontWeight: 'bold', border: 'none', cursor: 'pointer' }}>네이버지도</button>
-              </div>
-            </div>
-          </div>
+          <AdditionalPointModal
+            key={selectedAdditional.id}
+            label={label}
+            point={selectedAdditional}
+            apSt={apSt}
+            insertOptions={insertOptions}
+            onClose={() => setShowInsertModal(false)}
+            onSave={async (insertAfterOrder, status, memo, photoUrl) => {
+              const updated = additionalPoints.map(p =>
+                p.id === selectedAdditional.id
+                  ? { ...p, insertAfterOrder, ...(photoUrl ? { photoUrl } : {}) }
+                  : p
+              );
+              setAdditionalPoints(updated);
+              additionalPointsRef.current = updated;
+              try {
+                const draft = JSON.parse(localStorage.getItem('draft-route') || '{}');
+                draft.additionalPoints = updated;
+                draft.lastModified = Date.now();
+                localStorage.setItem('draft-route', JSON.stringify(draft));
+              } catch {}
+              const today = routeRef.current?.date ?? new Date().toLocaleDateString('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/\. /g, '-').replace('.', '');
+              fetch('/api/save-additional', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ date: today, points: updated }) }).catch(() => {});
+              if (status !== undefined) {
+                await fetch('/api/save-status', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ date: route?.date ?? today, address: selectedAdditional.address, destination: selectedAdditional.destination, complaint: selectedAdditional.complaint?.trim() ?? '', originalId: null, status, memo }) });
+                statusesRef.current = { ...statusesRef.current, [apKey]: { status, memo, updatedAt: Date.now() } };
+                setStatuses(prev => ({ ...prev, [apKey]: { status, memo, updatedAt: Date.now() } }));
+              }
+              setShowInsertModal(false);
+              drawAdditionalMarkers(updated);
+            }}
+            onDelete={() => handleAdditionalDelete(selectedAdditional.id)}
+            onPhotoUpload={async (file) => {
+              const reader = new FileReader();
+              const base64 = await new Promise<string>(res => { reader.onload = () => res(reader.result as string); reader.readAsDataURL(file); });
+              const uploadRes = await fetch('/api/upload-photo', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ imageData: base64, filename: `additional-map-${Date.now()}.jpg` }) });
+              if (uploadRes.ok) { const { url } = await uploadRes.json(); return url as string; }
+              return null;
+            }}
+          />
         );
       })()}
 
-      {/* 지도뷰 도움말 팝업 */}
+      {/* 지도뷰 도움말 팝업 */}}
       {showMapHelpModal && (
         <div
           style={{ position: 'fixed', inset: 0, zIndex: 9999, background: 'rgba(0,0,0,0.65)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
@@ -2831,6 +2646,129 @@ export default function MapPage() {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+// ★ 추가지점 팝업 컴포넌트 (지도뷰 마커 클릭 시 표시)
+function AdditionalPointModal({ label, point, apSt, insertOptions, onClose, onSave, onDelete, onPhotoUpload }: {
+  label: string;
+  point: AdditionalPoint;
+  apSt: PointStatus | undefined;
+  insertOptions: { value: number | string | null; label: string }[];
+  onClose: () => void;
+  onSave: (insertAfterOrder: number | string | null, status: string, memo: string, photoUrl: string | null) => Promise<void>;
+  onDelete: () => void;
+  onPhotoUpload: (file: File) => Promise<string | null>;
+}) {
+  const [localInsert, setLocalInsert] = useState<number | string | null>(point.insertAfterOrder ?? null);
+  const [localStatus, setLocalStatus] = useState(apSt?.status || '');
+  const [localMemo, setLocalMemo] = useState(apSt?.memo || '');
+  const [localPhoto, setLocalPhoto] = useState(point.photoUrl || '');
+  const [saving, setSaving] = useState(false);
+
+  const handleSave = async () => {
+    setSaving(true);
+    await onSave(localInsert, localStatus, localMemo, localPhoto || null);
+    setSaving(false);
+  };
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 400, background: 'rgba(0,0,0,0.65)' }} onClick={onClose}>
+      <div style={{ background: '#7c2d00', border: '2px solid rgba(249,115,22,0.6)', borderRadius: '12px', padding: '18px', width: '320px', maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 8px 32px rgba(0,0,0,0.6)' }} onClick={e => e.stopPropagation()}>
+
+        {/* 헤더 */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <svg width="28" height="28" viewBox="0 0 28 28">
+              <polygon points="14,1 27,14 14,27 1,14" fill="#f97316" stroke="white" strokeWidth="1.5"/>
+              <text x="14" y="18" textAnchor="middle" fontSize="9" fontWeight="bold" fill="white" fontFamily="Arial,sans-serif">{label}</text>
+            </svg>
+            <div>
+              <div style={{ color: 'white', fontWeight: 'bold', fontSize: '13px' }}>{point.address}</div>
+              {point.destination && <div style={{ color: '#fbbf77', fontSize: '11px' }}>({point.destination})</div>}
+            </div>
+          </div>
+          <span style={{ color: 'white', cursor: 'pointer', fontSize: '18px' }} onClick={onClose}>✕</span>
+        </div>
+
+        {point.complaint && <div style={{ fontSize: '12px', color: '#fbbf77', marginBottom: '4px' }}>📋 {point.complaint}</div>}
+        {point.coordMessage && <div style={{ fontSize: '12px', color: '#fde68a', marginBottom: '12px' }}>📍 {point.coordMessage}</div>}
+
+        {/* 삽입위치 */}
+        <div style={{ marginBottom: '12px' }}>
+          <label style={{ color: '#fde68a', fontSize: '12px', display: 'block', marginBottom: '4px' }}>📌 삽입 위치</label>
+          <select
+            value={localInsert === null ? '' : String(localInsert)}
+            onChange={e => {
+              const v = e.target.value;
+              if (v === '') setLocalInsert(null);
+              else if (v.startsWith('add_')) setLocalInsert(v);
+              else setLocalInsert(Number(v));
+            }}
+            style={{ width: '100%', padding: '8px', borderRadius: '6px', background: '#92400e', color: 'white', border: '1px solid rgba(249,115,22,0.5)', fontSize: '13px' }}>
+            {insertOptions.map(opt => (
+              <option key={String(opt.value)} value={opt.value === null ? '' : String(opt.value)}>{opt.label}</option>
+            ))}
+          </select>
+        </div>
+
+        {/* 작업상태 */}
+        <div style={{ marginBottom: '10px' }}>
+          <label style={{ color: '#fde68a', fontSize: '12px', display: 'block', marginBottom: '4px' }}>작업상태</label>
+          <select value={localStatus} onChange={e => setLocalStatus(e.target.value)}
+            style={{ width: '100%', padding: '8px', borderRadius: '6px', background: '#92400e', color: 'white', border: '1px solid rgba(249,115,22,0.5)', fontSize: '13px' }}>
+            <option value=''>미완료</option>
+            <option value='민원처리완료'>민원처리완료</option>
+            <option value='기처리'>기처리</option>
+            <option value='확인불가'>확인불가</option>
+          </select>
+        </div>
+
+        {/* 작업메모 */}
+        <div style={{ marginBottom: '12px' }}>
+          <label style={{ color: '#fde68a', fontSize: '12px', display: 'block', marginBottom: '4px' }}>작업메모</label>
+          <textarea value={localMemo} onChange={e => setLocalMemo(e.target.value)} rows={2}
+            style={{ width: '100%', padding: '8px', borderRadius: '6px', background: '#92400e', color: 'white', border: '1px solid rgba(249,115,22,0.5)', fontSize: '12px', resize: 'none', boxSizing: 'border-box' }} />
+        </div>
+
+        {/* 현장사진 */}
+        <div style={{ marginBottom: '14px' }}>
+          <label style={{ color: '#fde68a', fontSize: '12px', display: 'block', marginBottom: '6px' }}>📷 현장사진</label>
+          {localPhoto ? (
+            <div style={{ position: 'relative' }}>
+              <img src={localPhoto} style={{ width: '100%', borderRadius: '6px', objectFit: 'cover', maxHeight: '160px' }} />
+              <button onClick={() => setLocalPhoto('')} style={{ position: 'absolute', top: 4, right: 4, background: 'rgba(0,0,0,0.6)', border: 'none', borderRadius: '50%', color: 'white', width: 24, height: 24, cursor: 'pointer', fontSize: '12px' }}>✕</button>
+            </div>
+          ) : (
+            <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', background: '#92400e', border: '2px dashed rgba(249,115,22,0.5)', borderRadius: '8px', padding: '12px', cursor: 'pointer', color: '#fde68a', fontSize: '12px' }}>
+              📷 사진 선택
+              <input type="file" accept="image/*" capture="environment" style={{ display: 'none' }}
+                onChange={async e => {
+                  const file = e.target.files?.[0];
+                  if (!file) return;
+                  setLocalPhoto(URL.createObjectURL(file));
+                  const url = await onPhotoUpload(file);
+                  if (url) setLocalPhoto(url);
+                }} />
+            </label>
+          )}
+        </div>
+
+        {/* 하단 버튼 */}
+        <div style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
+          <button onClick={onDelete} style={{ flex: 1, padding: '10px', borderRadius: '8px', background: '#c62828', color: 'white', border: 'none', fontWeight: 'bold', fontSize: '13px', cursor: 'pointer' }}>지점 삭제</button>
+          <button onClick={handleSave} disabled={saving} style={{ flex: 2, padding: '10px', borderRadius: '8px', background: saving ? '#555' : '#f97316', color: 'white', border: 'none', fontWeight: 'bold', fontSize: '13px', cursor: saving ? 'default' : 'pointer' }}>{saving ? '저장 중...' : '저장'}</button>
+        </div>
+
+        {/* 네비 버튼 */}
+        {point.lat && point.lng && (
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <button onClick={() => window.open(`tmap://route?goalname=${encodeURIComponent(point.destination || point.address)}&goaly=${point.lat}&goalx=${point.lng}`)} style={{ flex: 1, padding: '8px', borderRadius: '8px', background: '#0a3d8f', color: 'white', border: 'none', fontWeight: 'bold', fontSize: '12px', cursor: 'pointer' }}>티맵</button>
+            <button onClick={() => window.open(`nmap://navigation?dlat=${point.lat}&dlng=${point.lng}&dname=${encodeURIComponent(point.destination || point.address)}&appname=patrol-optimizer`)} style={{ flex: 1, padding: '8px', borderRadius: '8px', background: '#1b5e20', color: 'white', border: 'none', fontWeight: 'bold', fontSize: '12px', cursor: 'pointer' }}>네이버</button>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

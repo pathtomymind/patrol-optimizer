@@ -28,7 +28,7 @@ export default function Home() {
   const [additionalPoints, setAdditionalPoints] = useState<{
     id: number; address: string; destination: string; complaint: string; manager: string; photoUrl: string;
     lat?: number | null; lng?: number | null; placeName?: string | null; source?: string | null; coordMessage?: string | null;
-    isAdditional: true; insertAfterOrder?: number | null;
+    isAdditional: true; insertAfterOrder?: number | string | null;
   }[]>([]);
   const [additionalOpen, setAdditionalOpen] = useState(false);
   const [showAdditionalModal, setShowAdditionalModal] = useState(false);
