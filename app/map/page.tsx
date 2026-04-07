@@ -733,6 +733,15 @@ export default function MapPage() {
 
     const isRoadMode = lineModeRef.current === 'road';
 
+    // ★ "add_X"를 insertAfterOrder로 사용하는 추가지점들의 prevAdd id 집합
+    // → prevAdd는 자신의 →toPoint 구간선을 그리면 안 됨 (뒤에 오는 추가지점이 대신 연결)
+    const prevAddIds = new Set<number>();
+    points.forEach(p => {
+      if (typeof p.insertAfterOrder === 'string' && p.insertAfterOrder.startsWith('add_')) {
+        prevAddIds.add(parseInt(p.insertAfterOrder.replace('add_', '')));
+      }
+    });
+
     // ★ 앞 지점이 route point인 추가지점부터 처리 후, add_X 참조 추가지점 처리
     const sortedPoints = [...points].sort((a, b) => {
       const aIsAfterAdd = typeof a.insertAfterOrder === 'string';
@@ -807,7 +816,8 @@ export default function MapPage() {
         const drawRoadSegments = async () => {
           const segPairs = [];
           segPairs.push({ fromLng, fromLat, toLng: addLng, toLat: addLat });
-          if (toPoint) segPairs.push({ fromLng: addLng, fromLat: addLat, toLng: toPoint.lng, toLat: toPoint.lat });
+          // ★ 이 추가지점이 다른 추가지점의 앞 지점으로 쓰이면 →toPoint 구간 생략
+          if (toPoint && !prevAddIds.has(point.id)) segPairs.push({ fromLng: addLng, fromLat: addLat, toLng: toPoint.lng, toLat: toPoint.lat });
 
           try {
             const res = await fetch('/api/ors-route', {
@@ -855,7 +865,8 @@ export default function MapPage() {
           const b1 = arrowMarkersRef.current.length;
           placeArrows(coords1, null, map, naver);
           additionalArrowMarkersRef.current.push(...arrowMarkersRef.current.slice(b1));
-          if (toPoint) {
+          // ★ 이 추가지점이 다른 추가지점의 앞 지점으로 쓰이면 →toPoint 구간선 생략
+          if (toPoint && !prevAddIds.has(point.id)) {
             const coords2 = [{ lat: addLat, lng: addLng }, { lat: toPoint.lat, lng: toPoint.lng }];
             const line2 = new naver.maps.Polyline({ map, path: coords2.map(c => new naver.maps.LatLng(c.lat, c.lng)), strokeColor: getAdditionalLineColor(point, false, toPoint), strokeWeight: 6, strokeOpacity: 1, zIndex: 8 });
             additionalPolylinesRef.current.push(line2);
@@ -875,7 +886,8 @@ export default function MapPage() {
         const b1 = arrowMarkersRef.current.length;
         placeArrows(coords1, null, map, naver);
         additionalArrowMarkersRef.current.push(...arrowMarkersRef.current.slice(b1));
-        if (toPoint) {
+        // ★ 이 추가지점이 다른 추가지점의 앞 지점으로 쓰이면 →toPoint 구간선 생략
+        if (toPoint && !prevAddIds.has(point.id)) {
           const coords2 = [{ lat: addLat, lng: addLng }, { lat: toPoint.lat, lng: toPoint.lng }];
           const line2 = new naver.maps.Polyline({ map, path: coords2.map(c => new naver.maps.LatLng(c.lat, c.lng)), strokeColor: getAdditionalLineColor(point, false, toPoint), strokeWeight: 6, strokeOpacity: 1, zIndex: 8 });
           additionalPolylinesRef.current.push(line2);
