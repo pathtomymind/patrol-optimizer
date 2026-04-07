@@ -1343,6 +1343,7 @@ export default function MapPage() {
     additionalPointsRef.current.forEach(point => {
       if (!point.lat || !point.lng || point.insertAfterOrder == null) return;
 
+      if (typeof point.insertAfterOrder !== 'number') return;
       const fromOrder = point.insertAfterOrder;
       const toOrder = fromOrder + 1;
       const fromPoint = routePoints.find(p => p.order === fromOrder);
