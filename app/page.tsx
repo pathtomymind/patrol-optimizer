@@ -1464,13 +1464,10 @@ export default function Home() {
                                   ? point.coordMessage.replace('⚠️', '').trim()
                                   : '좌표 없음. (주소나 방문지명 확인 필요)';
                                 if (isWarningMsg) {
-                                  const parts = rawMsg.split('확인 필요');
                                   return (
                                     <p className="text-xs mt-0.5" style={{ color: 'white', fontWeight: 'bold' }}>
                                       <span style={{ display: 'inline-block', width: '1.2rem' }}>⚠️</span>
-                                      {parts.length > 1 ? (
-                                        <>{parts[0]}<span style={{ animation: 'blink-text 1.2s ease-in-out infinite' }}>확인 필요</span>{parts[1]}</>
-                                      ) : rawMsg}
+                                      <span style={{ animation: 'blink-text 1.2s ease-in-out infinite' }}>{rawMsg}</span>
                                     </p>
                                   );
                                 }
