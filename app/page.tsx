@@ -1454,17 +1454,26 @@ export default function Home() {
                               {(() => {
                                 const hasWarning = point.coordMessage?.includes('⚠️');
                                 const noCoord = !point.source;
-                                const icon = (hasWarning || noCoord) ? '⚠️' : '✅';
+                                const isWarningMsg = hasWarning || noCoord;
+                                const icon = isWarningMsg ? '⚠️' : '✅';
                                 const rawMsg = point.coordMessage
                                   ? point.coordMessage.replace('⚠️', '').trim()
                                   : '좌표 없음. (주소나 방문지명 확인 필요)';
-                                const parts = rawMsg.split('확인 필요');
+                                if (isWarningMsg) {
+                                  const parts = rawMsg.split('확인 필요');
+                                  return (
+                                    <p className="text-xs mt-0.5" style={{ color: 'white', fontWeight: 'bold' }}>
+                                      <span style={{ display: 'inline-block', width: '1.2rem' }}>⚠️</span>
+                                      {parts.length > 1 ? (
+                                        <>{parts[0]}<span style={{ color: '#ffeb3b' }}>확인 필요</span>{parts[1]}</>
+                                      ) : rawMsg}
+                                    </p>
+                                  );
+                                }
                                 return (
-                                  <p className="text-xs mt-0.5" style={{ color: 'white', fontWeight: 'bold' }}>
-                                    <span style={{ display: 'inline-block', width: '1.2rem' }}>{icon}</span>
-                                    {parts.length > 1 ? (
-                                      <>{parts[0]}<span style={{ color: '#ff5252' }}>확인 필요</span>{parts[1]}</>
-                                    ) : rawMsg}
+                                  <p className="text-xs mt-0.5" style={{ color: '#fff176' }}>
+                                    <span style={{ display: 'inline-block', width: '1.2rem' }}>✅</span>
+                                    {rawMsg}
                                   </p>
                                 );
                               })()}
@@ -2316,8 +2325,13 @@ export default function Home() {
               <button onClick={() => setShowHelpModal(false)} className="text-white text-lg">✕</button>
             </div>
 
+            {/* 설명 한 줄 */}
+            <p className="px-4 pt-3 pb-1" style={{ color: 'rgba(255,255,255,0.8)', fontSize: '11px', lineHeight: '1.6' }}>
+              방문지의 좌표는 네이버 클라우드 <span style={{ color: '#90caf9', fontWeight: 'bold' }}>Geocoding API</span>(도로명·지번 주소 → 좌표 변환)와 <span style={{ color: '#90caf9', fontWeight: 'bold' }}>Local Search API</span>(방문지명으로 POI 검색)를 통해 자동으로 생성됩니다.
+            </p>
+
             {/* 표 */}
-            <div className="px-4 pt-3 pb-2 overflow-x-auto">
+            <div className="px-4 pt-1 pb-2 overflow-x-auto">
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11px', tableLayout: 'fixed' }}>
                 <colgroup>
                   <col style={{ width: '10%' }} />
