@@ -1450,24 +1450,17 @@ export default function Home() {
                                   <span className="text-white">{point.address}{point.destination ? ` (${point.destination})` : ''}</span>
                                 )}
                               </p>
-                              {/* 돋보기: place_nearest/place_single일 때만 플레이스명 표시 */}
-                              <p className="text-xs mt-0.5" style={{ color: '#a5d6a7' }}>
-                                <span style={{ display: 'inline-block', width: '4rem' }}>🔍</span>
-                                {(point.source === 'place_nearest' || point.source === 'place_single') ? (point.placeName || '') : ''}
-                              </p>
-                              {/* 핀: coordMessage 또는 케이스6 메시지 */}
+                              {/* 좌표 생성 메시지 */}
                               <p className="text-xs mt-0.5" style={{ color: point.coordMessage?.includes('⚠️') ? '#ffb74d' : point.source ? '#fff176' : 'rgba(255,255,255,0.5)' }}>
-                                <span style={{ display: 'inline-block', width: '4rem' }}>📍</span>
-                                {point.coordMessage || '좌표 없음. (⚠️주소나 목적지명 확인 필요)'}
+                                <span style={{ display: 'inline-block', width: '1.2rem' }}>{point.source && !point.coordMessage?.includes('⚠️') ? '✅' : '⚠️'}</span>
+                                {point.coordMessage || '좌표 없음. (⚠️주소나 방문지명 확인 필요)'}
                               </p>
                               <p className="text-xs mt-0.5" style={{ color: '#a5d6a7' }}>
-                                <span style={{ color: 'rgba(255,255,255,0.6)', display: 'inline-block', width: '4rem' }}>민원내용:</span><span style={{ color: '#a5d6a7' }}>{point.complaint}</span>
+                                <span style={{ color: 'rgba(255,255,255,0.6)', display: 'inline-block', width: '4rem' }}>민원내용:</span><span style={{ color: '#a5d6a7' }}>{point.complaint || ''}</span>
                               </p>
-                              {point.photoDescription && (
-                                <p className="text-xs mt-0.5" style={{ color: '#a5d6a7' }}>
-                                  <span style={{ color: 'rgba(255,255,255,0.6)', display: 'inline-block', width: '4rem' }}>사진설명:</span>{point.photoDescription}
-                                </p>
-                              )}
+                              <p className="text-xs mt-0.5" style={{ color: '#a5d6a7' }}>
+                                <span style={{ color: 'rgba(255,255,255,0.6)', display: 'inline-block', width: '4rem' }}>사진설명:</span><span style={{ color: '#a5d6a7' }}>{point.photoDescription || '(사진없음)'}</span>
+                              </p>
                             </div>
                             <button
                               onClick={() => handleExtractedDelete(point.id)}
@@ -2306,7 +2299,7 @@ export default function Home() {
             onClick={e => e.stopPropagation()}>
             {/* 헤더 */}
             <div className="flex items-center justify-between px-4 py-3" style={{ borderBottom: '1px solid rgba(255,255,255,0.15)' }}>
-              <span className="text-white font-bold text-sm">📍 좌표 생성 도움말</span>
+              <span className="text-white font-bold text-sm">좌표는 어떻게 만들어지나요?</span>
               <button onClick={() => setShowHelpModal(false)} className="text-white text-lg">✕</button>
             </div>
 
@@ -2315,30 +2308,29 @@ export default function Home() {
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11px' }}>
                 <thead>
                   <tr style={{ background: 'rgba(255,255,255,0.1)' }}>
-                    {['민원요청주소', '좌표생성기준', '플레이스명', '좌표 생성 메시지'].map(h => (
-                      <th key={h} style={{ padding: '6px 8px', color: '#90caf9', fontWeight: 'bold', textAlign: 'left', borderBottom: '1px solid rgba(255,255,255,0.15)', whiteSpace: 'nowrap' }}>{h}</th>
+                    {['도로명주소', '지번주소', '방문지명', '좌표 생성 기준', '메시지'].map(h => (
+                      <th key={h} style={{ padding: '6px 8px', color: '#90caf9', fontWeight: 'bold', textAlign: 'center', borderBottom: '1px solid rgba(255,255,255,0.15)', whiteSpace: 'nowrap' }}>{h}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
                   {[
-                    ['도로명 + 목적지명 있음', '도로명 주소 직접 변환', '❌', '도로명 주소로 좌표 생성'],
-                    ['도로명 + 목적지명 없음', '도로명 주소 직접 변환', '❌', '도로명 주소로 좌표 생성'],
-                    ['지번 + 목적지명 있음\n(POI 보정 성공)', '목적지명 POI 검색\n100m 내 최근접', '✅', '목적지명으로 좌표 보정'],
-                    ['지번 + 목적지명 있음\n(POI 보정 실패)', '지번 주소 중심점', '❌', '지번 주소로 좌표 생성'],
-                    ['지번 + 목적지명 없음', '지번 주소 중심점', '❌', '지번 주소로 좌표 생성'],
-                    ['목적지명만 (1건)', '목적지명 POI 검색', '✅', '목적지명으로 좌표 생성'],
-                    ['목적지명만 (복수)', 'POI 검색 첫번째 결과', '✅', '목적지명으로 좌표 생성\n(⚠️복수 검색됨, 확인 필요)'],
-                    ['주소·목적지 모두 없음', '좌표 생성 불가', '❌', '좌표 없음.\n(⚠️주소나 목적지명 확인 필요)'],
+                    ['○', '', '○', '도로명 주소로 직접 변환', '→ 도로명 주소로 좌표 생성'],
+                    ['○', '', '', '도로명 주소로 직접 변환', '→ 도로명 주소로 좌표 생성'],
+                    ['', '○', '○', '방문지명 POI 검색 (100m 내 최근접)\n실패시 지번주소 중심점', '→ 방문지명으로 좌표 보정\n→ 지번 주소로 좌표 생성'],
+                    ['', '○', '', '지번주소 중심점', '→ 지번 주소로 좌표 생성'],
+                    ['', '', '○', '방문지명 POI 검색 (결과 1건일 때)\n방문지명 POI 검색 (결과 복수일 때)', '→ 방문지명으로 좌표 생성\n→ ⚠️ 방문지명으로 좌표 생성 (복수 검색됨, 확인 필요)'],
+                    ['', '', '', '좌표생성 불가', '→ ⚠️ 좌표 없음 (주소나 방문지명 확인 필요)'],
                   ].map((row, i) => (
                     <tr key={i} style={{ background: i % 2 === 0 ? 'rgba(255,255,255,0.03)' : 'transparent' }}>
                       {row.map((cell, j) => (
                         <td key={j} style={{
                           padding: '6px 8px',
-                          color: j === 2 ? (cell === '✅' ? '#a5d6a7' : '#ef9a9a') : j === 3 ? '#fff176' : 'rgba(255,255,255,0.85)',
+                          color: j <= 2 ? '#a5d6a7' : j === 4 ? '#fff176' : 'rgba(255,255,255,0.85)',
                           borderBottom: '1px solid rgba(255,255,255,0.07)',
                           whiteSpace: 'pre-wrap',
                           verticalAlign: 'top',
+                          textAlign: j <= 2 ? 'center' : 'left',
                           fontSize: '10px',
                         }}>{cell}</td>
                       ))}
@@ -2352,9 +2344,9 @@ export default function Home() {
             <div className="px-4 py-3 space-y-2" style={{ borderTop: '1px solid rgba(255,255,255,0.1)' }}>
               {[
                 '📌 도로명 주소는 건물 단위까지 식별되므로 별도 POI 검색 없이 주소로 직접 좌표를 생성합니다.',
-                '📌 지번 주소는 토지(필지) 중심점 좌표를 생성하므로 현장 찾기가 어려울 수 있습니다. 목적지명이 있는 경우 반경 100m 내 POI 검색으로 좌표를 보정합니다.',
-                '📌 목적지명만 있는 경우 복수의 검색 결과가 나오면 첫 번째 결과를 사용합니다. ⚠️ 경고가 표시되면 지점 편집에서 확인해 주세요.',
-                '📌 좌표가 없는 지점은 최적화 경로 생성에서 제외됩니다. 지점 편집에서 주소나 목적지명을 입력해 주세요.',
+                '📌 지번 주소는 토지(필지) 중심점 좌표를 생성하므로 현장 찾기가 어려울 수 있습니다. 방문지명이 있는 경우 반경 100m 내 POI 검색으로 좌표를 보정합니다.',
+                '📌 방문지명만 있는 경우 복수의 검색 결과가 나오면 첫 번째 결과를 사용합니다. ⚠️ 경고가 표시되면 지점 편집에서 확인해 주세요.',
+                '📌 좌표가 없는 지점은 최적 경로 생성에서 제외됩니다. 지점 편집에서 주소나 방문지명을 입력해 주세요.',
               ].map((text, i) => (
                 <p key={i} style={{ color: 'rgba(255,255,255,0.75)', fontSize: '11px', lineHeight: '1.6' }}>{text}</p>
               ))}
