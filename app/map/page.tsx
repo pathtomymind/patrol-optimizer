@@ -1936,7 +1936,7 @@ export default function MapPage() {
             }}>
             ← 메인화면
           </button>
-          <div style={{ color: 'white', fontWeight: 'bold', fontSize: '15px', flex: 1 }}>순회 경로 지도</div>
+          <div style={{ color: 'white', fontWeight: 'bold', fontSize: '15px', flex: 1 }}>최적 경로 지도</div>
           <button
             onClick={() => setShowMapHelpModal(true)}
             title="지도뷰 도움말"
