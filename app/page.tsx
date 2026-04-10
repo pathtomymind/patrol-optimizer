@@ -1388,11 +1388,11 @@ export default function Home() {
               {uploadOpen && (
                 <div className="px-3 py-3 space-y-3" style={{ background: 'rgba(255,255,255,0.08)' }}>
 
-                  {/* 이미지 불러오기 */}
+                  {/* 사진 불러오기 */}
                   <div>
                     <label className="inline-block text-white text-xs font-bold px-4 py-2 rounded cursor-pointer w-32 text-center"
                       style={{ background: '#0a3d8f' }}>
-                      이미지 불러오기
+                      사진 불러오기
                       <input type="file" accept="image/*" multiple className="hidden" onChange={handleImageUpload} />
                     </label>
 
@@ -1413,7 +1413,7 @@ export default function Home() {
                     )}
                   </div>
 
-                  {/* 지점 추출하기 버튼 + 도움말 버튼 */}
+                  {/* 방문지 추출하기 버튼 + 도움말 버튼 */}
                   <div className="flex items-center justify-between">
                     <button
                       onClick={isExtracting ? undefined : handleExtract}
@@ -1421,7 +1421,7 @@ export default function Home() {
                       className="py-2 rounded text-white text-xs font-bold w-32"
                       style={{ background: isExtracting ? '#f97316' : '#0a3d8f', animation: isExtracting ? 'pulse-btn 1s ease-in-out infinite' : 'none' }}
                     >
-                      {isExtracting ? '추출 중...' : '지점 추출하기'}
+                      {isExtracting ? '추출 중...' : '방문지 추출하기'}
                     </button>
                     <button
                       onClick={() => setShowHelpModal(true)}
@@ -1571,9 +1571,6 @@ export default function Home() {
                 style={{ background: 'linear-gradient(180deg, #b0bec5 0%, #78909c 100%)' }}
               >
                 <span className="flex items-center gap-2">
-                  <svg width="14" height="14" viewBox="0 0 14 14" style={{ flexShrink: 0 }}>
-                    <polygon points="7,0 14,7 7,14 0,7" fill="#f97316" stroke="none"/>
-                  </svg>
                   완성 루트에 끼워넣기
                   {additionalPoints.length > 0 && (
                     <span className="text-xs px-1.5 py-0.5 rounded-full font-bold" style={{ background: '#78909c', color: 'white', border: '1px solid rgba(255,255,255,0.4)' }}>
