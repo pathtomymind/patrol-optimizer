@@ -1451,10 +1451,23 @@ export default function Home() {
                                 )}
                               </p>
                               {/* 좌표 생성 메시지 */}
-                              <p className="text-xs mt-0.5" style={{ color: point.coordMessage?.includes('⚠️') ? '#ffb74d' : point.source ? '#fff176' : 'rgba(255,255,255,0.5)' }}>
-                                <span style={{ display: 'inline-block', width: '1.2rem' }}>{point.source && !point.coordMessage?.includes('⚠️') ? '✅' : '⚠️'}</span>
-                                {point.coordMessage || '좌표 없음. (⚠️주소나 방문지명 확인 필요)'}
-                              </p>
+                              {(() => {
+                                const hasWarning = point.coordMessage?.includes('⚠️');
+                                const noCoord = !point.source;
+                                const icon = (hasWarning || noCoord) ? '⚠️' : '✅';
+                                const rawMsg = point.coordMessage
+                                  ? point.coordMessage.replace('⚠️', '').trim()
+                                  : '좌표 없음. (주소나 방문지명 확인 필요)';
+                                const parts = rawMsg.split('확인 필요');
+                                return (
+                                  <p className="text-xs mt-0.5" style={{ color: 'white', fontWeight: 'bold' }}>
+                                    <span style={{ display: 'inline-block', width: '1.2rem' }}>{icon}</span>
+                                    {parts.length > 1 ? (
+                                      <>{parts[0]}<span style={{ color: '#ff5252' }}>확인 필요</span>{parts[1]}</>
+                                    ) : rawMsg}
+                                  </p>
+                                );
+                              })()}
                               <p className="text-xs mt-0.5" style={{ color: '#a5d6a7' }}>
                                 <span style={{ color: 'rgba(255,255,255,0.6)', display: 'inline-block', width: '4rem' }}>민원내용:</span><span style={{ color: '#a5d6a7' }}>{point.complaint || ''}</span>
                               </p>
@@ -2305,11 +2318,20 @@ export default function Home() {
 
             {/* 표 */}
             <div className="px-4 pt-3 pb-2 overflow-x-auto">
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11px' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11px', tableLayout: 'fixed' }}>
+                <colgroup>
+                  <col style={{ width: '10%' }} />
+                  <col style={{ width: '10%' }} />
+                  <col style={{ width: '10%' }} />
+                  <col style={{ width: '33%' }} />
+                  <col style={{ width: '37%' }} />
+                </colgroup>
                 <thead>
                   <tr style={{ background: 'rgba(255,255,255,0.1)' }}>
-                    {['도로명주소', '지번주소', '방문지명', '좌표 생성 기준', '메시지'].map(h => (
-                      <th key={h} style={{ padding: '6px 8px', color: '#90caf9', fontWeight: 'bold', textAlign: 'center', borderBottom: '1px solid rgba(255,255,255,0.15)', whiteSpace: 'nowrap' }}>{h}</th>
+                    {[['도로명', '주소'], ['지번', '주소'], ['방문지명'], ['좌표 생성 기준'], ['메시지']].map((h, i) => (
+                      <th key={i} style={{ padding: '6px 4px', color: '#90caf9', fontWeight: 'bold', textAlign: 'center', borderBottom: '1px solid rgba(255,255,255,0.15)', whiteSpace: 'pre-wrap', lineHeight: '1.3' }}>
+                        {h.join('\n')}
+                      </th>
                     ))}
                   </tr>
                 </thead>
@@ -2325,13 +2347,14 @@ export default function Home() {
                     <tr key={i} style={{ background: i % 2 === 0 ? 'rgba(255,255,255,0.03)' : 'transparent' }}>
                       {row.map((cell, j) => (
                         <td key={j} style={{
-                          padding: '6px 8px',
+                          padding: '6px 4px',
                           color: j <= 2 ? '#a5d6a7' : j === 4 ? '#fff176' : 'rgba(255,255,255,0.85)',
                           borderBottom: '1px solid rgba(255,255,255,0.07)',
                           whiteSpace: 'pre-wrap',
                           verticalAlign: 'top',
                           textAlign: j <= 2 ? 'center' : 'left',
                           fontSize: '10px',
+                          wordBreak: 'keep-all',
                         }}>{cell}</td>
                       ))}
                     </tr>
