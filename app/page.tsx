@@ -1081,6 +1081,10 @@ export default function Home() {
           0%, 100% { background-color: #16a34a; }
           50% { background-color: #f97316; }
         }
+        @keyframes blink-text {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0; }
+        }
       `}</style>
       <main className="px-3 py-3 max-w-lg mx-auto space-y-2">
 
@@ -1465,7 +1469,7 @@ export default function Home() {
                                     <p className="text-xs mt-0.5" style={{ color: 'white', fontWeight: 'bold' }}>
                                       <span style={{ display: 'inline-block', width: '1.2rem' }}>⚠️</span>
                                       {parts.length > 1 ? (
-                                        <>{parts[0]}<span style={{ color: '#ffeb3b' }}>확인 필요</span>{parts[1]}</>
+                                        <>{parts[0]}<span style={{ animation: 'blink-text 1.2s ease-in-out infinite' }}>확인 필요</span>{parts[1]}</>
                                       ) : rawMsg}
                                     </p>
                                   );
@@ -2334,17 +2338,17 @@ export default function Home() {
             <div className="px-4 pt-1 pb-2 overflow-x-auto">
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11px', tableLayout: 'fixed' }}>
                 <colgroup>
+                  <col style={{ width: '12%' }} />
                   <col style={{ width: '10%' }} />
-                  <col style={{ width: '10%' }} />
-                  <col style={{ width: '10%' }} />
-                  <col style={{ width: '33%' }} />
-                  <col style={{ width: '37%' }} />
+                  <col style={{ width: '11%' }} />
+                  <col style={{ width: '32%' }} />
+                  <col style={{ width: '35%' }} />
                 </colgroup>
                 <thead>
                   <tr style={{ background: 'rgba(255,255,255,0.1)' }}>
                     {[['도로명', '주소'], ['지번', '주소'], ['방문지명'], ['좌표 생성 기준'], ['메시지']].map((h, i) => (
-                      <th key={i} style={{ padding: '6px 4px', color: '#90caf9', fontWeight: 'bold', textAlign: 'center', borderBottom: '1px solid rgba(255,255,255,0.15)', whiteSpace: 'pre-wrap', lineHeight: '1.3' }}>
-                        {h.join('\n')}
+                      <th key={i} style={{ padding: '6px 4px', color: '#90caf9', fontWeight: 'bold', textAlign: 'center', borderBottom: '1px solid rgba(255,255,255,0.15)', lineHeight: '1.3', fontSize: '10px' }}>
+                        {h[0]}<br />{h[1] || ''}
                       </th>
                     ))}
                   </tr>
@@ -2382,8 +2386,8 @@ export default function Home() {
               {[
                 '📌 도로명 주소는 건물 단위까지 식별되므로 별도 POI 검색 없이 주소로 직접 좌표를 생성합니다.',
                 '📌 지번 주소는 토지(필지) 중심점 좌표를 생성하므로 현장 찾기가 어려울 수 있습니다. 방문지명이 있는 경우 반경 100m 내 POI 검색으로 좌표를 보정합니다.',
-                '📌 방문지명만 있는 경우 복수의 검색 결과가 나오면 첫 번째 결과를 사용합니다. ⚠️ 경고가 표시되면 지점 편집에서 확인해 주세요.',
-                '📌 좌표가 없는 지점은 최적 경로 생성에서 제외됩니다. 지점 편집에서 주소나 방문지명을 입력해 주세요.',
+                '📌 방문지명만 있는 경우 복수의 검색 결과가 나오면 첫 번째 결과를 사용합니다. ⚠️ 경고가 표시되면 방문지 수정에서 확인해 주세요.',
+                '📌 좌표가 없는 지점은 최적 경로 생성에서 제외됩니다. 방문지 수정에서 주소나 방문지명을 입력해 주세요.',
               ].map((text, i) => (
                 <p key={i} style={{ color: 'rgba(255,255,255,0.75)', fontSize: '11px', lineHeight: '1.6' }}>{text}</p>
               ))}
