@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useState, useEffect, useRef } from 'react';
 import AdditionalPointModal, { type InsertOption, type AdditionalPointData } from '@/app/components/AdditionalPointModal';
@@ -1053,7 +1053,7 @@ export default function Home() {
       <header className="px-4 py-3 text-white" style={{ background: 'linear-gradient(180deg, #0d2444 0%, #1a3a6e 100%)' }}>
         <h1 className="text-lg font-bold text-center">길도사 2.0 <span className="text-xs font-normal">(No헤맴 보장)</span></h1>
         <p className="text-xs text-blue-200 mt-1 text-center leading-relaxed">
-          최적화 순회 경로는 인공지능 클로드가 네이버 클라우드의 지리정보를 기반으로 동선 낭비 없는 루프형 동선으로 설계한 것입니다.
+          방문지를 입력하면 AI가 가장 효율적인 순서로 길을 짜드립니다.`nClaude AI가 네이버 지도와 ORS 도로 데이터를 분석해 최적 경로를 만듭니다.
         </p>
       </header>
 
@@ -1064,14 +1064,14 @@ export default function Home() {
           className={`py-3 text-sm font-medium transition-all ${activeTab === 'view' ? 'w-2/3 text-white font-bold' : 'w-1/3 text-blue-300'}`}
           style={activeTab === 'view' ? { background: 'linear-gradient(180deg, #2196f3 0%, #1565c0 100%)' } : { background: '#2a4a7e' }}
         >
-          최적화 경로 확인
+          최적 경로
         </button>
         <button
           onClick={handleInputTabClick}
           className={`py-3 text-sm font-medium transition-all ${activeTab === 'input' ? 'w-2/3 text-white font-bold' : 'w-1/3 text-blue-300'}`}
           style={activeTab === 'input' ? { background: 'linear-gradient(180deg, #b0bec5 0%, #78909c 100%)' } : { background: '#2a4a7e' }}
         >
-          지점 정보 입력
+          방문지 입력
         </button>
       </div>
 
@@ -1084,7 +1084,7 @@ export default function Home() {
       `}</style>
       <main className="px-3 py-3 max-w-lg mx-auto space-y-2">
 
-        {/* ── 최적화 경로 확인 탭 ── */}
+        {/* ── 최적 경로 탭 ── */}
         {activeTab === 'view' && (
           <>
             {isLoadingRoute && (
@@ -1095,14 +1095,14 @@ export default function Home() {
             )}
             {!isLoadingRoute && currentRoute && (
               <>
-                {/* 지도 뷰 - 상단 배치 */}
+                {/* 지도로 보기 - 상단 배치 */}
                 <div className="rounded overflow-hidden">
                   <div className="w-full flex justify-between items-center px-4 py-3 text-white font-medium text-sm"
                     style={{ background: 'linear-gradient(180deg, #4a90d9 0%, #1a5fb4 100%)' }}>
                     <button
                       onClick={() => { sessionStorage.setItem('map-entry', '1'); window.location.href = '/map'; }}
                       style={{ background: 'none', border: 'none', color: 'white', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center', gap: '8px', flex: 1 }}>
-                      <span className="font-medium text-sm">지도 뷰</span>
+                      <span className="font-medium text-sm">지도로 보기</span>
                       <span className="text-xs" style={{ color: 'rgba(200,230,255,0.85)' }}>{currentRoute.date} 버전{currentRoute.version}</span>
                     </button>
                     <span className="flex items-center gap-1">
@@ -1123,7 +1123,7 @@ export default function Home() {
                   </div>
                 </div>
 
-                {/* 카드 리스트 - 하단 배치, 기본 닫힘 */}
+                {/* 목록으로 보기 - 하단 배치, 기본 닫힘 */}
                 <div className="rounded overflow-hidden mt-2">
                   <button
                     onClick={() => setCardListOpen(!cardListOpen)}
@@ -1131,7 +1131,7 @@ export default function Home() {
                     style={{ background: 'linear-gradient(180deg, #4a90d9 0%, #1a5fb4 100%)' }}
                   >
                     <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <span>카드 리스트</span>
+                      <span>목록으로 보기</span>
                       <span className="text-xs" style={{ color: 'rgba(200,230,255,0.85)' }}>{currentRoute.date} 버전{currentRoute.version}</span>
                     </span>
                     <span className="flex items-center gap-1">
@@ -1364,7 +1364,7 @@ export default function Home() {
           </>
         )}
 
-        {/* ── 지점 정보 입력 탭 ── */}
+        {/* ── 방문지 입력 탭 ── */}
         {activeTab === 'input' && (
           <>
             {/* 이미지 업로드 아코디언 */}
@@ -1374,7 +1374,7 @@ export default function Home() {
                 className="w-full flex justify-between items-center px-4 py-3 text-white font-medium text-sm"
                 style={{ background: 'linear-gradient(180deg, #b0bec5 0%, #78909c 100%)' }}
               >
-                <span>이미지를 업로드하여 지점정보 추출하기</span>
+                <span>사진에서 뽑기</span>
                 <span className="flex items-center gap-2">
                   <div
                     onClick={(e) => { e.stopPropagation(); handleUploadReset(); }}
@@ -1492,7 +1492,7 @@ export default function Home() {
                 className="w-full flex justify-between items-center px-4 py-3 text-white font-medium text-sm"
                 style={{ background: 'linear-gradient(180deg, #b0bec5 0%, #78909c 100%)' }}
               >
-                <span>지점정보 직접 입력하기</span>
+                <span>손으로 입력</span>
                 <span className="flex items-center gap-2">
                   <div
                     onClick={(e) => { e.stopPropagation(); handleDirectReset(); }}
@@ -1574,7 +1574,7 @@ export default function Home() {
                   <svg width="14" height="14" viewBox="0 0 14 14" style={{ flexShrink: 0 }}>
                     <polygon points="7,0 14,7 7,14 0,7" fill="#f97316" stroke="none"/>
                   </svg>
-                  추가 지점 입력하기
+                  완성 루트에 끼워넣기
                   {additionalPoints.length > 0 && (
                     <span className="text-xs px-1.5 py-0.5 rounded-full font-bold" style={{ background: '#78909c', color: 'white', border: '1px solid rgba(255,255,255,0.4)' }}>
                       {additionalPoints.length}
@@ -1654,13 +1654,13 @@ export default function Home() {
               )}
             </div>
 
-            {/* 최적화 경로 생성하기 */}
+            {/* 최적 경로 짜기 */}
             <div className="rounded mt-2" style={{ background: '#0d2444' }}>
               <button
                 onClick={handleGenerateRoute}
                 className="w-full py-3 text-white text-sm font-medium"
                 style={{ opacity: isGenerating ? 0.6 : 1, cursor: isGenerating ? 'not-allowed' : 'pointer' }}
-              >{isGenerating ? '경로 생성 중...' : '최적화 경로 생성하기'}</button>
+              >{isGenerating ? '경로 생성 중...' : '최적 경로 짜기'}</button>
             </div>
 
             {/* 오늘 버전 이력 */}
