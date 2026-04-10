@@ -1053,7 +1053,7 @@ export default function Home() {
       <header className="px-4 py-3 text-white" style={{ background: 'linear-gradient(180deg, #0d2444 0%, #1a3a6e 100%)' }}>
         <h1 className="text-lg font-bold text-center">길도사 2.0 <span className="text-xs font-normal">(No헤맴 보장)</span></h1>
         <p className="text-xs text-blue-200 mt-1 text-center leading-relaxed">
-          방문지를 입력하면 AI가 가장 효율적인 순서로 길을 짜드립니다.`nClaude AI가 네이버 지도와 ORS 도로 데이터를 분석해 최적 경로를 만듭니다.
+          방문지를 입력하면 AI가 가장 효율적인 순서로 길을 짜드립니다. 클로드 AI가 네이버 지도와 ORS 도로 데이터를 분석해 최적 경로를 만듭니다.
         </p>
       </header>
 
