@@ -891,7 +891,8 @@ export default function MapPage() {
             if (res.ok) {
               const data = await res.json();
               if (data.results?.length) {
-                data.results.forEach((r: { ok: boolean; coords?: { lat: number; lng: number }[] }, i: number) => {
+                // ★ segPairs 개수만큼만 처리 (캐시 결과가 더 많을 수 있음)
+                data.results.slice(0, segPairs.length).forEach((r: { ok: boolean; coords?: { lat: number; lng: number }[] }, i: number) => {
                   const fallback = i === 0
                     ? [{ lat: fromLat, lng: fromLng }, { lat: addLat, lng: addLng }]
                     : (toPoint ? [{ lat: addLat, lng: addLng }, { lat: toPoint.lat, lng: toPoint.lng }] : []);
