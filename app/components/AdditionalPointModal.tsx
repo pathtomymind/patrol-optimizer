@@ -181,45 +181,57 @@ export default function AdditionalPointModal({
       {/* 내용 - 스크롤 격리 */}
       <div style={{ flex: 1, overflowY: 'auto', padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: '12px', overscrollBehavior: 'contain' }}>
 
-        {/* 위치정보 묶음 */}
-        <div style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.15)', borderRadius: '8px', padding: '12px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
-            <label style={{ color: '#90caf9', fontSize: '11px', flexShrink: 0, width: '5rem' }}>주소</label>
-            <input type="text" value={address}
-              onChange={e => { setAddress(e.target.value); setCoordStatus('idle'); setLat(null); setLng(null); setPlaceName(null); setSource(null); setCoordMessage(null); }}
-              style={{ flex: 1, padding: '6px 8px', borderRadius: '6px', background: 'rgba(255,255,255,0.15)', color: 'white', border: 'none', outline: 'none', fontSize: '12px', boxSizing: 'border-box' }} />
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
-            <label style={{ color: '#90caf9', fontSize: '11px', flexShrink: 0, width: '5rem' }}>방문지</label>
-            <input type="text" value={destination}
-              onChange={e => { setDestination(e.target.value); setCoordStatus('idle'); setLat(null); setLng(null); setPlaceName(null); setSource(null); setCoordMessage(null); }}
-              style={{ flex: 1, padding: '6px 8px', borderRadius: '6px', background: 'rgba(255,255,255,0.15)', color: 'white', border: 'none', outline: 'none', fontSize: '12px', boxSizing: 'border-box' }} />
-          </div>
+        {/* 주소 */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <label style={{ color: '#90caf9', fontSize: '11px', flexShrink: 0, width: '5rem' }}>주소</label>
+          <input type="text" value={address} placeholder=""
+            onChange={e => { setAddress(e.target.value); setCoordStatus('idle'); setLat(null); setLng(null); setPlaceName(null); setSource(null); setCoordMessage(null); }}
+            style={{ flex: 1, padding: '6px 8px', borderRadius: '6px', background: 'rgba(255,255,255,0.15)', color: 'white', border: 'none', outline: 'none', fontSize: '12px', boxSizing: 'border-box' }} />
+        </div>
+
+        {/* 방문지 */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <label style={{ color: '#90caf9', fontSize: '11px', flexShrink: 0, width: '5rem' }}>방문지</label>
+          <input type="text" value={destination} placeholder=""
+            onChange={e => { setDestination(e.target.value); setCoordStatus('idle'); setLat(null); setLng(null); setPlaceName(null); setSource(null); setCoordMessage(null); }}
+            style={{ flex: 1, padding: '6px 8px', borderRadius: '6px', background: 'rgba(255,255,255,0.15)', color: 'white', border: 'none', outline: 'none', fontSize: '12px', boxSizing: 'border-box' }} />
+        </div>
+
+        {/* 좌표 확인하기 버튼 */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <div style={{ width: '5rem', flexShrink: 0 }} />
           <button onClick={handleCheckCoord} disabled={coordStatus === 'loading'}
-            style={{ width: '100%', padding: '8px', borderRadius: '6px', background: coordStatus === 'loading' ? '#555' : '#0a3d8f', color: 'white', border: 'none', fontWeight: 'bold', fontSize: '13px', cursor: 'pointer' }}>
+            style={{ flex: 1, padding: '8px', borderRadius: '6px', background: coordStatus === 'loading' ? '#555' : '#0a3d8f', color: 'white', border: 'none', fontWeight: 'bold', fontSize: '12px', cursor: 'pointer' }}>
             {coordStatus === 'loading' ? '확인 중...' : '좌표 확인하기'}
           </button>
-          {renderCoordMsg()}
         </div>
+
+        {/* 좌표 메시지 */}
+        {coordStatus !== 'idle' && (
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
+            <div style={{ width: '5rem', flexShrink: 0 }} />
+            <div style={{ flex: 1 }}>{renderCoordMsg()}</div>
+          </div>
+        )}
 
         {/* 사진번호 */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <label style={{ color: '#90caf9', fontSize: '11px', flexShrink: 0, width: '5rem' }}>사진번호</label>
-          <input type="number" placeholder="예) 12" defaultValue=""
+          <input type="number" placeholder="" defaultValue=""
             style={{ flex: 1, padding: '6px 8px', borderRadius: '6px', background: 'rgba(255,255,255,0.15)', color: '#a5d6a7', border: 'none', outline: 'none', fontSize: '12px', boxSizing: 'border-box' as const }} />
         </div>
 
         {/* 방문내용 */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <label style={{ color: '#90caf9', fontSize: '11px', flexShrink: 0, width: '5rem' }}>방문내용</label>
-          <input type="text" value={complaint} onChange={e => setComplaint(e.target.value)}
+          <input type="text" value={complaint} placeholder="" onChange={e => setComplaint(e.target.value)}
             style={{ flex: 1, padding: '6px 8px', borderRadius: '6px', background: 'rgba(255,255,255,0.15)', color: '#a5d6a7', border: 'none', outline: 'none', fontSize: '12px', boxSizing: 'border-box' as const }} />
         </div>
 
         {/* 담당자 */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <label style={{ color: '#90caf9', fontSize: '11px', flexShrink: 0, width: '5rem' }}>담당자</label>
-          <input type="text" value={manager} onChange={e => setManager(e.target.value)}
+          <input type="text" value={manager} placeholder="" onChange={e => setManager(e.target.value)}
             style={{ flex: 1, padding: '6px 8px', borderRadius: '6px', background: 'rgba(255,255,255,0.15)', color: '#a5d6a7', border: 'none', outline: 'none', fontSize: '12px', boxSizing: 'border-box' as const }} />
         </div>
 
@@ -231,11 +243,9 @@ export default function AdditionalPointModal({
               <div style={{ position: 'relative', marginBottom: '6px' }}>
                 <img src={photoUrl} alt="방문지사진" style={{ width: '100%', borderRadius: '6px' }}
                   crossOrigin="anonymous" onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }} />
-                <button onClick={() => setPhotoUrl('')}
-                  style={{ position: 'absolute', top: 4, right: 4, background: '#c62828', border: 'none', borderRadius: '50%', color: 'white', width: 24, height: 24, cursor: 'pointer', fontSize: '11px', fontWeight: 'bold' }}>✕</button>
               </div>
             )}
-            <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(255,255,255,0.1)', border: '1px dashed rgba(255,255,255,0.4)', borderRadius: '6px', padding: '8px', cursor: 'pointer', color: '#90caf9', fontSize: '12px' }}>
+            <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#0a3d8f', borderRadius: '6px', padding: '8px', cursor: 'pointer', color: 'white', fontSize: '12px', fontWeight: 'bold' }}>
               사진 선택
               <input type="file" accept="image/*" capture="environment" style={{ display: 'none' }}
                 onChange={async e => {

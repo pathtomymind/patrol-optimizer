@@ -1852,22 +1852,27 @@ export default function Home() {
             onWheel={e => e.stopPropagation()}
             onTouchMove={e => e.stopPropagation()}>
 
-            {/* 위치정보 묶음 */}
-            <div className="rounded-lg p-3" style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.15)' }}>
-              <div className="flex items-center gap-2 mb-2">
-                <label className="text-blue-200 text-xs flex-shrink-0" style={{ width: '5rem' }}>주소</label>
-                <input type="text" value={directForm.address} placeholder=""
-                  onChange={(e) => { setDirectForm((prev) => ({ ...prev, address: e.target.value })); setDirectCoordStatus('idle'); setDirectCoord({ lat: null, lng: null, placeName: null, source: null, coordMessage: null }); }}
-                  className="flex-1 px-2 py-1.5 rounded text-xs outline-none"
-                  style={{ background: 'rgba(255,255,255,0.15)', color: 'white' }} />
-              </div>
-              <div className="flex items-center gap-2 mb-2">
-                <label className="text-blue-200 text-xs flex-shrink-0" style={{ width: '5rem' }}>방문지</label>
-                <input type="text" value={directForm.destination} placeholder=""
-                  onChange={(e) => { setDirectForm((prev) => ({ ...prev, destination: e.target.value })); setDirectCoordStatus('idle'); setDirectCoord({ lat: null, lng: null, placeName: null, source: null, coordMessage: null }); }}
-                  className="flex-1 px-2 py-1.5 rounded text-xs outline-none"
-                  style={{ background: 'rgba(255,255,255,0.15)', color: 'white' }} />
-              </div>
+            {/* 주소 */}
+            <div className="flex items-center gap-2">
+              <label className="text-blue-200 text-xs flex-shrink-0" style={{ width: '5rem' }}>주소</label>
+              <input type="text" value={directForm.address} placeholder=""
+                onChange={(e) => { setDirectForm((prev) => ({ ...prev, address: e.target.value })); setDirectCoordStatus('idle'); setDirectCoord({ lat: null, lng: null, placeName: null, source: null, coordMessage: null }); }}
+                className="flex-1 px-2 py-1.5 rounded text-xs outline-none"
+                style={{ background: 'rgba(255,255,255,0.15)', color: 'white' }} />
+            </div>
+
+            {/* 방문지 */}
+            <div className="flex items-center gap-2">
+              <label className="text-blue-200 text-xs flex-shrink-0" style={{ width: '5rem' }}>방문지</label>
+              <input type="text" value={directForm.destination} placeholder=""
+                onChange={(e) => { setDirectForm((prev) => ({ ...prev, destination: e.target.value })); setDirectCoordStatus('idle'); setDirectCoord({ lat: null, lng: null, placeName: null, source: null, coordMessage: null }); }}
+                className="flex-1 px-2 py-1.5 rounded text-xs outline-none"
+                style={{ background: 'rgba(255,255,255,0.15)', color: 'white' }} />
+            </div>
+
+            {/* 좌표 확인하기 버튼 */}
+            <div className="flex items-center gap-2">
+              <div style={{ width: '5rem', flexShrink: 0 }} />
               <button
                 onClick={async () => {
                   setDirectCoordStatus('loading');
@@ -1881,17 +1886,24 @@ export default function Home() {
                   } catch { setDirectCoordStatus('fail'); }
                 }}
                 disabled={directCoordStatus === 'loading'}
-                className="w-full py-2 rounded text-sm font-bold text-white"
+                className="flex-1 py-2 rounded text-xs font-bold text-white"
                 style={{ background: directCoordStatus === 'loading' ? '#555' : '#0a3d8f' }}>
                 {directCoordStatus === 'loading' ? '확인 중...' : '좌표 확인하기'}
               </button>
-              <div className="mt-2">{renderCoordMessage(directCoordStatus, directCoord)}</div>
             </div>
+
+            {/* 좌표 메시지 */}
+            {directCoordStatus !== 'idle' && (
+              <div className="flex items-start gap-2">
+                <div style={{ width: '5rem', flexShrink: 0 }} />
+                <div className="flex-1">{renderCoordMessage(directCoordStatus, directCoord)}</div>
+              </div>
+            )}
 
             {/* 사진번호 */}
             <div className="flex items-center gap-2">
               <label className="text-blue-200 text-xs flex-shrink-0" style={{ width: '5rem' }}>사진번호</label>
-              <input type="number" placeholder="예) 12" value={(directForm as any).originalId || ''}
+              <input type="number" placeholder="" value={(directForm as any).originalId || ''}
                 onChange={(e) => setDirectForm((prev) => ({ ...prev, originalId: e.target.value } as any))}
                 className="flex-1 px-2 py-1.5 rounded text-xs outline-none"
                 style={{ background: 'rgba(255,255,255,0.15)', color: '#a5d6a7' }} />
@@ -2116,36 +2128,46 @@ export default function Home() {
             onWheel={e => e.stopPropagation()}
             onTouchMove={e => e.stopPropagation()}>
 
-            {/* 위치정보 묶음 */}
-            <div className="rounded-lg p-3" style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.15)' }}>
-              {/* 주소 */}
-              <div className="flex items-center gap-2 mb-2">
-                <label className="text-blue-200 text-xs flex-shrink-0" style={{ width: '5rem' }}>주소</label>
-                <input type="text" value={extractEditForm.address} placeholder=""
-                  onChange={(e) => { setExtractEditForm((prev) => ({ ...prev, address: e.target.value })); setExtractEditCoordStatus('idle'); setExtractEditCoord({ lat: null, lng: null, placeName: null, source: null, coordMessage: null }); }}
-                  className="flex-1 px-2 py-1.5 rounded text-xs outline-none"
-                  style={{ background: 'rgba(255,255,255,0.15)', color: 'white' }} />
-              </div>
-              {/* 방문지 */}
-              <div className="flex items-center gap-2 mb-2">
-                <label className="text-blue-200 text-xs flex-shrink-0" style={{ width: '5rem' }}>방문지</label>
-                <input type="text" value={extractEditForm.destination} placeholder=""
-                  onChange={(e) => { setExtractEditForm((prev) => ({ ...prev, destination: e.target.value })); setExtractEditCoordStatus('idle'); setExtractEditCoord({ lat: null, lng: null, placeName: null, source: null, coordMessage: null }); }}
-                  className="flex-1 px-2 py-1.5 rounded text-xs outline-none"
-                  style={{ background: 'rgba(255,255,255,0.15)', color: 'white' }} />
-              </div>
+            {/* 주소 */}
+            <div className="flex items-center gap-2">
+              <label className="text-blue-200 text-xs flex-shrink-0" style={{ width: '5rem' }}>주소</label>
+              <input type="text" value={extractEditForm.address} placeholder=""
+                onChange={(e) => { setExtractEditForm((prev) => ({ ...prev, address: e.target.value })); setExtractEditCoordStatus('idle'); setExtractEditCoord({ lat: null, lng: null, placeName: null, source: null, coordMessage: null }); }}
+                className="flex-1 px-2 py-1.5 rounded text-xs outline-none"
+                style={{ background: 'rgba(255,255,255,0.15)', color: 'white' }} />
+            </div>
+
+            {/* 방문지 */}
+            <div className="flex items-center gap-2">
+              <label className="text-blue-200 text-xs flex-shrink-0" style={{ width: '5rem' }}>방문지</label>
+              <input type="text" value={extractEditForm.destination} placeholder=""
+                onChange={(e) => { setExtractEditForm((prev) => ({ ...prev, destination: e.target.value })); setExtractEditCoordStatus('idle'); setExtractEditCoord({ lat: null, lng: null, placeName: null, source: null, coordMessage: null }); }}
+                className="flex-1 px-2 py-1.5 rounded text-xs outline-none"
+                style={{ background: 'rgba(255,255,255,0.15)', color: 'white' }} />
+            </div>
+
+            {/* 좌표 확인하기 버튼 */}
+            <div className="flex items-center gap-2">
+              <div style={{ width: '5rem', flexShrink: 0 }} />
               <button onClick={handleExtractEditCheckCoord} disabled={extractEditCoordStatus === 'loading'}
-                className="w-full py-2 rounded text-sm font-bold text-white"
+                className="flex-1 py-2 rounded text-xs font-bold text-white"
                 style={{ background: extractEditCoordStatus === 'loading' ? '#555' : '#0a3d8f' }}>
                 {extractEditCoordStatus === 'loading' ? '확인 중...' : '좌표 확인하기'}
               </button>
-              <div className="mt-2">{renderCoordMessage(extractEditCoordStatus, extractEditCoord)}</div>
             </div>
+
+            {/* 좌표 메시지 */}
+            {extractEditCoordStatus !== 'idle' && (
+              <div className="flex items-start gap-2">
+                <div style={{ width: '5rem', flexShrink: 0 }} />
+                <div className="flex-1">{renderCoordMessage(extractEditCoordStatus, extractEditCoord)}</div>
+              </div>
+            )}
 
             {/* 사진번호 */}
             <div className="flex items-center gap-2">
               <label className="text-blue-200 text-xs flex-shrink-0" style={{ width: '5rem' }}>사진번호</label>
-              <input type="number" placeholder="예) 12" value={extractEditForm.originalId}
+              <input type="number" placeholder="" value={extractEditForm.originalId}
                 onChange={(e) => { setExtractEditForm((prev) => ({ ...prev, originalId: e.target.value })); handleExtractEditSaveField({ originalId: e.target.value }); }}
                 className="flex-1 px-2 py-1.5 rounded text-xs outline-none"
                 style={{ background: 'rgba(255,255,255,0.15)', color: '#a5d6a7' }} />
@@ -2173,9 +2195,6 @@ export default function Home() {
             <div className="flex items-start gap-2">
               <label className="text-blue-200 text-xs flex-shrink-0 pt-1" style={{ width: '5rem' }}>방문지사진</label>
               <div className="flex-1">
-                {extractEditTarget?.photoDescription && (
-                  <p className="text-xs mb-1" style={{ color: '#a5d6a7' }}>{extractEditTarget.photoDescription}</p>
-                )}
                 {(extractEditForm.photoUrl || extractEditTarget?.photoUrl) ? (
                   <div className="relative w-full mb-1">
                     <img src={extractEditForm.photoUrl || extractEditTarget?.photoUrl || ''} alt="방문지사진" className="w-full rounded" />
@@ -2192,6 +2211,10 @@ export default function Home() {
                   <input type="file" accept="image/*" className="hidden"
                     onChange={(e) => { const file = e.target.files?.[0]; if (file) { setExtractEditForm((prev) => ({ ...prev, photoUrl: URL.createObjectURL(file) })); } e.target.value = ''; }} />
                 </label>
+                {/* 사진설명 - 읽기 전용 */}
+                {extractEditTarget?.photoDescription && (
+                  <p className="text-xs mt-1 px-1" style={{ color: '#a5d6a7' }}>{extractEditTarget.photoDescription}</p>
+                )}
               </div>
             </div>
           </div>
