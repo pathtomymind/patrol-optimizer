@@ -1884,6 +1884,15 @@ export default function Home() {
               <div className="mt-2">{renderCoordMessage(directCoordStatus, directCoord)}</div>
             </div>
 
+            {/* 사진번호 */}
+            <div>
+              <label className="text-blue-200 text-xs mb-1 block">사진번호</label>
+              <input type="number" placeholder="예) 12" value={(directForm as any).originalId || ''}
+                onChange={(e) => setDirectForm((prev) => ({ ...prev, originalId: e.target.value } as any))}
+                className="w-full px-3 py-2 rounded text-sm outline-none"
+                style={{ background: 'rgba(255,255,255,0.15)', color: '#a5d6a7' }} />
+            </div>
+
             {/* 방문내용 */}
             <div>
               <label className="text-blue-200 text-xs mb-1 block">방문내용</label>
@@ -2121,9 +2130,9 @@ export default function Home() {
               <div className="mt-2">{renderCoordMessage(extractEditCoordStatus, extractEditCoord)}</div>
             </div>
 
-            {/* 민원번호 */}
+            {/* 사진번호 */}
             <div>
-              <label className="text-blue-200 text-xs mb-1 block">민원번호</label>
+              <label className="text-blue-200 text-xs mb-1 block">사진번호</label>
               <input type="number" placeholder="예) 12" value={extractEditForm.originalId}
                 onChange={(e) => { setExtractEditForm((prev) => ({ ...prev, originalId: e.target.value })); handleExtractEditSaveField({ originalId: e.target.value }); }}
                 className="w-full px-3 py-2 rounded text-sm outline-none"

@@ -202,18 +202,25 @@ export default function AdditionalPointModal({
           {renderCoordMsg()}
         </div>
 
+        {/* 사진번호 */}
+        <div>
+          <label style={{ color: '#90caf9', fontSize: '11px', display: 'block', marginBottom: '4px' }}>사진번호</label>
+          <input type="number" placeholder="예) 12" defaultValue=""
+            style={{ width: '100%', padding: '8px 10px', borderRadius: '6px', background: 'rgba(255,255,255,0.15)', color: '#a5d6a7', border: 'none', outline: 'none', fontSize: '13px', boxSizing: 'border-box' as const }} />
+        </div>
+
         {/* 방문내용 */}
         <div>
           <label style={{ color: '#90caf9', fontSize: '11px', display: 'block', marginBottom: '4px' }}>방문내용</label>
           <input type="text" value={complaint} onChange={e => setComplaint(e.target.value)}
-            style={{ width: '100%', padding: '8px 10px', borderRadius: '6px', background: 'rgba(255,255,255,0.15)', color: '#a5d6a7', border: 'none', outline: 'none', fontSize: '13px', boxSizing: 'border-box' }} />
+            style={{ width: '100%', padding: '8px 10px', borderRadius: '6px', background: 'rgba(255,255,255,0.15)', color: '#a5d6a7', border: 'none', outline: 'none', fontSize: '13px', boxSizing: 'border-box' as const }} />
         </div>
 
         {/* 담당자 */}
         <div>
           <label style={{ color: '#90caf9', fontSize: '11px', display: 'block', marginBottom: '4px' }}>담당자</label>
           <input type="text" value={manager} onChange={e => setManager(e.target.value)}
-            style={{ width: '100%', padding: '8px 10px', borderRadius: '6px', background: 'rgba(255,255,255,0.15)', color: '#a5d6a7', border: 'none', outline: 'none', fontSize: '13px', boxSizing: 'border-box' }} />
+            style={{ width: '100%', padding: '8px 10px', borderRadius: '6px', background: 'rgba(255,255,255,0.15)', color: '#a5d6a7', border: 'none', outline: 'none', fontSize: '13px', boxSizing: 'border-box' as const }} />
         </div>
 
         {/* 방문지사진 */}
@@ -238,34 +245,6 @@ export default function AdditionalPointModal({
                 e.target.value = '';
               }} />
           </label>
-        </div>
-
-        {/* 경로 삽입 위치 + 지점 삭제 */}
-        <div>
-          <label style={{ color: '#fed7aa', fontSize: '11px', fontWeight: 'bold', display: 'block', marginBottom: '4px' }}>📌 경로 삽입 위치</label>
-          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-            <select
-              value={localInsert === null ? '' : String(localInsert)}
-              onChange={async e => {
-                const v = e.target.value;
-                const newInsert = v === '' ? null : v.startsWith('add_') ? v : Number(v);
-                setLocalInsert(newInsert);
-                await autoSave({ insertAfterOrder: newInsert });
-              }}
-              style={{ flex: 1, borderRadius: '6px', padding: '8px 10px', fontSize: '12px', color: 'white', background: 'rgba(255,255,255,0.12)', border: '1px solid rgba(249,115,22,0.5)' }}>
-              {insertOptions.map(opt => (
-                <option key={String(opt.value)} value={opt.value === null ? '' : String(opt.value)} style={{ background: '#1a3a6e' }}>
-                  {opt.label}
-                </option>
-              ))}
-            </select>
-            {onDelete && (
-              <button onClick={onDelete}
-                style={{ padding: '8px 12px', borderRadius: '6px', border: 'none', background: '#c62828', color: 'white', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer', flexShrink: 0 }}>
-                삭제
-              </button>
-            )}
-          </div>
         </div>
 
         {saving && <p style={{ textAlign: 'center', color: 'rgba(255,255,255,0.5)', fontSize: '11px' }}>저장 중...</p>}
