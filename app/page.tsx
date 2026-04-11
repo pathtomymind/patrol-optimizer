@@ -2122,29 +2122,49 @@ export default function Home() {
             apSt={apSt}
             insertOptions={insertOptions}
             isNew={!editingAdditionalPoint}
-            onClose={() => setShowAdditionalModal(false)}
+            onClose={async () => {
+              setShowAdditionalModal(false);
+            }}
             onSave={async (data) => {
-              // isSaving은 외부 저장(업로드 등) 중복 방지용 - handleClose에서 호출 시 허용
               const coordData = { lat: data.lat, lng: data.lng, placeName: data.placeName, source: data.source, coordMessage: data.coordMessage };
               let photoUrl = data.photoUrl;
-              if (photoUrl && photoUrl.startsWith('blob:')) {
+              if (photoUrl && (photoUrl.startsWith('blob:') || photoUrl.startsWith('data:'))) {
                 try {
-                  const res = await fetch(photoUrl);
-                  const blob = await res.blob();
-                  const reader = new FileReader();
-                  const base64 = await new Promise<string>((resolve) => { reader.onload = () => resolve(reader.result as string); reader.readAsDataURL(blob); });
-                  const uploadRes = await fetch('/api/upload-photo', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ imageData: base64, filename: `additional-${Date.now()}.jpg` }) });
+                  let base64 = photoUrl;
+                  if (photoUrl.startsWith('blob:')) {
+                    const res = await fetch(photoUrl);
+                    const blob = await res.blob();
+                    const reader = new FileReader();
+                    base64 = await new Promise<string>((resolve) => { reader.onload = () => resolve(reader.result as string); reader.readAsDataURL(blob); });
+                  }
+                  // 압축
+                  const compressed = await new Promise<string>((resolve) => {
+                    const img = new Image();
+                    img.onload = () => {
+                      const canvas = document.createElement('canvas');
+                      const maxSize = 1024;
+                      let w = img.width, h = img.height;
+                      if (w > maxSize || h > maxSize) {
+                        if (w > h) { h = Math.round(h * maxSize / w); w = maxSize; }
+                        else { w = Math.round(w * maxSize / h); h = maxSize; }
+                      }
+                      canvas.width = w; canvas.height = h;
+                      canvas.getContext('2d')!.drawImage(img, 0, 0, w, h);
+                      resolve(canvas.toDataURL('image/jpeg', 0.7));
+                    };
+                    img.src = base64;
+                  });
+                  const uploadRes = await fetch('/api/upload-photo', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ imageData: compressed, filename: `additional-${Date.now()}.jpg` }) });
                   if (uploadRes.ok) { const uploadData = await uploadRes.json(); photoUrl = uploadData.url; }
                 } catch {}
               }
-              let updatedPoints;
+              let updatedPoints: typeof additionalPoints;
               if (editingAdditionalPoint) {
                 updatedPoints = additionalPoints.map(p =>
                   p.id === editingAdditionalPoint.id
                     ? { ...p, address: data.address, destination: data.destination, complaint: data.complaint, manager: data.manager, photoUrl, ...coordData, isAdditional: true as const, insertAfterOrder: data.insertAfterOrder }
                     : p
                 );
-                // 작업상태 저장
                 if (data.status !== undefined) {
                   const addrPart = data.address?.trim() || data.destination?.trim() || '';
                   const apKey = `${addrPart}:${(data.complaint || '').trim()}:none`;
@@ -2161,8 +2181,7 @@ export default function Home() {
               draft.lastModified = Date.now();
               localStorage.setItem('draft-route', JSON.stringify(draft));
               const today = new Date().toLocaleDateString('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/\. /g, '-').replace('.', '');
-              fetch('/api/save-additional', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ date: today, points: updatedPoints }) }).catch(() => {});
-              // 모달 닫기는 handleClose(onClose)가 담당 - 여기서 직접 닫지 않음
+              await fetch('/api/save-additional', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ date: today, points: updatedPoints }) }).catch(() => {});
             }}
             onDelete={editingAdditionalPoint ? () => handleAdditionalDelete(editingAdditionalPoint.id) : undefined}
             onPhotoUpload={async (file) => {

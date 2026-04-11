@@ -109,9 +109,7 @@ export default function AdditionalPointModal({
   };
 
   const handleClose = async () => {
-    setSaving(true);
     await onSave(buildData());
-    setSaving(false);
     onClose();
   };
 
