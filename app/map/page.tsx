@@ -633,39 +633,37 @@ export default function MapPage() {
     const routePoints = routeRef.current?.points ?? [];
     const allAdditional = additionalPointsRef.current;
 
+    // ★ 체인을 거슬러 올라가 최초 route point의 order를 찾는 헬퍼
+    const findRootOrder = (ap: AdditionalPoint): number | null => {
+      if (typeof ap.insertAfterOrder === 'number') return ap.insertAfterOrder;
+      if (typeof ap.insertAfterOrder === 'string' && ap.insertAfterOrder.startsWith('add_')) {
+        const prevId = parseInt(ap.insertAfterOrder.replace('add_', ''));
+        const prev = allAdditional.find(p => p.id === prevId);
+        if (prev) return findRootOrder(prev);
+      }
+      return null;
+    };
+
     // ★ 다음 지점 찾기 - insertAfterOrder 타입에 따라 분기
     let fromLat = point.lat!;
     let fromLng = point.lng!;
     let toLat: number | null = null;
     let toLng: number | null = null;
 
-    if (typeof point.insertAfterOrder === 'number') {
-      // 일반 route point 다음 → 다음 추가지점이 있으면 그게 toPoint, 없으면 route의 order+1
-      const nextAdd = allAdditional.find(ap =>
-        typeof ap.insertAfterOrder === 'string' &&
-        ap.insertAfterOrder === `add_${point.id}`
-      );
-      if (nextAdd && nextAdd.lat && nextAdd.lng) {
-        toLat = nextAdd.lat;
-        toLng = nextAdd.lng;
-      } else {
-        const toPoint = routePoints.find(p => p.order === (point.insertAfterOrder as number) + 1);
-        if (toPoint) { toLat = toPoint.lat; toLng = toPoint.lng; }
-      }
-    } else if (typeof point.insertAfterOrder === 'string' && point.insertAfterOrder.startsWith('add_')) {
-      // 앞이 다른 추가지점인 경우 → 다음 추가지점 또는 route point 찾기
-      const prevAddId = parseInt(point.insertAfterOrder.replace('add_', ''));
-      const prevAdd = allAdditional.find(p => p.id === prevAddId);
+    // 다음 추가지점이 있으면 그쪽으로, 없으면 route point로
+    const nextAdd = allAdditional.find(ap =>
+      typeof ap.insertAfterOrder === 'string' &&
+      ap.insertAfterOrder === `add_${point.id}`
+    );
 
-      const nextAdd = allAdditional.find(ap =>
-        typeof ap.insertAfterOrder === 'string' &&
-        ap.insertAfterOrder === `add_${point.id}`
-      );
-      if (nextAdd && nextAdd.lat && nextAdd.lng) {
-        toLat = nextAdd.lat;
-        toLng = nextAdd.lng;
-      } else if (prevAdd && typeof prevAdd.insertAfterOrder === 'number') {
-        const toPoint = routePoints.find(p => p.order === (prevAdd.insertAfterOrder as number) + 1);
+    if (nextAdd && nextAdd.lat && nextAdd.lng) {
+      toLat = nextAdd.lat;
+      toLng = nextAdd.lng;
+    } else {
+      // 체인 거슬러 올라가 root order 찾기
+      const rootOrder = findRootOrder(point);
+      if (rootOrder !== null) {
+        const toPoint = routePoints.find(p => p.order === rootOrder + 1);
         if (toPoint) { toLat = toPoint.lat; toLng = toPoint.lng; }
       }
     }
@@ -689,13 +687,8 @@ export default function MapPage() {
     // 다음이 추가지점이면 그 추가지점의 fromCoords, 다음이 route point면 현재의 toCoords
     let coords: { lat: number; lng: number }[] = [];
 
-    const nextAdd = allAdditional.find(ap =>
-      typeof ap.insertAfterOrder === 'string' &&
-      ap.insertAfterOrder === `add_${point.id}`
-    );
-
     if (nextAdd) {
-      // A1→A2: A2의 fromCoords (A1→A2 구간 경로)
+      // An→An+1: 다음 추가지점의 fromCoords
       const nextEntry = additionalPolylinesByIdRef.current.get(nextAdd.id);
       if (nextEntry && nextEntry.fromCoords.length >= 2) {
         coords = nextEntry.fromCoords;
@@ -838,10 +831,14 @@ export default function MapPage() {
             if (segArrows) segArrows.forEach(a => a.setMap(null));
           }
         } else if (typeof prevAdd.insertAfterOrder === 'string') {
-          const prevPrevId = parseInt((prevAdd.insertAfterOrder as string).replace('add_', ''));
-          const prevPrevAdd = points.find(p => p.id === prevPrevId);
-          if (prevPrevAdd && typeof prevPrevAdd.insertAfterOrder === 'number') {
-            toPoint = routePoints.find(p => p.order === (prevPrevAdd.insertAfterOrder as number) + 1);
+          // ★ 재귀적으로 체인 거슬러 올라가 root order 찾기 (A3→A2→A1→order 4)
+          let cur: AdditionalPoint | undefined = prevAdd;
+          while (cur && typeof cur.insertAfterOrder === 'string' && cur.insertAfterOrder.startsWith('add_')) {
+            const pid = parseInt(cur.insertAfterOrder.replace('add_', ''));
+            cur = points.find(p => p.id === pid);
+          }
+          if (cur && typeof cur.insertAfterOrder === 'number') {
+            toPoint = routePoints.find(p => p.order === (cur!.insertAfterOrder as number) + 1);
           }
         }
       } else {
@@ -1469,15 +1466,18 @@ export default function MapPage() {
 
       // toPl (A→to 구간): A 완료 + toPoint 완료 모두 되어야 파란색
       if (entry.toPl) {
-        // toPoint 찾기 - insertAfterOrder 타입에 따라
+        // toPoint 찾기 - 체인을 재귀적으로 거슬러 올라가 root order 찾기
         let toPoint: RoutePoint | undefined;
         if (typeof point.insertAfterOrder === 'number') {
           toPoint = routePoints.find(p => p.order === (point.insertAfterOrder as number) + 1);
         } else if (typeof point.insertAfterOrder === 'string') {
-          const prevAddId = parseInt(point.insertAfterOrder.replace('add_', ''));
-          const prevAdd = additionalPointsRef.current.find(p => p.id === prevAddId);
-          if (prevAdd && typeof prevAdd.insertAfterOrder === 'number') {
-            toPoint = routePoints.find(p => p.order === (prevAdd.insertAfterOrder as number) + 1);
+          let cur: AdditionalPoint | undefined = additionalPointsRef.current.find(p => p.id === parseInt(point.insertAfterOrder.toString().replace('add_', '')));
+          while (cur && typeof cur.insertAfterOrder === 'string' && cur.insertAfterOrder.startsWith('add_')) {
+            const pid = parseInt(cur.insertAfterOrder.replace('add_', ''));
+            cur = additionalPointsRef.current.find(p => p.id === pid);
+          }
+          if (cur && typeof cur.insertAfterOrder === 'number') {
+            toPoint = routePoints.find(p => p.order === (cur!.insertAfterOrder as number) + 1);
           }
         }
         entry.toPl.setOptions({ strokeColor: getAdditionalLineColor(point, false, toPoint) });
