@@ -638,9 +638,46 @@ export default function MapPage() {
     const naver = (window as any).naver;
     const map = naverMapRef.current;
     const routePoints = routeRef.current?.points ?? [];
+    const allAdditional = additionalPointsRef.current;
 
-    const toPoint = routePoints.find(p => p.order === (typeof point.insertAfterOrder === 'number' ? point.insertAfterOrder + 1 : -1));
-    if (!toPoint) return;
+    // ★ 다음 지점 찾기 - insertAfterOrder 타입에 따라 분기
+    let fromLat = point.lat!;
+    let fromLng = point.lng!;
+    let toLat: number | null = null;
+    let toLng: number | null = null;
+
+    if (typeof point.insertAfterOrder === 'number') {
+      // 일반 route point 다음 → 다음 추가지점이 있으면 그게 toPoint, 없으면 route의 order+1
+      const nextAdd = allAdditional.find(ap =>
+        typeof ap.insertAfterOrder === 'string' &&
+        ap.insertAfterOrder === `add_${point.id}`
+      );
+      if (nextAdd && nextAdd.lat && nextAdd.lng) {
+        toLat = nextAdd.lat;
+        toLng = nextAdd.lng;
+      } else {
+        const toPoint = routePoints.find(p => p.order === (point.insertAfterOrder as number) + 1);
+        if (toPoint) { toLat = toPoint.lat; toLng = toPoint.lng; }
+      }
+    } else if (typeof point.insertAfterOrder === 'string' && point.insertAfterOrder.startsWith('add_')) {
+      // 앞이 다른 추가지점인 경우 → 다음 추가지점 또는 route point 찾기
+      const prevAddId = parseInt(point.insertAfterOrder.replace('add_', ''));
+      const prevAdd = allAdditional.find(p => p.id === prevAddId);
+
+      const nextAdd = allAdditional.find(ap =>
+        typeof ap.insertAfterOrder === 'string' &&
+        ap.insertAfterOrder === `add_${point.id}`
+      );
+      if (nextAdd && nextAdd.lat && nextAdd.lng) {
+        toLat = nextAdd.lat;
+        toLng = nextAdd.lng;
+      } else if (prevAdd && typeof prevAdd.insertAfterOrder === 'number') {
+        const toPoint = routePoints.find(p => p.order === (prevAdd.insertAfterOrder as number) + 1);
+        if (toPoint) { toLat = toPoint.lat; toLng = toPoint.lng; }
+      }
+    }
+
+    if (toLat === null || toLng === null) return;
 
     const cleanupBlink = () => {
       if (blinkIntervalRef.current) { clearInterval(blinkIntervalRef.current); blinkIntervalRef.current = null; }
@@ -655,27 +692,10 @@ export default function MapPage() {
     };
     cleanupBlink();
 
-    // 도로 모드: additionalPolylinesRef[1]이 A1→toPoint 구간 경로
-    let coords: { lat: number; lng: number }[] = [];
-    if (lineModeRef.current === 'road' && additionalPolylinesRef.current.length > 1) {
-      const secondPl = additionalPolylinesRef.current[1];
-      try {
-        const path = (secondPl as any).getPath();
-        if (path && path.getLength) {
-          for (let i = 0; i < path.getLength(); i++) {
-            const pt = path.getAt(i);
-            coords.push({ lat: pt.lat(), lng: pt.lng() });
-          }
-        }
-      } catch {}
-    }
-    // 직선 모드 또는 경로 추출 실패
-    if (coords.length < 2) {
-      coords = [
-        { lat: point.lat!, lng: point.lng! },
-        { lat: toPoint.lat, lng: toPoint.lng },
-      ];
-    }
+    const coords = [
+      { lat: fromLat, lng: fromLng },
+      { lat: toLat, lng: toLng },
+    ];
 
     blinkPolylineRef.current = new naver.maps.Polyline({
       map,
