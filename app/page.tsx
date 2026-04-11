@@ -236,22 +236,34 @@ export default function Home() {
     setIsSaving(true);
     const coordData = directCoordStatus === 'success' ? { lat: directCoord.lat, lng: directCoord.lng, placeName: directCoord.placeName, source: directCoord.source, coordMessage: directCoord.coordMessage } : { lat: null, lng: null, placeName: null, source: null, coordMessage: null };
 
-    // 현장사진 업로드 (base64 dataURL인 경우)
+    // 현장사진 업로드 (base64 dataURL인 경우) - 압축 후 업로드
     let photoUrl = directForm.photoUrl;
     if (photoUrl && photoUrl.startsWith('data:')) {
       try {
+        // 압축
+        const compressed = await new Promise<string>((resolve) => {
+          const img = new Image();
+          img.onload = () => {
+            const canvas = document.createElement('canvas');
+            const maxSize = 1024;
+            let w = img.width, h = img.height;
+            if (w > maxSize || h > maxSize) {
+              if (w > h) { h = Math.round(h * maxSize / w); w = maxSize; }
+              else { w = Math.round(w * maxSize / h); h = maxSize; }
+            }
+            canvas.width = w; canvas.height = h;
+            canvas.getContext('2d')!.drawImage(img, 0, 0, w, h);
+            resolve(canvas.toDataURL('image/jpeg', 0.7));
+          };
+          img.src = photoUrl as string;
+        });
         const uploadRes = await fetch('/api/upload-photo', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ imageData: photoUrl, filename: `direct-${Date.now()}.jpg` }),
+          body: JSON.stringify({ imageData: compressed, filename: `direct-${Date.now()}.jpg` }),
         });
-        if (uploadRes.ok) {
-          const uploadData = await uploadRes.json();
-          photoUrl = uploadData.url;
-        }
-      } catch (e) {
-        console.error('직접입력 사진 업로드 오류:', e);
-      }
+        if (uploadRes.ok) { const uploadData = await uploadRes.json(); photoUrl = uploadData.url; }
+      } catch (e) { console.error('직접입력 사진 업로드 오류:', e); }
     }
 
     let updatedPoints;
@@ -820,14 +832,30 @@ export default function Home() {
     if (!extractEditTarget) return;
     const parsedOriginalId = extractEditForm.originalId ? Number(extractEditForm.originalId) : null;
 
-    // 새로 선택한 사진이 dataURL이면 업로드
+    // 새로 선택한 사진이 dataURL이면 압축 후 업로드
     let photoUrl = extractEditForm.photoUrl || extractEditTarget.photoUrl || null;
     if (extractEditForm.photoUrl && extractEditForm.photoUrl.startsWith('data:')) {
       try {
+        const compressed = await new Promise<string>((resolve) => {
+          const img = new Image();
+          img.onload = () => {
+            const canvas = document.createElement('canvas');
+            const maxSize = 1024;
+            let w = img.width, h = img.height;
+            if (w > maxSize || h > maxSize) {
+              if (w > h) { h = Math.round(h * maxSize / w); w = maxSize; }
+              else { w = Math.round(w * maxSize / h); h = maxSize; }
+            }
+            canvas.width = w; canvas.height = h;
+            canvas.getContext('2d')!.drawImage(img, 0, 0, w, h);
+            resolve(canvas.toDataURL('image/jpeg', 0.7));
+          };
+          img.src = extractEditForm.photoUrl as string;
+        });
         const uploadRes = await fetch('/api/upload-photo', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ imageData: extractEditForm.photoUrl, filename: `extract-${Date.now()}.jpg` }),
+          body: JSON.stringify({ imageData: compressed, filename: `extract-${Date.now()}.jpg` }),
         });
         if (uploadRes.ok) { const uploadData = await uploadRes.json(); photoUrl = uploadData.url; }
       } catch (e) { console.error('사진 업로드 오류:', e); }
@@ -1034,21 +1062,26 @@ export default function Home() {
       const cityHall = { order: 0, address: '의정부시 의정부동 358-1', destination: '의정부시청', complaint: '출발/복귀', lat: 37.7381, lng: 127.0338, placeName: '의정부시청', source: 'fixed' };
       const routePoints = [
         { ...cityHall, order: 0 },
-        ...ordered.map((p, i) => ({
-          order: i + 1,
-          originalId: ('originalId' in p ? (p as any).originalId : null) ?? null,
-          address: p.address,
-          destination: ('destination' in p ? p.destination : null) || null,
-          complaint: p.complaint,
-          lat: p.lat,
-          lng: p.lng,
-          placeName: p.placeName || null,
-          source: p.source || null,
-          coordMessage: ('coordMessage' in p ? p.coordMessage : null) || null,
-          photoDescription: ('photoDescription' in p ? p.photoDescription : null) || null,
-          photoUrl: ('photoUrl' in p ? p.photoUrl : null) || null,
-          manager: ('manager' in p ? p.manager : null) || null,
-        })),
+        ...ordered.map((p, i) => {
+          const rawPhotoUrl = ('photoUrl' in p ? p.photoUrl : null) || null;
+          // dataUrl(base64)은 제외하고 실제 업로드된 URL만 포함
+          const safePhotoUrl = rawPhotoUrl && rawPhotoUrl.startsWith('https://') ? rawPhotoUrl : null;
+          return {
+            order: i + 1,
+            originalId: ('originalId' in p ? (p as any).originalId : null) ?? null,
+            address: p.address,
+            destination: ('destination' in p ? p.destination : null) || null,
+            complaint: p.complaint,
+            lat: p.lat,
+            lng: p.lng,
+            placeName: p.placeName || null,
+            source: p.source || null,
+            coordMessage: ('coordMessage' in p ? p.coordMessage : null) || null,
+            photoDescription: ('photoDescription' in p ? p.photoDescription : null) || null,
+            photoUrl: safePhotoUrl,
+            manager: ('manager' in p ? p.manager : null) || null,
+          };
+        }),
         { ...cityHall, order: ordered.length + 1 },
       ];
 
