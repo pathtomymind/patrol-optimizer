@@ -1381,7 +1381,14 @@ export default function Home() {
                 className="w-full flex justify-between items-center px-4 py-3 text-white font-medium text-sm"
                 style={{ background: 'linear-gradient(180deg, #b0bec5 0%, #78909c 100%)' }}
               >
-                <span>사진에서 뽑기</span>
+                <span className="flex items-center gap-2">
+                  사진에서 뽑기
+                  {extractedPoints.length > 0 && (
+                    <span className="text-xs px-1.5 py-0.5 rounded-full font-bold" style={{ background: '#78909c', color: 'white', border: '1px solid rgba(255,255,255,0.4)' }}>
+                      {extractedPoints.length}
+                    </span>
+                  )}
+                </span>
                 <span className="flex items-center gap-2">
                   <div
                     onClick={(e) => { e.stopPropagation(); handleUploadReset(); }}
@@ -1486,7 +1493,7 @@ export default function Home() {
                                 );
                               })()}
                               <p className="text-xs mt-0.5" style={{ color: '#a5d6a7' }}>
-                                <span style={{ color: 'rgba(255,255,255,0.6)', display: 'inline-block', width: '4rem' }}>민원내용:</span><span style={{ color: '#a5d6a7' }}>{point.complaint || ''}</span>
+                                <span style={{ color: 'rgba(255,255,255,0.6)', display: 'inline-block', width: '4rem' }}>방문내용:</span><span style={{ color: '#a5d6a7' }}>{point.complaint || ''}</span>
                               </p>
                               <p className="text-xs mt-0.5" style={{ color: '#a5d6a7' }}>
                                 <span style={{ color: 'rgba(255,255,255,0.6)', display: 'inline-block', width: '4rem' }}>사진설명:</span><span style={{ color: '#a5d6a7' }}>{point.photoDescription || '(사진없음)'}</span>
@@ -1515,7 +1522,14 @@ export default function Home() {
                 className="w-full flex justify-between items-center px-4 py-3 text-white font-medium text-sm"
                 style={{ background: 'linear-gradient(180deg, #b0bec5 0%, #78909c 100%)' }}
               >
-                <span>손으로 입력</span>
+                <span className="flex items-center gap-2">
+                  손으로 입력
+                  {directPoints.length > 0 && (
+                    <span className="text-xs px-1.5 py-0.5 rounded-full font-bold" style={{ background: '#78909c', color: 'white', border: '1px solid rgba(255,255,255,0.4)' }}>
+                      {directPoints.length}
+                    </span>
+                  )}
+                </span>
                 <span className="flex items-center gap-2">
                   <div
                     onClick={(e) => { e.stopPropagation(); handleDirectReset(); }}
@@ -1544,24 +1558,36 @@ export default function Home() {
                               <span className="text-white">{point.address || '주소 없음'}{point.destination ? ` (${point.destination})` : ''}</span>
                             )}
                           </p>
-                          {/* 돋보기: place_nearest/place_single일 때만 플레이스명 표시 */}
-                          <p className="text-xs mt-0.5" style={{ color: '#a5d6a7' }}>
-                            <span style={{ display: 'inline-block', width: '4rem' }}>🔍</span>
-                            {(point.source === 'place_nearest' || point.source === 'place_single') ? (point.placeName || '') : ''}
+                          {(() => {
+                            const hasWarning = point.coordMessage?.includes('⚠️');
+                            const noCoord = !point.source;
+                            const isWarningMsg = hasWarning || noCoord;
+                            const rawMsg = point.coordMessage
+                              ? point.coordMessage.replace('⚠️', '').trim()
+                              : '좌표 없음. (주소나 방문지명 확인 필요)';
+                            if (isWarningMsg) {
+                              return (
+                                <p className="text-xs mt-0.5" style={{ color: 'white', fontWeight: 'bold' }}>
+                                  <span style={{ display: 'inline-block', width: '1.2rem' }}>⚠️</span>
+                                  <span style={{ animation: 'blink-text 1.2s ease-in-out infinite' }}>{rawMsg}</span>
+                                </p>
+                              );
+                            }
+                            return (
+                              <p className="text-xs mt-0.5" style={{ color: '#fff176' }}>
+                                <span style={{ display: 'inline-block', width: '1.2rem' }}>✅</span>
+                                {rawMsg}
+                              </p>
+                            );
+                          })()}
+                          <p className="text-xs mt-0.5">
+                            <span style={{ color: 'rgba(255,255,255,0.6)', display: 'inline-block', width: '4rem' }}>방문내용:</span>
+                            <span style={{ color: '#a5d6a7' }}>{point.complaint || ''}</span>
                           </p>
-                          {/* 핀: coordMessage 또는 케이스6 메시지 */}
-                          <p className="text-xs mt-0.5" style={{ color: point.coordMessage?.includes('⚠️') ? '#ffb74d' : point.source ? '#fff176' : 'rgba(255,255,255,0.5)' }}>
-                            <span style={{ display: 'inline-block', width: '4rem' }}>📍</span>
-                            {point.coordMessage || '좌표 없음. (⚠️주소나 목적지명 확인 필요)'}
+                          <p className="text-xs mt-0.5">
+                            <span style={{ color: 'rgba(255,255,255,0.6)', display: 'inline-block', width: '4rem' }}>사진설명:</span>
+                            <span style={{ color: '#a5d6a7' }}>{(point as any).photoDescription || '(사진없음)'}</span>
                           </p>
-                          <p className="text-xs mt-0.5" style={{ color: '#a5d6a7' }}>
-                            <span style={{ color: 'rgba(255,255,255,0.6)', display: 'inline-block', width: '4rem' }}>민원내용:</span><span style={{ color: '#a5d6a7' }}>{point.complaint}</span>
-                          </p>
-                          {point.photoDescription && (
-                            <p className="text-xs mt-0.5" style={{ color: '#a5d6a7' }}>
-                              <span style={{ color: 'rgba(255,255,255,0.6)', display: 'inline-block', width: '4rem' }}>사진설명:</span>{point.photoDescription}
-                            </p>
-                          )}
                         </div>
                         <button
                           onClick={() => handleDirectDelete(point.id)}
@@ -1615,13 +1641,13 @@ export default function Home() {
               {additionalOpen && (
                 <div className="px-3 py-3 space-y-2" style={{ background: 'rgba(255,255,255,0.08)' }}>
                   {/* 추가지점 설명 */}
-                  <p className="text-xs px-1" style={{ color: 'rgba(200,160,255,0.85)' }}>
-                    최적화 경로 완성 후 현장에서 추가되는 민원 지점입니다. 지점을 입력하면 지도에 마름모 마커로 표시됩니다.
+                  <p className="text-xs px-1" style={{ color: 'white' }}>
+                    경로 완성 후 현장에서 방문지를 추가할 수 있습니다. 추가된 방문지는 지도에 마름모 마커로 표시됩니다.
                   </p>
                   {/* 추가지점 카드 목록 */}
                   {additionalPoints.map((point, index) => (
                     <div key={point.id} className="rounded px-3 py-2"
-                      style={{ background: 'rgba(249,115,22,0.15)', border: '1px solid rgba(249,115,22,0.4)' }}>
+                      style={{ background: 'rgba(255,255,255,0.12)' }}>
                       <div className="flex justify-between items-start gap-2">
                         {/* 마름모 마커 */}
                         <div className="flex-shrink-0 flex items-center justify-center" style={{ width: '28px', height: '28px' }}>
@@ -1632,19 +1658,41 @@ export default function Home() {
                         </div>
                         <div className="flex-1 cursor-pointer" onClick={() => handleAdditionalEdit(point)}>
                           <p className="text-sm leading-snug font-medium">
-                            <span style={{ color: point.source ? '#fbbf77' : 'white' }}>
-                              {point.address || '주소 없음'}{point.destination ? ` (${point.destination})` : ''}
-                            </span>
+                            {point.source ? (
+                              <span style={{ color: '#a5d6a7' }}>{point.address || '주소 없음'}{point.destination ? ` (${point.destination})` : ''}</span>
+                            ) : (
+                              <span className="text-white">{point.address || '주소 없음'}{point.destination ? ` (${point.destination})` : ''}</span>
+                            )}
                           </p>
-                          {(point.source === 'place_nearest' || point.source === 'place_single') && point.placeName && (
-                            <p className="text-xs mt-0.5" style={{ color: '#fbbf77' }}>🔍 {point.placeName}</p>
-                          )}
-                          <p className="text-xs mt-0.5" style={{ color: point.coordMessage?.includes('⚠️') ? '#ffb74d' : point.source ? '#fde68a' : 'rgba(255,255,255,0.5)' }}>
-                            📍 {point.coordMessage || '좌표 없음'}
+                          {(() => {
+                            const hasWarning = point.coordMessage?.includes('⚠️');
+                            const noCoord = !point.source;
+                            const isWarningMsg = hasWarning || noCoord;
+                            const rawMsg = point.coordMessage
+                              ? point.coordMessage.replace('⚠️', '').trim()
+                              : '좌표 없음. (주소나 방문지명 확인 필요)';
+                            if (isWarningMsg) {
+                              return (
+                                <p className="text-xs mt-0.5" style={{ color: 'white', fontWeight: 'bold' }}>
+                                  <span style={{ display: 'inline-block', width: '1.2rem' }}>⚠️</span>
+                                  <span style={{ animation: 'blink-text 1.2s ease-in-out infinite' }}>{rawMsg}</span>
+                                </p>
+                              );
+                            }
+                            return (
+                              <p className="text-xs mt-0.5" style={{ color: '#fff176' }}>
+                                <span style={{ display: 'inline-block', width: '1.2rem' }}>✅</span>
+                                {rawMsg}
+                              </p>
+                            );
+                          })()}
+                          <p className="text-xs mt-0.5">
+                            <span style={{ color: 'rgba(255,255,255,0.6)', display: 'inline-block', width: '4rem' }}>방문내용:</span>
+                            <span style={{ color: '#a5d6a7' }}>{point.complaint || ''}</span>
                           </p>
-                          <p className="text-xs mt-0.5" style={{ color: '#fbbf77' }}>
-                            <span style={{ color: 'rgba(255,255,255,0.6)', display: 'inline-block', width: '4rem' }}>민원내용:</span>
-                            {point.complaint}
+                          <p className="text-xs mt-0.5">
+                            <span style={{ color: 'rgba(255,255,255,0.6)', display: 'inline-block', width: '4rem' }}>사진설명:</span>
+                            <span style={{ color: '#a5d6a7' }}>{(point as any).photoDescription || '(사진없음)'}</span>
                           </p>
                           {point.insertAfterOrder != null && (
                             <p className="text-xs mt-0.5" style={{ color: '#c4b5fd' }}>
@@ -1662,11 +1710,11 @@ export default function Home() {
                       </div>
                     </div>
                   ))}
-                  {/* 추가 버튼 */}
+                  {/* 추가 버튼 - 손으로 입력과 동일한 스타일 */}
                   <div
                     onClick={handleAdditionalAdd}
                     className="flex items-center justify-center w-10 h-10 rounded-full cursor-pointer mx-auto mt-1"
-                    style={{ background: 'rgba(120,144,156,0.3)', border: '2px dashed rgba(120,144,156,0.7)' }}
+                    style={{ background: 'rgba(255,255,255,0.2)', border: '2px dashed rgba(255,255,255,0.5)' }}
                   >
                     <span className="text-white text-xl font-bold">+</span>
                   </div>
