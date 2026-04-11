@@ -566,8 +566,11 @@ export default function MapPage() {
       additionalMarkersRef.current.push(marker);
     });
 
-    // ★ 도로 경로 그리는 중이면 폴리라인은 applyAdditionalAfterRoad가 담당
-    if (!roadDrawingRef.current) {
+    // ★ 도로 모드 경로 그리는 중(polylinesRef 비어있음)이면 폴리라인 스킵
+    // applyAdditionalAfterRoad가 완료 후 그려줌
+    const isRoadDrawingInProgress = roadDrawingRef.current || 
+      (lineModeRef.current === 'road' && polylinesRef.current.length === 0);
+    if (!isRoadDrawingInProgress) {
       drawAdditionalPolylines(points);
     }
   };
@@ -1985,6 +1988,8 @@ export default function MapPage() {
         ...statusesRef.current,
         [key]: { status, memo, updatedAt: Date.now() },
       };
+      // ★ 추가지점 경로선 색상도 즉시 업데이트
+      updateAdditionalPolylineColors();
     } catch {}
     setSavingStatus(false);
   };
