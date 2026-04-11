@@ -178,22 +178,22 @@ export default function AdditionalPointModal({
         </button>
       </div>
 
-      {/* 내용 */}
-      <div style={{ flex: 1, overflowY: 'auto', padding: '16px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+      {/* 내용 - 스크롤 격리 */}
+      <div style={{ flex: 1, overflowY: 'auto', padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: '12px', overscrollBehavior: 'contain' }}>
 
         {/* 위치정보 묶음 */}
         <div style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.15)', borderRadius: '8px', padding: '12px' }}>
-          <div style={{ marginBottom: '10px' }}>
-            <label style={{ color: '#90caf9', fontSize: '11px', display: 'block', marginBottom: '4px' }}>주소</label>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+            <label style={{ color: '#90caf9', fontSize: '11px', flexShrink: 0, width: '5rem' }}>주소</label>
             <input type="text" value={address}
               onChange={e => { setAddress(e.target.value); setCoordStatus('idle'); setLat(null); setLng(null); setPlaceName(null); setSource(null); setCoordMessage(null); }}
-              style={{ width: '100%', padding: '8px 10px', borderRadius: '6px', background: 'rgba(255,255,255,0.15)', color: 'white', border: 'none', outline: 'none', fontSize: '13px', boxSizing: 'border-box' }} />
+              style={{ flex: 1, padding: '6px 8px', borderRadius: '6px', background: 'rgba(255,255,255,0.15)', color: 'white', border: 'none', outline: 'none', fontSize: '12px', boxSizing: 'border-box' }} />
           </div>
-          <div style={{ marginBottom: '10px' }}>
-            <label style={{ color: '#90caf9', fontSize: '11px', display: 'block', marginBottom: '4px' }}>방문지</label>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+            <label style={{ color: '#90caf9', fontSize: '11px', flexShrink: 0, width: '5rem' }}>방문지</label>
             <input type="text" value={destination}
               onChange={e => { setDestination(e.target.value); setCoordStatus('idle'); setLat(null); setLng(null); setPlaceName(null); setSource(null); setCoordMessage(null); }}
-              style={{ width: '100%', padding: '8px 10px', borderRadius: '6px', background: 'rgba(255,255,255,0.15)', color: 'white', border: 'none', outline: 'none', fontSize: '13px', boxSizing: 'border-box' }} />
+              style={{ flex: 1, padding: '6px 8px', borderRadius: '6px', background: 'rgba(255,255,255,0.15)', color: 'white', border: 'none', outline: 'none', fontSize: '12px', boxSizing: 'border-box' }} />
           </div>
           <button onClick={handleCheckCoord} disabled={coordStatus === 'loading'}
             style={{ width: '100%', padding: '8px', borderRadius: '6px', background: coordStatus === 'loading' ? '#555' : '#0a3d8f', color: 'white', border: 'none', fontWeight: 'bold', fontSize: '13px', cursor: 'pointer' }}>
@@ -203,48 +203,50 @@ export default function AdditionalPointModal({
         </div>
 
         {/* 사진번호 */}
-        <div>
-          <label style={{ color: '#90caf9', fontSize: '11px', display: 'block', marginBottom: '4px' }}>사진번호</label>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <label style={{ color: '#90caf9', fontSize: '11px', flexShrink: 0, width: '5rem' }}>사진번호</label>
           <input type="number" placeholder="예) 12" defaultValue=""
-            style={{ width: '100%', padding: '8px 10px', borderRadius: '6px', background: 'rgba(255,255,255,0.15)', color: '#a5d6a7', border: 'none', outline: 'none', fontSize: '13px', boxSizing: 'border-box' as const }} />
+            style={{ flex: 1, padding: '6px 8px', borderRadius: '6px', background: 'rgba(255,255,255,0.15)', color: '#a5d6a7', border: 'none', outline: 'none', fontSize: '12px', boxSizing: 'border-box' as const }} />
         </div>
 
         {/* 방문내용 */}
-        <div>
-          <label style={{ color: '#90caf9', fontSize: '11px', display: 'block', marginBottom: '4px' }}>방문내용</label>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <label style={{ color: '#90caf9', fontSize: '11px', flexShrink: 0, width: '5rem' }}>방문내용</label>
           <input type="text" value={complaint} onChange={e => setComplaint(e.target.value)}
-            style={{ width: '100%', padding: '8px 10px', borderRadius: '6px', background: 'rgba(255,255,255,0.15)', color: '#a5d6a7', border: 'none', outline: 'none', fontSize: '13px', boxSizing: 'border-box' as const }} />
+            style={{ flex: 1, padding: '6px 8px', borderRadius: '6px', background: 'rgba(255,255,255,0.15)', color: '#a5d6a7', border: 'none', outline: 'none', fontSize: '12px', boxSizing: 'border-box' as const }} />
         </div>
 
         {/* 담당자 */}
-        <div>
-          <label style={{ color: '#90caf9', fontSize: '11px', display: 'block', marginBottom: '4px' }}>담당자</label>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <label style={{ color: '#90caf9', fontSize: '11px', flexShrink: 0, width: '5rem' }}>담당자</label>
           <input type="text" value={manager} onChange={e => setManager(e.target.value)}
-            style={{ width: '100%', padding: '8px 10px', borderRadius: '6px', background: 'rgba(255,255,255,0.15)', color: '#a5d6a7', border: 'none', outline: 'none', fontSize: '13px', boxSizing: 'border-box' as const }} />
+            style={{ flex: 1, padding: '6px 8px', borderRadius: '6px', background: 'rgba(255,255,255,0.15)', color: '#a5d6a7', border: 'none', outline: 'none', fontSize: '12px', boxSizing: 'border-box' as const }} />
         </div>
 
         {/* 방문지사진 */}
-        <div>
-          <label style={{ color: '#90caf9', fontSize: '11px', display: 'block', marginBottom: '4px' }}>방문지사진</label>
-          {photoUrl && (
-            <div style={{ position: 'relative', marginBottom: '8px' }}>
-              <img src={photoUrl} alt="방문지사진" style={{ width: '100%', borderRadius: '6px' }}
-                crossOrigin="anonymous" onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }} />
-              <button onClick={() => setPhotoUrl('')}
-                style={{ position: 'absolute', top: 4, right: 4, background: '#c62828', border: 'none', borderRadius: '50%', color: 'white', width: 24, height: 24, cursor: 'pointer', fontSize: '11px', fontWeight: 'bold' }}>✕</button>
-            </div>
-          )}
-          <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(255,255,255,0.1)', border: '1px dashed rgba(255,255,255,0.4)', borderRadius: '6px', padding: '10px', cursor: 'pointer', color: '#90caf9', fontSize: '12px' }}>
-            사진 선택
-            <input type="file" accept="image/*" capture="environment" style={{ display: 'none' }}
-              onChange={async e => {
-                const file = e.target.files?.[0];
-                if (!file) return;
-                setPhotoUrl(URL.createObjectURL(file));
-                if (onPhotoUpload) { const url = await onPhotoUpload(file); if (url) setPhotoUrl(url); }
-                e.target.value = '';
-              }} />
-          </label>
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
+          <label style={{ color: '#90caf9', fontSize: '11px', flexShrink: 0, width: '5rem', paddingTop: '4px' }}>방문지사진</label>
+          <div style={{ flex: 1 }}>
+            {photoUrl && (
+              <div style={{ position: 'relative', marginBottom: '6px' }}>
+                <img src={photoUrl} alt="방문지사진" style={{ width: '100%', borderRadius: '6px' }}
+                  crossOrigin="anonymous" onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                <button onClick={() => setPhotoUrl('')}
+                  style={{ position: 'absolute', top: 4, right: 4, background: '#c62828', border: 'none', borderRadius: '50%', color: 'white', width: 24, height: 24, cursor: 'pointer', fontSize: '11px', fontWeight: 'bold' }}>✕</button>
+              </div>
+            )}
+            <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(255,255,255,0.1)', border: '1px dashed rgba(255,255,255,0.4)', borderRadius: '6px', padding: '8px', cursor: 'pointer', color: '#90caf9', fontSize: '12px' }}>
+              사진 선택
+              <input type="file" accept="image/*" capture="environment" style={{ display: 'none' }}
+                onChange={async e => {
+                  const file = e.target.files?.[0];
+                  if (!file) return;
+                  setPhotoUrl(URL.createObjectURL(file));
+                  if (onPhotoUpload) { const url = await onPhotoUpload(file); if (url) setPhotoUrl(url); }
+                  e.target.value = '';
+                }} />
+            </label>
+          </div>
         </div>
 
         {saving && <p style={{ textAlign: 'center', color: 'rgba(255,255,255,0.5)', fontSize: '11px' }}>저장 중...</p>}
