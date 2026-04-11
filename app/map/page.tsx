@@ -103,6 +103,8 @@ export default function MapPage() {
   const [additionalPoints, setAdditionalPoints] = useState<AdditionalPoint[]>([]);
   const additionalPointsRef = useRef<AdditionalPoint[]>([]);
   const additionalMarkersRef = useRef<naver.maps.Marker[]>([]);
+  // ★ 도로 경로 그리는 중 플래그 (추가지점 폴리라인 중복 그리기 방지)
+  const roadDrawingRef = useRef<boolean>(false);
   const [showInsertModal, setShowInsertModal] = useState(false);
   const [selectedAdditional, setSelectedAdditional] = useState<AdditionalPoint | null>(null);
   // ★ 지도뷰 추가지점 입력 팝업
@@ -564,8 +566,13 @@ export default function MapPage() {
       additionalMarkersRef.current.push(marker);
     });
 
-    drawAdditionalPolylines(points);
+    // ★ 도로 경로 그리는 중이면 폴리라인은 applyAdditionalAfterRoad가 담당
+    if (!roadDrawingRef.current) {
+      drawAdditionalPolylines(points);
+    }
   };
+
+  // ★ 불필요한 중복 함수 제거
 
   // ★ fromPoint → 추가지점 구간 blink (14번 롱프레스용)
   const blinkFromPointToAdditional = (fromPoint: RoutePoint, addPoint: AdditionalPoint) => {
@@ -1185,6 +1192,7 @@ export default function MapPage() {
 
     // ★ 도로 경로 렌더 완료 후 추가지점 경로선 재적용 헬퍼
     const applyAdditionalAfterRoad = () => {
+      roadDrawingRef.current = false;
       const pts = additionalPointsRef.current;
       console.log('[additional] applyAdditionalAfterRoad 호출 - 추가지점 수:', pts.length, '/ polylinesRef 수:', polylinesRef.current.length);
       // 기존 추가지점 경로선 완전 정리
@@ -1222,6 +1230,7 @@ export default function MapPage() {
 
     // 직선 fallback 렌더링
     const renderStraight = () => {
+      roadDrawingRef.current = false;
       segments.forEach(({ from, to, color }) => {
         const polyline = new naver.maps.Polyline({
           map,
@@ -1234,6 +1243,7 @@ export default function MapPage() {
     };
 
     // ① ORS 시도 (주 서비스 - 안정적)
+    roadDrawingRef.current = true;
     setRoadLoading(true);
     try {
       console.log('[road] ORS 요청 시작...');
@@ -1307,6 +1317,7 @@ export default function MapPage() {
 
     // ③ 둘 다 실패 → 직선 + 에러 배너
     console.error('[road] ORS·OSRM 모두 실패 → 직선 표시');
+    roadDrawingRef.current = false;
     setRoadLoading(false);
     setOsrmError(true);
     renderStraight();
@@ -1338,9 +1349,11 @@ export default function MapPage() {
     const points = route.points;
     if (lineModeRef.current === 'road') {
       // 도로 모드: renderResults 콜백에서 applyAdditionalAfterRoad 호출됨
+      roadDrawingRef.current = true;
       drawRoadLines(points, map, naver);
     } else {
       // 직선 모드: drawStraightLines 완료 후 drawAdditionalPolylines 호출됨
+      roadDrawingRef.current = false;
       drawStraightLines(points, map, naver);
     }
   };
