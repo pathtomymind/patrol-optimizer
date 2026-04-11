@@ -252,8 +252,16 @@ export default function AdditionalPointModal({
                 onChange={async e => {
                   const file = e.target.files?.[0];
                   if (!file) return;
-                  setPhotoUrl(URL.createObjectURL(file));
-                  if (onPhotoUpload) { const url = await onPhotoUpload(file); if (url) setPhotoUrl(url); }
+                  const reader = new FileReader();
+                  reader.onload = async (ev) => {
+                    const dataUrl = ev.target?.result as string;
+                    setPhotoUrl(dataUrl);
+                    if (onPhotoUpload) {
+                      const url = await onPhotoUpload(file);
+                      if (url) setPhotoUrl(url);
+                    }
+                  };
+                  reader.readAsDataURL(file);
                   e.target.value = '';
                 }} />
             </label>

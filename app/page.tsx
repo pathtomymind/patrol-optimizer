@@ -236,24 +236,14 @@ export default function Home() {
     setIsSaving(true);
     const coordData = directCoordStatus === 'success' ? { lat: directCoord.lat, lng: directCoord.lng, placeName: directCoord.placeName, source: directCoord.source, coordMessage: directCoord.coordMessage } : { lat: null, lng: null, placeName: null, source: null, coordMessage: null };
 
-    // 현장사진 Blob 업로드 (로컬 URL인 경우만)
+    // 현장사진 업로드 (base64 dataURL인 경우)
     let photoUrl = directForm.photoUrl;
-    if (photoUrl && photoUrl.startsWith('blob:')) {
+    if (photoUrl && photoUrl.startsWith('data:')) {
       try {
-        const res = await fetch(photoUrl);
-        const blob = await res.blob();
-        const reader = new FileReader();
-        const base64 = await new Promise<string>((resolve) => {
-          reader.onload = () => resolve((reader.result as string));
-          reader.readAsDataURL(blob);
-        });
         const uploadRes = await fetch('/api/upload-photo', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            imageData: base64,
-            filename: `direct-${Date.now()}.jpg`,
-          }),
+          body: JSON.stringify({ imageData: photoUrl, filename: `direct-${Date.now()}.jpg` }),
         });
         if (uploadRes.ok) {
           const uploadData = await uploadRes.json();
@@ -830,15 +820,15 @@ export default function Home() {
     if (!extractEditTarget) return;
     const parsedOriginalId = extractEditForm.originalId ? Number(extractEditForm.originalId) : null;
 
-    // 새로 선택한 사진이 blob URL이면 업로드
+    // 새로 선택한 사진이 dataURL이면 업로드
     let photoUrl = extractEditForm.photoUrl || extractEditTarget.photoUrl || null;
-    if (extractEditForm.photoUrl && extractEditForm.photoUrl.startsWith('blob:')) {
+    if (extractEditForm.photoUrl && extractEditForm.photoUrl.startsWith('data:')) {
       try {
-        const res = await fetch(extractEditForm.photoUrl);
-        const blob = await res.blob();
-        const reader = new FileReader();
-        const base64 = await new Promise<string>((resolve) => { reader.onload = () => resolve(reader.result as string); reader.readAsDataURL(blob); });
-        const uploadRes = await fetch('/api/upload-photo', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ imageData: base64, filename: `extract-${Date.now()}.jpg` }) });
+        const uploadRes = await fetch('/api/upload-photo', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ imageData: extractEditForm.photoUrl, filename: `extract-${Date.now()}.jpg` }),
+        });
         if (uploadRes.ok) { const uploadData = await uploadRes.json(); photoUrl = uploadData.url; }
       } catch (e) { console.error('사진 업로드 오류:', e); }
     }
@@ -1969,14 +1959,30 @@ export default function Home() {
               <div className="flex-1">
                 {directForm.photoUrl && (
                   <div className="relative w-full mb-1">
-                    <img src={directForm.photoUrl} alt="방문지사진" className="w-full rounded" />
+                    <img
+                      src={directForm.photoUrl}
+                      alt="방문지사진"
+                      className="w-full rounded"
+                      onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                    />
                   </div>
                 )}
                 <label className="flex items-center justify-center w-full h-9 rounded cursor-pointer font-bold"
                   style={{ background: '#1565c0', boxShadow: '0 2px 6px rgba(0,0,0,0.4)', border: '1px solid rgba(255,255,255,0.2)', color: 'white', fontSize: '12px' }}>
                   사진 선택
                   <input type="file" accept="image/*" className="hidden"
-                    onChange={(e) => { const file = e.target.files?.[0]; if (file) setDirectForm((prev) => ({ ...prev, photoUrl: URL.createObjectURL(file) })); e.target.value = ''; }} />
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) {
+                        const reader = new FileReader();
+                        reader.onload = (ev) => {
+                          const dataUrl = ev.target?.result as string;
+                          setDirectForm((prev) => ({ ...prev, photoUrl: dataUrl }));
+                        };
+                        reader.readAsDataURL(file);
+                      }
+                      e.target.value = '';
+                    }} />
                 </label>
               </div>
             </div>
@@ -2233,7 +2239,8 @@ export default function Home() {
               <div className="flex-1">
                 {(extractEditForm.photoUrl || extractEditTarget?.photoUrl) ? (
                   <div className="relative w-full mb-1">
-                    <img src={extractEditForm.photoUrl || extractEditTarget?.photoUrl || ''} alt="방문지사진" className="w-full rounded" />
+                    <img src={extractEditForm.photoUrl || extractEditTarget?.photoUrl || ''} alt="방문지사진" className="w-full rounded"
+                      onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
                   </div>
                 ) : null}
                 {/* 사진설명 - 사진과 버튼 사이 */}
@@ -2244,7 +2251,18 @@ export default function Home() {
                   style={{ background: '#1565c0', boxShadow: '0 2px 6px rgba(0,0,0,0.4)', border: '1px solid rgba(255,255,255,0.2)', color: 'white', fontSize: '12px' }}>
                   사진 선택
                   <input type="file" accept="image/*" className="hidden"
-                    onChange={(e) => { const file = e.target.files?.[0]; if (file) { setExtractEditForm((prev) => ({ ...prev, photoUrl: URL.createObjectURL(file) })); } e.target.value = ''; }} />
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) {
+                        const reader = new FileReader();
+                        reader.onload = (ev) => {
+                          const dataUrl = ev.target?.result as string;
+                          setExtractEditForm((prev) => ({ ...prev, photoUrl: dataUrl }));
+                        };
+                        reader.readAsDataURL(file);
+                      }
+                      e.target.value = '';
+                    }} />
                 </label>
               </div>
             </div>
