@@ -936,15 +936,16 @@ export default function MapPage() {
   // ★ 추가 지점 마커 줌 가시성 업데이트
   const updateAdditionalMarkersVisibility = (zoom: number) => {
     const showMarkers = zoom >= ZOOM_THRESHOLD;
+    // 마커(마름모)만 줌에 따라 표시/숨김
     additionalMarkersRef.current.forEach(m => {
       m.setMap(showMarkers ? naverMapRef.current : null);
     });
+    // 경로선과 화살표는 항상 표시 (일반 route 경로선과 동일하게)
     additionalPolylinesRef.current.forEach(p => {
-      p.setMap(showMarkers ? naverMapRef.current : null);
+      p.setMap(naverMapRef.current);
     });
-    // ★ 추가지점 화살표도 줌에 따라 가시성 업데이트
     additionalArrowMarkersRef.current.forEach(a => {
-      a.setMap(showMarkers ? naverMapRef.current : null);
+      a.setMap(naverMapRef.current);
     });
   };
 
