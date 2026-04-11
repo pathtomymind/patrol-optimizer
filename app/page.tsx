@@ -1887,7 +1887,7 @@ export default function Home() {
                 }}
                 disabled={directCoordStatus === 'loading'}
                 className="flex-1 py-2 rounded text-xs font-bold text-white"
-                style={{ background: directCoordStatus === 'loading' ? '#555' : '#0a3d8f' }}>
+                style={{ background: directCoordStatus === 'loading' ? '#555' : '#1565c0', boxShadow: '0 2px 6px rgba(0,0,0,0.4)', border: '1px solid rgba(255,255,255,0.2)' }}>
                 {directCoordStatus === 'loading' ? '확인 중...' : '좌표 확인하기'}
               </button>
             </div>
@@ -1899,6 +1899,9 @@ export default function Home() {
                 <div className="flex-1">{renderCoordMessage(directCoordStatus, directCoord)}</div>
               </div>
             )}
+
+            {/* 구분선 */}
+            <div style={{ borderTop: '1px solid rgba(255,255,255,0.2)' }} />
 
             {/* 사진번호 */}
             <div className="flex items-center gap-2">
@@ -1934,14 +1937,11 @@ export default function Home() {
                 {directForm.photoUrl && (
                   <div className="relative w-full mb-1">
                     <img src={directForm.photoUrl} alt="방문지사진" className="w-full rounded" />
-                    <button onClick={() => setDirectForm((prev) => ({ ...prev, photoUrl: '' }))}
-                      className="absolute top-1 right-1 w-6 h-6 rounded-full text-white text-xs flex items-center justify-center font-bold"
-                      style={{ background: '#c62828' }}>✕</button>
                   </div>
                 )}
-                <label className="flex items-center justify-center w-full h-10 rounded cursor-pointer"
-                  style={{ background: 'rgba(255,255,255,0.1)', border: '1px dashed rgba(255,255,255,0.4)' }}>
-                  <span className="text-blue-200 text-xs">사진 선택</span>
+                <label className="flex items-center justify-center w-full h-9 rounded cursor-pointer font-bold"
+                  style={{ background: '#1565c0', boxShadow: '0 2px 6px rgba(0,0,0,0.4)', border: '1px solid rgba(255,255,255,0.2)', color: 'white', fontSize: '12px' }}>
+                  사진 선택
                   <input type="file" accept="image/*" className="hidden"
                     onChange={(e) => { const file = e.target.files?.[0]; if (file) setDirectForm((prev) => ({ ...prev, photoUrl: URL.createObjectURL(file) })); e.target.value = ''; }} />
                 </label>
@@ -2151,7 +2151,7 @@ export default function Home() {
               <div style={{ width: '5rem', flexShrink: 0 }} />
               <button onClick={handleExtractEditCheckCoord} disabled={extractEditCoordStatus === 'loading'}
                 className="flex-1 py-2 rounded text-xs font-bold text-white"
-                style={{ background: extractEditCoordStatus === 'loading' ? '#555' : '#0a3d8f' }}>
+                style={{ background: extractEditCoordStatus === 'loading' ? '#555' : '#1565c0', boxShadow: '0 2px 6px rgba(0,0,0,0.4)', border: '1px solid rgba(255,255,255,0.2)' }}>
                 {extractEditCoordStatus === 'loading' ? '확인 중...' : '좌표 확인하기'}
               </button>
             </div>
@@ -2163,6 +2163,9 @@ export default function Home() {
                 <div className="flex-1">{renderCoordMessage(extractEditCoordStatus, extractEditCoord)}</div>
               </div>
             )}
+
+            {/* 구분선 */}
+            <div style={{ borderTop: '1px solid rgba(255,255,255,0.2)' }} />
 
             {/* 사진번호 */}
             <div className="flex items-center gap-2">
@@ -2198,23 +2201,18 @@ export default function Home() {
                 {(extractEditForm.photoUrl || extractEditTarget?.photoUrl) ? (
                   <div className="relative w-full mb-1">
                     <img src={extractEditForm.photoUrl || extractEditTarget?.photoUrl || ''} alt="방문지사진" className="w-full rounded" />
-                    {extractEditForm.photoUrl && (
-                      <button onClick={() => setExtractEditForm((prev) => ({ ...prev, photoUrl: '' }))}
-                        className="absolute top-1 right-1 w-6 h-6 rounded-full text-white text-xs flex items-center justify-center font-bold"
-                        style={{ background: '#c62828' }}>✕</button>
-                    )}
                   </div>
                 ) : null}
-                <label className="flex items-center justify-center w-full h-10 rounded cursor-pointer"
-                  style={{ background: 'rgba(255,255,255,0.1)', border: '1px dashed rgba(255,255,255,0.4)' }}>
-                  <span className="text-blue-200 text-xs">사진 선택</span>
+                {/* 사진설명 - 사진과 버튼 사이 */}
+                {extractEditTarget?.photoDescription && (
+                  <p className="text-xs mb-1 px-1" style={{ color: '#a5d6a7' }}>{extractEditTarget.photoDescription}</p>
+                )}
+                <label className="flex items-center justify-center w-full h-9 rounded cursor-pointer font-bold"
+                  style={{ background: '#1565c0', boxShadow: '0 2px 6px rgba(0,0,0,0.4)', border: '1px solid rgba(255,255,255,0.2)', color: 'white', fontSize: '12px' }}>
+                  사진 선택
                   <input type="file" accept="image/*" className="hidden"
                     onChange={(e) => { const file = e.target.files?.[0]; if (file) { setExtractEditForm((prev) => ({ ...prev, photoUrl: URL.createObjectURL(file) })); } e.target.value = ''; }} />
                 </label>
-                {/* 사진설명 - 읽기 전용 */}
-                {extractEditTarget?.photoDescription && (
-                  <p className="text-xs mt-1 px-1" style={{ color: '#a5d6a7' }}>{extractEditTarget.photoDescription}</p>
-                )}
               </div>
             </div>
           </div>

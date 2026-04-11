@@ -201,7 +201,7 @@ export default function AdditionalPointModal({
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <div style={{ width: '5rem', flexShrink: 0 }} />
           <button onClick={handleCheckCoord} disabled={coordStatus === 'loading'}
-            style={{ flex: 1, padding: '8px', borderRadius: '6px', background: coordStatus === 'loading' ? '#555' : '#0a3d8f', color: 'white', border: 'none', fontWeight: 'bold', fontSize: '12px', cursor: 'pointer' }}>
+            style={{ flex: 1, padding: '8px', borderRadius: '6px', background: coordStatus === 'loading' ? '#555' : '#1565c0', color: 'white', border: '1px solid rgba(255,255,255,0.2)', fontWeight: 'bold', fontSize: '12px', cursor: 'pointer', boxShadow: '0 2px 6px rgba(0,0,0,0.4)' }}>
             {coordStatus === 'loading' ? '확인 중...' : '좌표 확인하기'}
           </button>
         </div>
@@ -213,6 +213,9 @@ export default function AdditionalPointModal({
             <div style={{ flex: 1 }}>{renderCoordMsg()}</div>
           </div>
         )}
+
+        {/* 구분선 */}
+        <div style={{ borderTop: '1px solid rgba(255,255,255,0.2)' }} />
 
         {/* 사진번호 */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -245,9 +248,9 @@ export default function AdditionalPointModal({
                   crossOrigin="anonymous" onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }} />
               </div>
             )}
-            <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#0a3d8f', borderRadius: '6px', padding: '8px', cursor: 'pointer', color: 'white', fontSize: '12px', fontWeight: 'bold' }}>
+            <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#1565c0', borderRadius: '6px', padding: '8px', cursor: 'pointer', color: 'white', fontSize: '12px', fontWeight: 'bold', boxShadow: '0 2px 6px rgba(0,0,0,0.4)', border: '1px solid rgba(255,255,255,0.2)' }}>
               사진 선택
-              <input type="file" accept="image/*" capture="environment" style={{ display: 'none' }}
+              <input type="file" accept="image/*" style={{ display: 'none' }}
                 onChange={async e => {
                   const file = e.target.files?.[0];
                   if (!file) return;
