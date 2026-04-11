@@ -2124,8 +2124,7 @@ export default function Home() {
             isNew={!editingAdditionalPoint}
             onClose={() => setShowAdditionalModal(false)}
             onSave={async (data) => {
-              if (isSaving) return;
-              setIsSaving(true);
+              // isSaving은 외부 저장(업로드 등) 중복 방지용 - handleClose에서 호출 시 허용
               const coordData = { lat: data.lat, lng: data.lng, placeName: data.placeName, source: data.source, coordMessage: data.coordMessage };
               let photoUrl = data.photoUrl;
               if (photoUrl && photoUrl.startsWith('blob:')) {
@@ -2163,8 +2162,7 @@ export default function Home() {
               localStorage.setItem('draft-route', JSON.stringify(draft));
               const today = new Date().toLocaleDateString('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/\. /g, '-').replace('.', '');
               fetch('/api/save-additional', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ date: today, points: updatedPoints }) }).catch(() => {});
-              setIsSaving(false);
-              setShowAdditionalModal(false);
+              // 모달 닫기는 handleClose(onClose)가 담당 - 여기서 직접 닫지 않음
             }}
             onDelete={editingAdditionalPoint ? () => handleAdditionalDelete(editingAdditionalPoint.id) : undefined}
             onPhotoUpload={async (file) => {
