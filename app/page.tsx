@@ -103,6 +103,8 @@ export default function Home() {
 
   const handleDirectDelete = async (id: number) => {
     if (deletingId !== null) return;
+    const ok = await showConfirm('이 방문지를 삭제합니다. 정말로 삭제하시겠습니까?');
+    if (!ok) return;
     setDeletingId(id);
     const point = directPoints.find((p) => p.id === id);
     if (point?.photoUrl && point.photoUrl.startsWith('https://')) {
@@ -138,6 +140,8 @@ export default function Home() {
 
   const handleAdditionalDelete = async (id: number) => {
     if (deletingId !== null) return;
+    const ok = await showConfirm('이 방문지를 삭제합니다. 정말로 삭제하시겠습니까?');
+    if (!ok) return;
     setDeletingId(id);
     const point = additionalPoints.find((p) => p.id === id);
     if (point?.photoUrl && point.photoUrl.startsWith('https://')) {
@@ -210,7 +214,8 @@ export default function Home() {
   };
 
   const handleAdditionalReset = async () => {
-    if (!window.confirm('추가지점 전체를 삭제합니다. 계속하시겠습니까?')) return;
+    const ok = await showConfirm('추가 방문지 전체를 삭제합니다. 정말로 초기화 하시겠습니까?');
+    if (!ok) return;
     await Promise.all(
       additionalPoints
         .filter(p => p.photoUrl && p.photoUrl.startsWith('https://'))
@@ -450,6 +455,14 @@ export default function Home() {
         )}
       </>
     );
+  };
+
+  // 커스텀 confirm 다이얼로그
+  const [confirmDialog, setConfirmDialog] = useState<{ message: string; onConfirm: () => void } | null>(null);
+  const showConfirm = (message: string): Promise<boolean> => {
+    return new Promise((resolve) => {
+      setConfirmDialog({ message, onConfirm: () => { setConfirmDialog(null); resolve(true); } });
+    });
   };
 
   const [isExtracting, setIsExtracting] = useState(false);
@@ -728,6 +741,8 @@ export default function Home() {
 
   const handleExtractedDelete = async (id: number) => {
     if (deletingId !== null) return;
+    const ok = await showConfirm('이 방문지를 삭제합니다. 정말로 삭제하시겠습니까?');
+    if (!ok) return;
     setDeletingId(id);
     const point = extractedPoints.find((p) => p.id === id);
     if (point?.photoUrl && point.photoUrl.startsWith('https://')) {
@@ -905,7 +920,8 @@ export default function Home() {
       return;
     }
 
-    if (!window.confirm(`좌표 확인된 지점 ${allPoints.length}개로 최적화 경로를 생성합니다. 계속하시겠습니까?`)) return;
+    const ok = await showConfirm(`좌표 확인된 지점 ${allPoints.length}개로 최적화 경로를 생성합니다. 계속하시겠습니까?`);
+    if (!ok) return;
 
     setIsGenerating(true);
     try {
@@ -1076,7 +1092,8 @@ export default function Home() {
 
   const handleUploadReset = async () => {
     if (isResetting) return;
-    if (!window.confirm('추출된 지점 전체와 업로드 이미지를 모두 삭제합니다. 계속하시겠습니까?')) return;
+    const ok = await showConfirm('추출된 지점 전체와 업로드 이미지를 모두 삭제합니다. 정말로 초기화 하시겠습니까?');
+    if (!ok) return;
     setIsResetting(true);
     // 병렬 삭제로 변경 (순차 → 동시)
     await Promise.all(
@@ -1098,7 +1115,8 @@ export default function Home() {
   };
 
   const handleDirectReset = async () => {
-    if (!window.confirm('직접입력 지점 전체를 삭제합니다. 계속하시겠습니까?')) return;
+    const ok = await showConfirm('직접입력 지점 전체를 삭제합니다. 정말로 초기화 하시겠습니까?');
+    if (!ok) return;
     setIsResetting(true);
     await Promise.all(
       directPoints
@@ -2526,26 +2544,47 @@ export default function Home() {
       {showAdditionalConfirm && (
         <div style={{ position: 'fixed', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999, background: 'rgba(0,0,0,0.65)' }}>
           <div style={{ background: '#1a3a6e', borderRadius: '12px', padding: '24px 20px', width: '88%', maxWidth: '360px', boxShadow: '0 8px 32px rgba(0,0,0,0.5)' }}>
-            <p style={{ color: 'white', fontWeight: 'bold', fontSize: '14px', marginBottom: '8px' }}>추가지점 처리</p>
+            <p style={{ color: 'white', fontWeight: 'bold', fontSize: '14px', marginBottom: '8px' }}>추가 방문지 처리</p>
             <p style={{ color: 'rgba(200,220,255,0.85)', fontSize: '12px', marginBottom: '20px', lineHeight: '1.6' }}>
-              추가지점 {additionalPoints.filter(p => p.lat && p.lng).length}개가 있습니다.<br />
+              추가 방문지 {additionalPoints.filter(p => p.lat && p.lng).length}개가 있습니다.<br />
               최적화 경로 생성에 포함하시겠습니까?
             </p>
             <div style={{ display: 'flex', gap: '8px' }}>
-              <button
-                onClick={() => { setShowAdditionalConfirm(false); additionalConfirmResolveRef.current?.('include'); }}
-                style={{ flex: 1, padding: '10px', borderRadius: '8px', border: 'none', background: '#0a3d8f', color: 'white', fontSize: '13px', fontWeight: 'bold', cursor: 'pointer' }}>
-                포함
-              </button>
               <button
                 onClick={() => { setShowAdditionalConfirm(false); additionalConfirmResolveRef.current?.('exclude'); }}
                 style={{ flex: 1, padding: '10px', borderRadius: '8px', border: 'none', background: '#455a64', color: 'white', fontSize: '13px', fontWeight: 'bold', cursor: 'pointer' }}>
                 미포함
               </button>
               <button
+                onClick={() => { setShowAdditionalConfirm(false); additionalConfirmResolveRef.current?.('include'); }}
+                style={{ flex: 1, padding: '10px', borderRadius: '8px', border: 'none', background: '#0a3d8f', color: 'white', fontSize: '13px', fontWeight: 'bold', cursor: 'pointer' }}>
+                포함
+              </button>
+              <button
                 onClick={() => { setShowAdditionalConfirm(false); additionalConfirmResolveRef.current?.('cancel'); }}
                 style={{ flex: 1, padding: '10px', borderRadius: '8px', border: 'none', background: '#7a2800', color: 'white', fontSize: '13px', fontWeight: 'bold', cursor: 'pointer' }}>
                 취소
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 커스텀 confirm 다이얼로그 */}
+      {confirmDialog && (
+        <div style={{ position: 'fixed', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999, background: 'rgba(0,0,0,0.65)' }}>
+          <div style={{ background: '#1a3a6e', borderRadius: '12px', padding: '24px 20px', width: '88%', maxWidth: '320px', boxShadow: '0 8px 32px rgba(0,0,0,0.5)' }}>
+            <p style={{ color: 'white', fontSize: '13px', lineHeight: '1.7', marginBottom: '20px' }}>{confirmDialog.message}</p>
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <button
+                onClick={() => setConfirmDialog(null)}
+                style={{ flex: 1, padding: '10px', borderRadius: '8px', border: 'none', background: '#455a64', color: 'white', fontSize: '13px', fontWeight: 'bold', cursor: 'pointer' }}>
+                취소
+              </button>
+              <button
+                onClick={confirmDialog.onConfirm}
+                style={{ flex: 1, padding: '10px', borderRadius: '8px', border: 'none', background: '#c62828', color: 'white', fontSize: '13px', fontWeight: 'bold', cursor: 'pointer' }}>
+                확인
               </button>
             </div>
           </div>
