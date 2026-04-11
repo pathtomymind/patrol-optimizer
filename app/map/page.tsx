@@ -1466,12 +1466,12 @@ export default function MapPage() {
 
       // toPl (A→to 구간): A 완료 + toPoint 완료 모두 되어야 파란색
       if (entry.toPl) {
-        // toPoint 찾기 - 체인을 재귀적으로 거슬러 올라가 root order 찾기
         let toPoint: RoutePoint | undefined;
         if (typeof point.insertAfterOrder === 'number') {
           toPoint = routePoints.find(p => p.order === (point.insertAfterOrder as number) + 1);
-        } else if (typeof point.insertAfterOrder === 'string') {
-          let cur: AdditionalPoint | undefined = additionalPointsRef.current.find(p => p.id === parseInt(point.insertAfterOrder.toString().replace('add_', '')));
+        } else if (typeof point.insertAfterOrder === 'string' && point.insertAfterOrder.startsWith('add_')) {
+          const firstId = parseInt(point.insertAfterOrder.replace('add_', ''));
+          let cur: AdditionalPoint | undefined = additionalPointsRef.current.find(p => p.id === firstId);
           while (cur && typeof cur.insertAfterOrder === 'string' && cur.insertAfterOrder.startsWith('add_')) {
             const pid = parseInt(cur.insertAfterOrder.replace('add_', ''));
             cur = additionalPointsRef.current.find(p => p.id === pid);
