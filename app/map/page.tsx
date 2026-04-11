@@ -586,22 +586,12 @@ export default function MapPage() {
     };
     cleanupBlink();
 
-    // 도로 모드: additionalPolylinesRef에서 fromPoint→A1 구간 경로 추출
+    // ★ 저장된 실제 경로 좌표 사용 (도로 모드 경로 반영)
     let coords: { lat: number; lng: number }[] = [];
-    if (lineModeRef.current === 'road' && additionalPolylinesRef.current.length > 0) {
-      // additionalPolylinesRef[0]이 fromPoint→A1, [1]이 A1→toPoint (순서 기반)
-      const firstPl = additionalPolylinesRef.current[0];
-      try {
-        const path = (firstPl as any).getPath();
-        if (path && path.getLength) {
-          for (let i = 0; i < path.getLength(); i++) {
-            const pt = path.getAt(i);
-            coords.push({ lat: pt.lat(), lng: pt.lng() });
-          }
-        }
-      } catch {}
+    const entry = additionalPolylinesByIdRef.current.get(addPoint.id);
+    if (entry && entry.fromCoords.length >= 2) {
+      coords = entry.fromCoords;
     }
-    // 직선 모드 또는 도로 경로 추출 실패 시 직선
     if (coords.length < 2) {
       coords = [
         { lat: fromPoint.lat, lng: fromPoint.lng },
@@ -692,10 +682,32 @@ export default function MapPage() {
     };
     cleanupBlink();
 
-    const coords = [
-      { lat: fromLat, lng: fromLng },
-      { lat: toLat, lng: toLng },
-    ];
+    // ★ "현재 추가지점 → 다음 지점" 구간의 실제 경로 좌표 사용
+    // 다음이 추가지점이면 그 추가지점의 fromCoords, 다음이 route point면 현재의 toCoords
+    let coords: { lat: number; lng: number }[] = [];
+
+    const nextAdd = allAdditional.find(ap =>
+      typeof ap.insertAfterOrder === 'string' &&
+      ap.insertAfterOrder === `add_${point.id}`
+    );
+
+    if (nextAdd) {
+      // A1→A2: A2의 fromCoords (A1→A2 구간 경로)
+      const nextEntry = additionalPolylinesByIdRef.current.get(nextAdd.id);
+      if (nextEntry && nextEntry.fromCoords.length >= 2) {
+        coords = nextEntry.fromCoords;
+      }
+    } else {
+      // A(last)→route point: 현재 추가지점의 toCoords
+      const entry = additionalPolylinesByIdRef.current.get(point.id);
+      if (entry && entry.toCoords.length >= 2) {
+        coords = entry.toCoords;
+      }
+    }
+
+    if (coords.length < 2) {
+      coords = [{ lat: fromLat, lng: fromLng }, { lat: toLat, lng: toLng }];
+    }
 
     blinkPolylineRef.current = new naver.maps.Polyline({
       map,
@@ -727,6 +739,8 @@ export default function MapPage() {
   const segmentArrowsRef = useRef<Map<number, naver.maps.Marker[]>>(new Map());
   const additionalPolylinesRef = useRef<naver.maps.Polyline[]>([]);
   const additionalArrowMarkersRef = useRef<naver.maps.Marker[]>([]); // ★ 추가지점 화살표 별도 추적
+  // ★ 추가지점별 구간 경로선 참조 (색상 업데이트 + 롱프레스 도로 좌표용)
+  const additionalPolylinesByIdRef = useRef<Map<number, { fromPl: naver.maps.Polyline | null; toPl: naver.maps.Polyline | null; fromCoords: {lat:number;lng:number}[]; toCoords: {lat:number;lng:number}[] }>>(new Map());
 
   const drawAdditionalPolylines = (points: AdditionalPoint[]) => {
     if (!naverMapRef.current || !routeRef.current) return;
@@ -739,6 +753,7 @@ export default function MapPage() {
     // 기존 추가지점 경로선 + 화살표 정리
     additionalPolylinesRef.current.forEach(p => p.setMap(null));
     additionalPolylinesRef.current = [];
+    additionalPolylinesByIdRef.current = new Map();
     additionalArrowMarkersRef.current.forEach(a => {
       a.setMap(null);
       const i = arrowMarkersRef.current.indexOf(a);
@@ -884,6 +899,10 @@ export default function MapPage() {
                   const beforeCount = arrowMarkersRef.current.length;
                   placeArrows(coords, null, map, naver);
                   additionalArrowMarkersRef.current.push(...arrowMarkersRef.current.slice(beforeCount));
+                  // ★ 추가지점별 경로선 참조 저장
+                  const existing = additionalPolylinesByIdRef.current.get(point.id) || { fromPl: null, toPl: null, fromCoords: [], toCoords: [] };
+                  if (i === 0) additionalPolylinesByIdRef.current.set(point.id, { ...existing, fromPl: pl, fromCoords: coords });
+                  else additionalPolylinesByIdRef.current.set(point.id, { ...existing, toPl: pl, toCoords: coords });
                 });
                 return;
               }
@@ -899,15 +918,19 @@ export default function MapPage() {
           const b1 = arrowMarkersRef.current.length;
           placeArrows(coords1, null, map, naver);
           additionalArrowMarkersRef.current.push(...arrowMarkersRef.current.slice(b1));
+
+          let line2: naver.maps.Polyline | null = null;
+          let coords2: {lat:number;lng:number}[] = [];
           // ★ 이 추가지점이 다른 추가지점의 앞 지점으로 쓰이면 →toPoint 구간선 생략
           if (toPoint && !prevAddIds.has(point.id)) {
-            const coords2 = [{ lat: addLat, lng: addLng }, { lat: toPoint.lat, lng: toPoint.lng }];
-            const line2 = new naver.maps.Polyline({ map, path: coords2.map(c => new naver.maps.LatLng(c.lat, c.lng)), strokeColor: getAdditionalLineColor(point, false, toPoint), strokeWeight: 6, strokeOpacity: 1, zIndex: 8 });
-            additionalPolylinesRef.current.push(line2);
+            coords2 = [{ lat: addLat, lng: addLng }, { lat: toPoint.lat, lng: toPoint.lng }];
+            line2 = new naver.maps.Polyline({ map, path: coords2.map(c => new naver.maps.LatLng(c.lat, c.lng)), strokeColor: getAdditionalLineColor(point, false, toPoint), strokeWeight: 6, strokeOpacity: 1, zIndex: 8 });
+            additionalPolylinesRef.current.push(line2 as naver.maps.Polyline);
             const b2 = arrowMarkersRef.current.length;
             placeArrows(coords2, null, map, naver);
             additionalArrowMarkersRef.current.push(...arrowMarkersRef.current.slice(b2));
           }
+          additionalPolylinesByIdRef.current.set(point.id, { fromPl: line1, toPl: line2, fromCoords: coords1, toCoords: coords2 });
         };
 
         drawRoadSegments();
@@ -920,15 +943,20 @@ export default function MapPage() {
         const b1 = arrowMarkersRef.current.length;
         placeArrows(coords1, null, map, naver);
         additionalArrowMarkersRef.current.push(...arrowMarkersRef.current.slice(b1));
+
+        let line2: naver.maps.Polyline | null = null;
+        let coords2: {lat:number;lng:number}[] = [];
         // ★ 이 추가지점이 다른 추가지점의 앞 지점으로 쓰이면 →toPoint 구간선 생략
         if (toPoint && !prevAddIds.has(point.id)) {
-          const coords2 = [{ lat: addLat, lng: addLng }, { lat: toPoint.lat, lng: toPoint.lng }];
-          const line2 = new naver.maps.Polyline({ map, path: coords2.map(c => new naver.maps.LatLng(c.lat, c.lng)), strokeColor: getAdditionalLineColor(point, false, toPoint), strokeWeight: 6, strokeOpacity: 1, zIndex: 8 });
-          additionalPolylinesRef.current.push(line2);
+          coords2 = [{ lat: addLat, lng: addLng }, { lat: toPoint.lat, lng: toPoint.lng }];
+          line2 = new naver.maps.Polyline({ map, path: coords2.map(c => new naver.maps.LatLng(c.lat, c.lng)), strokeColor: getAdditionalLineColor(point, false, toPoint), strokeWeight: 6, strokeOpacity: 1, zIndex: 8 });
+          additionalPolylinesRef.current.push(line2 as naver.maps.Polyline);
           const b2 = arrowMarkersRef.current.length;
           placeArrows(coords2, null, map, naver);
           additionalArrowMarkersRef.current.push(...arrowMarkersRef.current.slice(b2));
         }
+        // ★ 추가지점별 경로선 참조 저장
+        additionalPolylinesByIdRef.current.set(point.id, { fromPl: line1, toPl: line2, fromCoords: coords1, toCoords: coords2 });
       }
     });
   };
@@ -1408,30 +1436,31 @@ export default function MapPage() {
   const updateAdditionalPolylineColors = () => {
     if (!routeRef.current || additionalPointsRef.current.length === 0) return;
     const routePoints = routeRef.current.points;
-    let plIdx = 0;
 
     additionalPointsRef.current.forEach(point => {
       if (!point.lat || !point.lng || point.insertAfterOrder == null) return;
+      const entry = additionalPolylinesByIdRef.current.get(point.id);
+      if (!entry) return;
 
-      if (typeof point.insertAfterOrder !== 'number') return;
-      const fromOrder = point.insertAfterOrder;
-      const toOrder = fromOrder + 1;
-      const fromPoint = routePoints.find(p => p.order === fromOrder);
-      const toPoint = routePoints.find(p => p.order === toOrder);
-
-      // fromPoint → A1 구간
-      if (fromPoint && additionalPolylinesRef.current[plIdx]) {
-        additionalPolylinesRef.current[plIdx].setOptions({
-          strokeColor: getAdditionalLineColor(point, true),
-        });
-        plIdx++;
+      // fromPl (from→A 구간): A의 완료 여부
+      if (entry.fromPl) {
+        entry.fromPl.setOptions({ strokeColor: getAdditionalLineColor(point, true) });
       }
-      // A1 → toPoint 구간
-      if (toPoint && additionalPolylinesRef.current[plIdx]) {
-        additionalPolylinesRef.current[plIdx].setOptions({
-          strokeColor: getAdditionalLineColor(point, false, toPoint),
-        });
-        plIdx++;
+
+      // toPl (A→to 구간): A 완료 + toPoint 완료 모두 되어야 파란색
+      if (entry.toPl) {
+        // toPoint 찾기 - insertAfterOrder 타입에 따라
+        let toPoint: RoutePoint | undefined;
+        if (typeof point.insertAfterOrder === 'number') {
+          toPoint = routePoints.find(p => p.order === (point.insertAfterOrder as number) + 1);
+        } else if (typeof point.insertAfterOrder === 'string') {
+          const prevAddId = parseInt(point.insertAfterOrder.replace('add_', ''));
+          const prevAdd = additionalPointsRef.current.find(p => p.id === prevAddId);
+          if (prevAdd && typeof prevAdd.insertAfterOrder === 'number') {
+            toPoint = routePoints.find(p => p.order === (prevAdd.insertAfterOrder as number) + 1);
+          }
+        }
+        entry.toPl.setOptions({ strokeColor: getAdditionalLineColor(point, false, toPoint) });
       }
     });
   };
