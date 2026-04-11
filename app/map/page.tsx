@@ -703,6 +703,8 @@ export default function MapPage() {
   // ★ 추가지점 경로선 연결 (insertAfterOrder 기반)
   // hiddenPolylinesRef: 추가지점 삽입으로 숨겨진 기존 경로선 인덱스 추적
   const hiddenPolylinesRef = useRef<number[]>([]);
+  // segmentArrowsRef: 구간(order) 별 화살표 마커 추적 - 추가지점 삽입 시 숨김 처리용
+  const segmentArrowsRef = useRef<Map<number, naver.maps.Marker[]>>(new Map());
   const additionalPolylinesRef = useRef<naver.maps.Polyline[]>([]);
   const additionalArrowMarkersRef = useRef<naver.maps.Marker[]>([]); // ★ 추가지점 화살표 별도 추적
 
@@ -728,6 +730,12 @@ export default function MapPage() {
     hiddenPolylinesRef.current.forEach(idx => {
       const pl = polylinesRef.current[idx];
       if (pl) pl.setMap(map);
+      // ★ 해당 구간(order = idx번째 point의 order) 화살표도 복원
+      const routePts = routeRef.current?.points;
+      if (routePts && routePts[idx]) {
+        const segArrows = segmentArrowsRef.current.get(routePts[idx].order);
+        if (segArrows) segArrows.forEach(a => a.setMap(map));
+      }
     });
     hiddenPolylinesRef.current = [];
 
@@ -780,6 +788,9 @@ export default function MapPage() {
                 hiddenPolylinesRef.current.push(prevAddFromIdx);
               }
             }
+            // ★ 해당 구간의 화살표도 숨기기
+            const segArrows = segmentArrowsRef.current.get(prevAdd.insertAfterOrder as number);
+            if (segArrows) segArrows.forEach(a => a.setMap(null));
           }
         } else if (typeof prevAdd.insertAfterOrder === 'string') {
           const prevPrevId = parseInt((prevAdd.insertAfterOrder as string).replace('add_', ''));
@@ -801,6 +812,9 @@ export default function MapPage() {
               hiddenPolylinesRef.current.push(fromIdx);
             }
           }
+          // ★ 해당 구간의 화살표도 숨기기
+          const segArrows = segmentArrowsRef.current.get(fromOrder);
+          if (segArrows) segArrows.forEach(a => a.setMap(null));
         }
         const fromPoint = routePoints.find(p => p.order === fromOrder);
         if (!fromPoint) return;
@@ -1077,6 +1091,7 @@ export default function MapPage() {
   };
 
   const drawStraightLines = (points: RoutePoint[], map: any, naver: any) => {
+    segmentArrowsRef.current = new Map();
     for (let i = 0; i < points.length - 1; i++) {
       const from = points[i];
       const to = points[i + 1];
@@ -1093,12 +1108,15 @@ export default function MapPage() {
       });
       polylinesRef.current.push(polyline);
       const bearing = calcBearing(from, to);
+      const beforeCount = arrowMarkersRef.current.length;
       placeArrows(
         [{ lat: from.lat, lng: from.lng }, { lat: to.lat, lng: to.lng }],
         bearing,
         map,
         naver
       );
+      // 이 구간(order=from.order)의 화살표들을 기록
+      segmentArrowsRef.current.set(from.order, arrowMarkersRef.current.slice(beforeCount));
     }
     // 직선 모드 완료 후 추가지점 경로선 재적용
     setTimeout(() => drawAdditionalPolylines(additionalPointsRef.current), 0);
@@ -1134,13 +1152,20 @@ export default function MapPage() {
 
     // 공통 렌더링 함수
     const renderResults = (results: { coords: { lat: number; lng: number }[]; color: string }[]) => {
-      results.forEach(({ coords, color }) => {
+      segmentArrowsRef.current = new Map();
+      results.forEach(({ coords, color }, segIdx) => {
         const path = coords.map((c: { lat: number; lng: number }) => new naver.maps.LatLng(c.lat, c.lng));
         const polyline = new naver.maps.Polyline({
           map, path, strokeColor: color, strokeWeight: 6, strokeOpacity: 1,
         });
         polylinesRef.current.push(polyline);
+        const beforeCount = arrowMarkersRef.current.length;
         placeArrows(coords, null, map, naver);
+        // 도로 모드도 구간별 화살표 기록 (order 기반으로 저장)
+        const routePts = routeRef.current?.points;
+        if (routePts && routePts[segIdx]) {
+          segmentArrowsRef.current.set(routePts[segIdx].order, arrowMarkersRef.current.slice(beforeCount));
+        }
       });
       // 렌더 완료 후 추가지점 경로선 재적용
       applyAdditionalAfterRoad();

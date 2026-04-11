@@ -137,11 +137,12 @@ export default function AdditionalPointModal({
   };
 
   const isDone = ['민원처리완료', '기처리', '확인불가'].includes(localStatus);
+  const bgColor = isDone ? '#4a148c' : '#7a2800';
 
   return (
-    <div style={{ position: 'fixed', inset: 0, zIndex: 400, display: 'flex', flexDirection: 'column', background: '#1a3a6e' }}>
+    <div style={{ position: 'fixed', inset: 0, zIndex: 400, display: 'flex', flexDirection: 'column', background: bgColor }}>
       {/* 타이틀 바 */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '12px 16px', background: '#0d2444', borderBottom: '1px solid rgba(255,255,255,0.15)', flexShrink: 0 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '12px 16px', background: 'rgba(0,0,0,0.25)', borderBottom: '1px solid rgba(255,255,255,0.15)', flexShrink: 0 }}>
         <div style={{ width: '32px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
           <svg width="30" height="30" viewBox="0 0 26 26">
             <polygon points="13,1 25,13 13,25 1,13" fill="#f97316" stroke="none"/>
