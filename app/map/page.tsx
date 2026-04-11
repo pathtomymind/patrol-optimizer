@@ -566,16 +566,9 @@ export default function MapPage() {
       additionalMarkersRef.current.push(marker);
     });
 
-    // ★ 도로 모드 경로 그리는 중(polylinesRef 비어있음)이면 폴리라인 스킵
-    // applyAdditionalAfterRoad가 완료 후 그려줌
-    const isRoadDrawingInProgress = roadDrawingRef.current || 
-      (lineModeRef.current === 'road' && polylinesRef.current.length === 0);
-    if (!isRoadDrawingInProgress) {
-      drawAdditionalPolylines(points);
-    }
+    // drawAdditionalPolylines 자체에서 roadDrawingRef 체크함
+    drawAdditionalPolylines(points);
   };
-
-  // ★ 불필요한 중복 함수 제거
 
   // ★ fromPoint → 추가지점 구간 blink (14번 롱프레스용)
   const blinkFromPointToAdditional = (fromPoint: RoutePoint, addPoint: AdditionalPoint) => {
@@ -754,6 +747,13 @@ export default function MapPage() {
 
   const drawAdditionalPolylines = (points: AdditionalPoint[]) => {
     if (!naverMapRef.current || !routeRef.current) return;
+
+    // ★ 도로 경로 그리는 중이면 스킵 - applyAdditionalAfterRoad가 완료 후 처리
+    if (roadDrawingRef.current) {
+      console.log('[additional] drawAdditionalPolylines SKIP - 도로 그리는 중');
+      return;
+    }
+
     const naver = (window as any).naver;
     const map = naverMapRef.current;
     const routePoints = routeRef.current.points;
@@ -1337,6 +1337,9 @@ export default function MapPage() {
     if (blinkPolylineRef.current) { blinkPolylineRef.current.setMap(null); blinkPolylineRef.current = null; }
     blinkArrowsRef.current = [];
     blinkOriginalPolylineRef.current = null;
+
+    // ★ 도로 모드로 전환하는 경우 즉시 플래그 설정 (useEffect 경합 방지)
+    if (lineModeRef.current === 'road') roadDrawingRef.current = true;
 
     polylinesRef.current.forEach(p => p.setMap(null));
     arrowMarkersRef.current.forEach(m => m.setMap(null));
