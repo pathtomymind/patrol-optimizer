@@ -416,6 +416,9 @@ export default function Home() {
     setUploadedImages((prev) => prev.filter((img) => img.id !== id));
   };
 
+  // 이미지 미리보기 모달
+  const [previewIndex, setPreviewIndex] = useState<number | null>(null);
+
   const [isExtracting, setIsExtracting] = useState(false);
   const [deletingId, setDeletingId] = useState<number | null>(null);
   const [isSaving, setIsSaving] = useState(false);
@@ -1403,9 +1406,13 @@ export default function Home() {
                     {/* 썸네일 목록 */}
                     {uploadedImages.length > 0 && (
                       <div className="flex flex-wrap gap-2 mt-2">
-                        {uploadedImages.map((img) => (
+                        {uploadedImages.map((img, idx) => (
                           <div key={img.id} className="relative w-16 h-16">
-                            <img src={img.url} alt={img.name} className="w-16 h-16 object-cover rounded" />
+                            <img
+                              src={img.url} alt={img.name}
+                              className="w-16 h-16 object-cover rounded cursor-pointer"
+                              onClick={() => setPreviewIndex(idx)}
+                            />
                             <button
                               onClick={() => handleImageDelete(img.id)}
                               className="absolute -top-1 -right-1 w-5 h-5 rounded-full text-white text-xs flex items-center justify-center font-bold"
@@ -2305,6 +2312,60 @@ export default function Home() {
                 onClick={() => window.open(`nmap://navigation?dlat=${selectedPoint.lat}&dlng=${selectedPoint.lng}&dname=${encodeURIComponent(selectedPoint.destination || selectedPoint.address)}&appname=patrol-optimizer`)}
                 className="flex-1 py-2 rounded text-sm text-white font-bold"
                 style={{ background: '#1b5e20' }}>네이버지도</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 이미지 미리보기 모달 */}
+      {previewIndex !== null && uploadedImages.length > 0 && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center"
+          style={{ background: 'rgba(0,0,0,0.85)' }}
+          onClick={() => setPreviewIndex(null)}>
+          <div
+            className="relative flex items-center justify-center w-full h-full px-4"
+            onClick={e => e.stopPropagation()}>
+
+            {/* 닫기 버튼 */}
+            <button
+              onClick={() => setPreviewIndex(null)}
+              className="absolute top-4 right-4 z-10 w-9 h-9 rounded-full flex items-center justify-center text-white font-bold text-lg"
+              style={{ background: 'rgba(0,0,0,0.6)', border: '1px solid rgba(255,255,255,0.3)' }}>✕</button>
+
+            {/* 이미지 번호 */}
+            <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10 px-3 py-1 rounded-full text-white text-xs font-bold"
+              style={{ background: 'rgba(0,0,0,0.55)' }}>
+              {previewIndex + 1} / {uploadedImages.length}
+            </div>
+
+            {/* 이전 버튼 */}
+            {uploadedImages.length > 1 && (
+              <button
+                onClick={() => setPreviewIndex((previewIndex - 1 + uploadedImages.length) % uploadedImages.length)}
+                className="absolute left-2 z-10 w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-xl"
+                style={{ background: 'rgba(0,0,0,0.55)', border: '1px solid rgba(255,255,255,0.25)' }}>‹</button>
+            )}
+
+            {/* 메인 이미지 */}
+            <img
+              src={uploadedImages[previewIndex].url}
+              alt={uploadedImages[previewIndex].name}
+              style={{ maxWidth: '100%', maxHeight: '80vh', objectFit: 'contain', borderRadius: '8px', boxShadow: '0 4px 32px rgba(0,0,0,0.6)' }}
+            />
+
+            {/* 다음 버튼 */}
+            {uploadedImages.length > 1 && (
+              <button
+                onClick={() => setPreviewIndex((previewIndex + 1) % uploadedImages.length)}
+                className="absolute right-2 z-10 w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-xl"
+                style={{ background: 'rgba(0,0,0,0.55)', border: '1px solid rgba(255,255,255,0.25)' }}>›</button>
+            )}
+
+            {/* 파일명 */}
+            <div className="absolute bottom-4 left-1/2 -translate-x-1/2 px-3 py-1 rounded-full text-xs text-white"
+              style={{ background: 'rgba(0,0,0,0.55)', maxWidth: '80%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {uploadedImages[previewIndex].name}
             </div>
           </div>
         </div>
