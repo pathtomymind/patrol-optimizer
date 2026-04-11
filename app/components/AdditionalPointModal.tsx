@@ -51,6 +51,7 @@ type Props = {
   apSt?: PointStatusData;
   insertOptions: InsertOption[];
   isNew?: boolean;
+  isAdmin?: boolean;
   onClose: () => void;
   onSave: (data: SaveData) => Promise<void>;
   onDelete?: () => void;
@@ -58,7 +59,7 @@ type Props = {
 };
 
 export default function AdditionalPointModal({
-  label, point, apSt, insertOptions, isNew = false,
+  label, point, apSt, insertOptions, isNew = false, isAdmin = false,
   onClose, onSave, onDelete, onPhotoUpload,
 }: Props) {
   const [address, setAddress] = useState(point.address || '');
@@ -75,13 +76,15 @@ export default function AdditionalPointModal({
   const [source, setSource] = useState<string | null>(point.source ?? null);
   const [coordMessage, setCoordMessage] = useState<string | null>(point.coordMessage ?? null);
   const [localInsert, setLocalInsert] = useState<number | string | null>(point.insertAfterOrder ?? null);
+  const [localStatus, setLocalStatus] = useState(apSt?.status || '');
+  const [localMemo, setLocalMemo] = useState(apSt?.memo || '');
   const [saving, setSaving] = useState(false);
 
   const buildData = (overrides: Partial<SaveData> = {}): SaveData => ({
     address, destination, complaint, manager, photoUrl,
     lat, lng, placeName, source, coordMessage,
     insertAfterOrder: localInsert,
-    status: '', memo: '',
+    status: localStatus, memo: localMemo,
     ...overrides,
   });
 
@@ -105,59 +108,35 @@ export default function AdditionalPointModal({
     } catch { setCoordStatus('fail'); }
   };
 
-  const handleSave = async () => {
-    setSaving(true);
-    await onSave(buildData());
-    setSaving(false);
-  };
-
-  // 수정 모드에서 자동저장 (팝업 닫지 않음)
-  const autoSave = async (overrides: Partial<SaveData> = {}) => {
-    if (isNew) return;
-    setSaving(true);
-    await onSave(buildData(overrides));
-    setSaving(false);
-  };
-
-
-  const renderCoordMsg = () => {
-    if (coordStatus === 'idle') return <p style={{ fontSize: '11px', margin: '4px 0 0', color: 'rgba(255,255,255,0.5)' }}>주소나 방문지를 입력한 후 좌표 확인 버튼을 누르세요.</p>;
-    if (coordStatus === 'loading') return <p style={{ fontSize: '11px', margin: '4px 0 0', color: 'rgba(255,255,255,0.5)' }}>좌표를 검색하는 중입니다...</p>;
-    if (coordStatus === 'fail') return (
-      <p style={{ fontSize: '11px', margin: '4px 0 0', color: 'white', fontWeight: 'bold' }}>
-        <span style={{ display: 'inline-block', width: '1.2rem' }}>⚠️</span>
-        <span style={{ animation: 'blink-text 1.2s ease-in-out infinite' }}>좌표 없음. (주소나 방문지명 확인 필요)</span>
-      </p>
-    );
-    const msg = coordMessage || '';
-    const hasWarning = msg.includes('⚠️');
-    const rawMsg = msg.replace('⚠️', '').trim();
-    const isPOI = source === 'place_nearest' || source === 'place_single';
-    return (
-      <>
-        {hasWarning ? (
-          <p style={{ fontSize: '11px', margin: '4px 0 0', color: 'white', fontWeight: 'bold' }}>
-            <span style={{ display: 'inline-block', width: '1.2rem' }}>⚠️</span>
-            <span style={{ animation: 'blink-text 1.2s ease-in-out infinite' }}>{rawMsg}</span>
-          </p>
-        ) : (
-          <p style={{ fontSize: '11px', margin: '4px 0 0', color: '#fff176' }}>
-            <span style={{ display: 'inline-block', width: '1.2rem' }}>✅</span>{rawMsg}
-          </p>
-        )}
-        {isPOI && placeName && (
-          <p style={{ fontSize: '11px', margin: '2px 0 0', color: '#a5d6a7' }}>📍 플레이스명: {placeName}</p>
-        )}
-      </>
-    );
-  };
-
   const handleClose = async () => {
     setSaving(true);
     await onSave(buildData());
     setSaving(false);
     onClose();
   };
+
+  const renderCoordMsg = () => {
+    if (coordStatus === 'idle') return null;
+    if (coordStatus === 'loading') return <p style={{ fontSize: '11px', margin: '4px 0 0', color: 'rgba(255,255,255,0.5)' }}>좌표를 검색하는 중입니다...</p>;
+    if (coordStatus === 'fail') return <p style={{ fontSize: '11px', margin: '4px 0 0', color: 'white', fontWeight: 'bold' }}>⚠️ 좌표 없음. (주소나 방문지명 확인 필요)</p>;
+    const msg = coordMessage || '';
+    const hw = msg.includes('⚠️');
+    const rm = msg.replace('⚠️', '').trim();
+    const isPOILocal = source === 'place_nearest' || source === 'place_single';
+    return (
+      <>
+        {hw
+          ? <p style={{ fontSize: '11px', margin: '4px 0 0', color: 'white', fontWeight: 'bold' }}>⚠️ {rm}</p>
+          : <p style={{ fontSize: '11px', margin: '4px 0 0', color: '#fff176' }}>✅ {rm}</p>
+        }
+        {isPOILocal && placeName && (
+          <p style={{ fontSize: '11px', margin: '2px 0 0', color: '#a5d6a7' }}>📍 플레이스명: {placeName}</p>
+        )}
+      </>
+    );
+  };
+
+  const isDone = ['민원처리완료', '기처리', '확인불가'].includes(localStatus);
 
   return (
     <div style={{ position: 'fixed', inset: 0, zIndex: 400, display: 'flex', flexDirection: 'column', background: '#1a3a6e' }}>
@@ -176,7 +155,7 @@ export default function AdditionalPointModal({
         </button>
       </div>
 
-      {/* 내용 - 스크롤 격리 */}
+      {/* 내용 */}
       <div style={{ flex: 1, overflowY: 'auto', padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: '12px', overscrollBehavior: 'contain' }}>
 
         {/* 주소 */}
@@ -195,7 +174,7 @@ export default function AdditionalPointModal({
             style={{ flex: 1, padding: '6px 8px', borderRadius: '6px', background: 'rgba(255,255,255,0.15)', color: 'white', border: 'none', outline: 'none', fontSize: '12px', boxSizing: 'border-box' }} />
         </div>
 
-        {/* 좌표 확인하기 버튼 */}
+        {/* 좌표 확인하기 */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <div style={{ width: '5rem', flexShrink: 0 }} />
           <button onClick={handleCheckCoord} disabled={coordStatus === 'loading'}
@@ -241,7 +220,7 @@ export default function AdditionalPointModal({
           <label style={{ color: '#90caf9', fontSize: '11px', flexShrink: 0, width: '5rem', paddingTop: '4px' }}>방문지사진</label>
           <div style={{ flex: 1 }}>
             {photoUrl && (
-              <div style={{ position: 'relative', marginBottom: '6px' }}>
+              <div style={{ marginBottom: '6px' }}>
                 <img src={photoUrl} alt="방문지사진" style={{ width: '100%', borderRadius: '6px' }}
                   crossOrigin="anonymous" onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }} />
               </div>
@@ -256,10 +235,7 @@ export default function AdditionalPointModal({
                   reader.onload = async (ev) => {
                     const dataUrl = ev.target?.result as string;
                     setPhotoUrl(dataUrl);
-                    if (onPhotoUpload) {
-                      const url = await onPhotoUpload(file);
-                      if (url) setPhotoUrl(url);
-                    }
+                    if (onPhotoUpload) { const url = await onPhotoUpload(file); if (url) setPhotoUrl(url); }
                   };
                   reader.readAsDataURL(file);
                   e.target.value = '';
@@ -268,7 +244,75 @@ export default function AdditionalPointModal({
           </div>
         </div>
 
+        {/* 관리자 - 경로 삽입 위치 + 삭제 */}
+        {isAdmin && (
+          <>
+            <div style={{ borderTop: '1px solid rgba(255,255,255,0.2)' }} />
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <label style={{ color: '#fed7aa', fontSize: '11px', fontWeight: 'bold', flexShrink: 0, width: '5rem' }}>삽입 위치</label>
+              <select
+                value={localInsert === null ? '' : String(localInsert)}
+                onChange={e => { const v = e.target.value; setLocalInsert(v === '' ? null : v.startsWith('add_') ? v : Number(v)); }}
+                style={{ flex: 1, borderRadius: '6px', padding: '6px 8px', fontSize: '12px', color: 'white', background: 'rgba(255,255,255,0.12)', border: '1px solid rgba(249,115,22,0.5)' }}>
+                {insertOptions.map(opt => (
+                  <option key={String(opt.value)} value={opt.value === null ? '' : String(opt.value)} style={{ background: '#1a3a6e' }}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+              {onDelete && (
+                <button onClick={onDelete}
+                  style={{ padding: '6px 12px', borderRadius: '6px', border: 'none', background: '#c62828', color: 'white', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer', flexShrink: 0 }}>
+                  삭제
+                </button>
+              )}
+            </div>
+
+            {/* 방문결과/방문메모 */}
+            <div style={{ borderTop: '1px solid rgba(255,255,255,0.2)' }} />
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <label style={{ color: '#90caf9', fontSize: '11px', flexShrink: 0, width: '5rem' }}>방문결과</label>
+              <select value={localStatus} onChange={e => setLocalStatus(e.target.value)}
+                style={{ flex: 1, borderRadius: '6px', padding: '6px 8px', fontSize: '12px', color: 'white', fontWeight: 'bold', background: isDone ? 'rgba(255,255,255,0.15)' : 'rgba(235,100,0,0.65)', border: '1px solid rgba(255,255,255,0.3)' }}>
+                <option value="" style={{ background: '#1a3a6e' }}></option>
+                <option value="민원처리완료" style={{ background: '#1a3a6e' }}>민원처리완료</option>
+                <option value="기처리" style={{ background: '#1a3a6e' }}>기처리</option>
+                <option value="확인불가" style={{ background: '#1a3a6e' }}>확인불가</option>
+              </select>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
+              <label style={{ color: '#90caf9', fontSize: '11px', flexShrink: 0, width: '5rem', paddingTop: '5px' }}>방문메모</label>
+              <textarea value={localMemo} onChange={e => setLocalMemo(e.target.value)}
+                rows={2} placeholder="메모 입력..."
+                style={{ flex: 1, borderRadius: '6px', padding: '6px 8px', fontSize: '12px', color: 'white', background: 'rgba(255,255,255,0.12)', border: '1px solid rgba(255,255,255,0.25)', resize: 'none', boxSizing: 'border-box' as const }} />
+            </div>
+          </>
+        )}
+
         {saving && <p style={{ textAlign: 'center', color: 'rgba(255,255,255,0.5)', fontSize: '11px' }}>저장 중...</p>}
+      </div>
+
+      {/* 하단 버튼 */}
+      <div style={{ display: 'flex', gap: '8px', padding: '12px 16px', borderTop: '1px solid rgba(255,255,255,0.15)', flexShrink: 0 }}>
+        <button onClick={() => window.location.href = 'timemarkcamera://'}
+          style={{ background: '#f9d835', width: '48px', height: '48px', flexShrink: 0, borderRadius: '8px', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <svg width="24" height="22" viewBox="0 0 24 22" fill="none">
+            <path d="M9 2L7.17 4H4C2.9 4 2 4.9 2 6V18C2 19.1 2.9 20 4 20H20C21.1 20 22 19.1 22 18V6C22 4.9 21.1 4 20 4H16.83L15 2H9ZM12 17C9.24 17 7 14.76 7 12C7 9.24 9.24 7 12 7C14.76 7 17 9.24 17 12C17 14.76 14.76 17 12 17Z" fill="#1a1a1a"/>
+            <circle cx="12" cy="12" r="3.5" fill="#1a1a1a"/>
+          </svg>
+        </button>
+        {point.lat && point.lng ? (
+          <>
+            <button onClick={() => window.open(`tmap://route?goalname=${encodeURIComponent(point.destination || point.address)}&goaly=${point.lat}&goalx=${point.lng}`)}
+              style={{ flex: 1, height: '48px', borderRadius: '8px', background: '#0a3d8f', color: 'white', fontSize: '14px', fontWeight: 'bold', border: 'none', cursor: 'pointer' }}>티맵</button>
+            <button onClick={() => window.open(`nmap://navigation?dlat=${point.lat}&dlng=${point.lng}&dname=${encodeURIComponent(point.destination || point.address)}&appname=patrol-optimizer`)}
+              style={{ flex: 1, height: '48px', borderRadius: '8px', background: '#1b5e20', color: 'white', fontSize: '14px', fontWeight: 'bold', border: 'none', cursor: 'pointer' }}>네이버지도</button>
+          </>
+        ) : (
+          <div style={{ flex: 1, height: '48px', borderRadius: '8px', background: 'rgba(255,255,255,0.08)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <span style={{ color: 'rgba(255,255,255,0.4)', fontSize: '12px' }}>좌표 확인 후 내비 사용 가능</span>
+          </div>
+        )}
       </div>
     </div>
   );
