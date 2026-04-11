@@ -153,11 +153,9 @@ export default function AdditionalPointModal({
   };
 
   const handleClose = async () => {
-    if (!isNew) {
-      setSaving(true);
-      await onSave(buildData());
-      setSaving(false);
-    }
+    setSaving(true);
+    await onSave(buildData());
+    setSaving(false);
     onClose();
   };
 
@@ -263,14 +261,6 @@ export default function AdditionalPointModal({
         </div>
 
         {saving && <p style={{ textAlign: 'center', color: 'rgba(255,255,255,0.5)', fontSize: '11px' }}>저장 중...</p>}
-
-        {/* 신규 입력 시만 저장 버튼 표시 */}
-        {isNew && (
-          <button onClick={handleSave} disabled={saving}
-            style={{ width: '100%', padding: '12px', borderRadius: '8px', background: saving ? '#555' : '#0a3d8f', color: 'white', border: 'none', fontWeight: 'bold', fontSize: '14px', cursor: saving ? 'default' : 'pointer' }}>
-            {saving ? '저장 중...' : '저장'}
-          </button>
-        )}
       </div>
     </div>
   );

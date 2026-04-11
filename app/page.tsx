@@ -811,15 +811,30 @@ export default function Home() {
     localStorage.setItem('draft-route', JSON.stringify(draft));
   };
 
-  const handleExtractEditSave = () => {
+  const handleExtractEditSave = async () => {
     if (!extractEditTarget) return;
     const parsedOriginalId = extractEditForm.originalId ? Number(extractEditForm.originalId) : null;
+
+    // 새로 선택한 사진이 blob URL이면 업로드
+    let photoUrl = extractEditForm.photoUrl || extractEditTarget.photoUrl || null;
+    if (extractEditForm.photoUrl && extractEditForm.photoUrl.startsWith('blob:')) {
+      try {
+        const res = await fetch(extractEditForm.photoUrl);
+        const blob = await res.blob();
+        const reader = new FileReader();
+        const base64 = await new Promise<string>((resolve) => { reader.onload = () => resolve(reader.result as string); reader.readAsDataURL(blob); });
+        const uploadRes = await fetch('/api/upload-photo', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ imageData: base64, filename: `extract-${Date.now()}.jpg` }) });
+        if (uploadRes.ok) { const uploadData = await uploadRes.json(); photoUrl = uploadData.url; }
+      } catch (e) { console.error('사진 업로드 오류:', e); }
+    }
+
     const updatedPoint = {
       ...extractEditTarget,
       originalId: (!isNaN(parsedOriginalId as number) && parsedOriginalId !== null) ? parsedOriginalId : extractEditTarget.originalId ?? null,
       address: extractEditForm.address,
       destination: extractEditForm.destination || null,
       complaint: extractEditForm.complaint,
+      photoUrl: photoUrl ?? null,
       lat: extractEditCoord.lat ?? extractEditTarget.lat ?? null,
       lng: extractEditCoord.lng ?? extractEditTarget.lng ?? null,
       placeName: extractEditCoord.placeName ?? extractEditTarget.placeName ?? null,
