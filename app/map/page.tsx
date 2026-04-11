@@ -2475,7 +2475,11 @@ export default function MapPage() {
             point={emptyPoint}
             insertOptions={insertOptions}
             isNew={true}
-            onClose={() => setShowMapAddModal(false)}
+            onClose={() => {
+              setShowMapAddModal(false);
+              // onSave 완료 후 최신 additionalPointsRef로 마커 재그리기
+              drawAdditionalMarkers(additionalPointsRef.current);
+            }}
             onSave={async (data) => {
               const newPoint = {
                 id: Date.now(),
@@ -2503,8 +2507,7 @@ export default function MapPage() {
               } catch {}
               const today = routeRef.current?.date ?? new Date().toLocaleDateString('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/\. /g, '-').replace('.', '');
               await fetch('/api/save-additional', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ date: today, points: updated }) }).catch(() => {});
-              drawAdditionalMarkers(updated);
-              setShowMapAddModal(false);
+              // 모달 닫기와 마커 재그리기는 onClose에서 처리
             }}
             onPhotoUpload={async (file) => {
               const reader = new FileReader();
@@ -2550,7 +2553,10 @@ export default function MapPage() {
             apSt={apSt}
             insertOptions={insertOptions}
             isAdmin={isAdmin}
-            onClose={() => setShowInsertModal(false)}
+            onClose={() => {
+              setShowInsertModal(false);
+              drawAdditionalMarkers(additionalPointsRef.current);
+            }}
             onSave={async (data) => {
               const updated = additionalPoints.map(p =>
                 p.id === selectedAdditional.id
@@ -2575,14 +2581,13 @@ export default function MapPage() {
                 localStorage.setItem('draft-route', JSON.stringify(draft));
               } catch {}
               const today = routeRef.current?.date ?? new Date().toLocaleDateString('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/\. /g, '-').replace('.', '');
-              fetch('/api/save-additional', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ date: today, points: updated }) }).catch(() => {});
+              await fetch('/api/save-additional', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ date: today, points: updated }) }).catch(() => {});
               if (data.status !== undefined) {
                 await fetch('/api/save-status', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ date: route?.date ?? today, address: data.address, destination: data.destination, complaint: data.complaint?.trim() ?? '', originalId: null, status: data.status, memo: data.memo }) });
                 statusesRef.current = { ...statusesRef.current, [apKey]: { status: data.status, memo: data.memo, updatedAt: Date.now() } };
                 setStatuses(prev => ({ ...prev, [apKey]: { status: data.status, memo: data.memo, updatedAt: Date.now() } }));
               }
-              setShowInsertModal(false);
-              drawAdditionalMarkers(updated);
+              // 모달 닫기는 onClose에서 처리
             }}
             onDelete={() => handleAdditionalDelete(selectedAdditional.id)}
             onPhotoUpload={async (file) => {
