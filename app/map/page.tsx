@@ -96,6 +96,8 @@ export default function MapPage() {
   const blinkArrowsRef = useRef<any[]>([]);
   const blinkOriginalPolylineRef = useRef<any>(null);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [showAdminAuthModal, setShowAdminAuthModal] = useState(false);
+  const [adminPwInput, setAdminPwInput] = useState('');
   const [savingStatus, setSavingStatus] = useState(false);
   const [isGeneratingReport, setIsGeneratingReport] = useState(false);
 
@@ -2048,6 +2050,30 @@ export default function MapPage() {
             ← 메인화면
           </button>
           <div style={{ color: 'white', fontWeight: 'bold', fontSize: '15px', flex: 1 }}>최적 경로 지도</div>
+          {/* 관리자 인증 버튼 */}
+          <button
+            onClick={() => {
+              if (isAdmin) {
+                // 인증 해제
+                setIsAdmin(false);
+                localStorage.removeItem('patrol-admin-auth');
+              } else {
+                setShowAdminAuthModal(true);
+              }
+            }}
+            title={isAdmin ? '관리자 인증됨 (탭하여 해제)' : '관리자 인증'}
+            style={{
+              width: '28px', height: '28px',
+              borderRadius: '50%',
+              background: isAdmin ? 'rgba(249,115,22,0.85)' : 'rgba(255,255,255,0.12)',
+              border: isAdmin ? '1.5px solid #f97316' : '1px solid rgba(255,255,255,0.3)',
+              color: 'white', fontSize: '14px',
+              cursor: 'pointer', flexShrink: 0,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              transition: 'all 0.2s',
+            }}>
+            {isAdmin ? '🔓' : '🔒'}
+          </button>
           <button
             onClick={() => setShowMapHelpModal(true)}
             title="지도뷰 도움말"
@@ -2125,33 +2151,24 @@ export default function MapPage() {
               <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#1565c0', border: '1px solid white', flexShrink: 0 }} />
               <span style={{ color: 'rgba(255,255,255,0.7)', fontSize: '10px', whiteSpace: 'nowrap' }}>완료</span>
             </div>
-            {/* ★ 추가지점 버튼 */}
+            {/* ★ 추가방문 버튼 - 관리자 전용 */}
             <button
-              onClick={() => setShowMapAddModal(true)}
+              onClick={() => {
+                if (!isAdmin) {
+                  alert('관리자 인증이 필요합니다.\n상단의 🔒 버튼을 눌러 인증해주세요.');
+                  return;
+                }
+                setShowMapAddModal(true);
+              }}
               style={{
-                background: 'rgba(249,115,22,0.85)',
+                background: isAdmin ? 'rgba(249,115,22,0.85)' : 'rgba(255,255,255,0.15)',
                 border: '1px solid rgba(255,255,255,0.25)',
-                color: 'white', fontSize: '10px', fontWeight: 'bold',
+                color: isAdmin ? 'white' : 'rgba(255,255,255,0.4)', fontSize: '10px', fontWeight: 'bold',
                 padding: '3px 7px', borderRadius: '6px',
                 cursor: 'pointer', whiteSpace: 'nowrap',
                 flexShrink: 0,
               }}>
-              +추가지점
-            </button>
-            {/* 보고서 버튼 */}
-            <button
-              onClick={handleGenerateReport}
-              disabled={isGeneratingReport || !route}
-              style={{
-                background: isGeneratingReport ? 'rgba(100,100,100,0.5)' : 'rgba(255,255,255,0.08)',
-                border: '1px solid rgba(255,255,255,0.25)',
-                color: isGeneratingReport ? 'rgba(255,255,255,0.5)' : 'rgba(255,255,255,0.7)',
-                fontSize: '10px', fontWeight: 'bold',
-                padding: '3px 7px', borderRadius: '6px',
-                cursor: isGeneratingReport ? 'default' : 'pointer',
-                whiteSpace: 'nowrap', flexShrink: 0,
-              }}>
-              {isGeneratingReport ? '⏳생성중' : '보고서'}
+              {isAdmin ? '+추가방문' : '🔒추가'}
             </button>
           </div>
         </div>
@@ -2298,29 +2315,57 @@ export default function MapPage() {
       {/* ★ 내 위치 추적 버튼 - 우측 하단 */}
 
       {!showDetailModal && !showOverlapModal && (
-        <button
-          onClick={toggleTracking}
-          title={isTracking ? '위치 추적 중지' : '내 위치 보기'}
-          style={{
-            position: 'absolute',
-            bottom: 52,
-            right: 12,
-            width: '44px',
-            height: '44px',
-            borderRadius: '50%',
-            background: isTracking ? '#1976d2' : 'rgba(255,255,255,0.95)',
-            border: isTracking ? '2px solid white' : '2px solid rgba(100,150,255,0.4)',
-            boxShadow: '0 2px 8px rgba(0,0,0,0.35)',
-            cursor: 'pointer',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            zIndex: 150,
-            fontSize: '22px',
-            transition: 'background 0.2s',
-          }}>
-          🛻
-        </button>
+        <>
+          {/* 보고서 버튼 - 🛻 위 */}
+          <button
+            onClick={handleGenerateReport}
+            disabled={isGeneratingReport || !route}
+            title="순회 결과 PDF 보고서 생성"
+            style={{
+              position: 'absolute',
+              bottom: 104,
+              right: 12,
+              width: '44px',
+              height: '44px',
+              borderRadius: '50%',
+              background: isGeneratingReport ? 'rgba(150,150,150,0.9)' : 'rgba(255,255,255,0.95)',
+              border: '2px solid rgba(100,150,255,0.4)',
+              boxShadow: '0 2px 8px rgba(0,0,0,0.35)',
+              cursor: isGeneratingReport ? 'default' : 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              zIndex: 150,
+              fontSize: '20px',
+              transition: 'background 0.2s',
+            }}>
+            {isGeneratingReport ? '⏳' : '📄'}
+          </button>
+          {/* 내 위치 버튼 */}
+          <button
+            onClick={toggleTracking}
+            title={isTracking ? '위치 추적 중지' : '내 위치 보기'}
+            style={{
+              position: 'absolute',
+              bottom: 52,
+              right: 12,
+              width: '44px',
+              height: '44px',
+              borderRadius: '50%',
+              background: isTracking ? '#1976d2' : 'rgba(255,255,255,0.95)',
+              border: isTracking ? '2px solid white' : '2px solid rgba(100,150,255,0.4)',
+              boxShadow: '0 2px 8px rgba(0,0,0,0.35)',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              zIndex: 150,
+              fontSize: '22px',
+              transition: 'background 0.2s',
+            }}>
+            🛻
+          </button>
+        </>
       )}
 
       {/* 줌 안내 토스트 - 팝업 없을 때만 표시 */}
@@ -2617,6 +2662,64 @@ export default function MapPage() {
       })()}
 
       {/* 지도뷰 도움말 팝업 */}
+      {/* 관리자 인증 팝업 */}
+      {showAdminAuthModal && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 500, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+          onClick={() => { setShowAdminAuthModal(false); setAdminPwInput(''); }}>
+          <div style={{ background: '#1a3a6e', borderRadius: '12px', padding: '24px', width: '80%', maxWidth: '320px', boxShadow: '0 8px 32px rgba(0,0,0,0.5)' }}
+            onClick={e => e.stopPropagation()}>
+            <div style={{ textAlign: 'center', marginBottom: '16px' }}>
+              <div style={{ fontSize: '32px', marginBottom: '8px' }}>🔓</div>
+              <div style={{ color: 'white', fontWeight: 'bold', fontSize: '16px' }}>관리자 인증</div>
+              <div style={{ color: 'rgba(255,255,255,0.6)', fontSize: '12px', marginTop: '4px' }}>비밀번호를 입력하세요</div>
+            </div>
+            <input
+              type="password"
+              value={adminPwInput}
+              onChange={e => setAdminPwInput(e.target.value)}
+              onKeyDown={async e => {
+                if (e.key === 'Enter') {
+                  const res = await fetch('/api/auth', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password: adminPwInput }) });
+                  if (res.ok) {
+                    setIsAdmin(true);
+                    localStorage.setItem('patrol-admin-auth', 'true');
+                    setShowAdminAuthModal(false);
+                    setAdminPwInput('');
+                  } else {
+                    alert('비밀번호가 틀렸습니다.');
+                    setAdminPwInput('');
+                  }
+                }
+              }}
+              placeholder="비밀번호"
+              autoFocus
+              style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.3)', background: 'rgba(255,255,255,0.1)', color: 'white', fontSize: '14px', boxSizing: 'border-box', marginBottom: '12px', outline: 'none' }}
+            />
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <button onClick={() => { setShowAdminAuthModal(false); setAdminPwInput(''); }}
+                style={{ flex: 1, padding: '10px', borderRadius: '8px', border: 'none', background: 'rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.7)', fontSize: '13px', cursor: 'pointer' }}>
+                취소
+              </button>
+              <button onClick={async () => {
+                const res = await fetch('/api/auth', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password: adminPwInput }) });
+                if (res.ok) {
+                  setIsAdmin(true);
+                  localStorage.setItem('patrol-admin-auth', 'true');
+                  setShowAdminAuthModal(false);
+                  setAdminPwInput('');
+                } else {
+                  alert('비밀번호가 틀렸습니다.');
+                  setAdminPwInput('');
+                }
+              }}
+                style={{ flex: 1, padding: '10px', borderRadius: '8px', border: 'none', background: '#f97316', color: 'white', fontSize: '13px', fontWeight: 'bold', cursor: 'pointer' }}>
+                확인
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {showMapHelpModal && (
         <div
           style={{ position: 'fixed', inset: 0, zIndex: 9999, background: 'rgba(0,0,0,0.65)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
