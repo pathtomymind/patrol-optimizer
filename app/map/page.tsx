@@ -1,365 +1,2047 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import AdditionalPointModal, { type InsertOption, type AdditionalPointData } from '@/app/components/AdditionalPointModal';
+import { useRouter } from 'next/navigation';
+import AdditionalPointModal, { type InsertOption } from '@/app/components/AdditionalPointModal';
 
-const dummyRoute = {
-  version: '2026-03-01 버전1',
-  points: [
-    { id: 1, address: '녹양동 산104 (가금교 삼거리)', complaint: '분양 현수막' },
-    { id: 2, address: '가능동 663-9 (백정밥상)', complaint: '푸르넷 광고 벽보' },
-    { id: 3, address: '가능동 663-21 (세븐일레븐 의정부)', complaint: '광고 벽보' },
-    { id: 4, address: '태평로 132 (화순식당)', complaint: '에어라이트' },
-    { id: 5, address: '산곡동 730 (고산수자인 정문)', complaint: '광고 현수막' },
-  ],
+type RoutePoint = {
+  order: number;
+  address: string;
+  destination: string | null;
+  complaint: string;
+  lat: number;
+  lng: number;
+  placeName: string | null;
+  source: string | null;
+  coordMessage?: string | null;
+  originalId?: number | null;
+  photoDescription?: string | null;
+  photoUrl?: string | null;
+  manager?: string | null;
 };
 
-export default function Home() {
-  const [activeTab, setActiveTab] = useState<'view' | 'input'>('view');
-  const [cardListOpen, setCardListOpen] = useState(false);
-  const [uploadOpen, setUploadOpen] = useState(true);
-  const [directOpen, setDirectOpen] = useState(false);
-  // 직접 입력 지점
-  const [directPoints, setDirectPoints] = useState<{
-    id: number; address: string; destination: string; complaint: string; manager: string; photoUrl: string;
-    lat?: number | null; lng?: number | null; placeName?: string | null; source?: string | null; coordMessage?: string | null; photoDescription?: string | null;
-  }[]>([]);
+type AdditionalPoint = {
+  id: number;
+  address: string;
+  destination: string;
+  complaint: string;
+  manager: string;
+  photoUrl: string;
+  lat?: number | null;
+  lng?: number | null;
+  placeName?: string | null;
+  source?: string | null;
+  coordMessage?: string | null;
+  isAdditional: true;
+  insertAfterOrder?: number | string | null; // ★ "add_${id}" 형식으로 추가지점 참조 가능
+};
 
-  // 추가 지점 (최적화 경로 완성 후 추가되는 지점)
-  const [additionalPoints, setAdditionalPoints] = useState<{
-    id: number; address: string; destination: string; complaint: string; manager: string; photoUrl: string;
-    lat?: number | null; lng?: number | null; placeName?: string | null; source?: string | null; coordMessage?: string | null;
-    isAdditional: true; insertAfterOrder?: number | string | null;
-  }[]>([]);
-  const additionalPointsRef = useRef<typeof additionalPoints>([]);
-  const [additionalOpen, setAdditionalOpen] = useState(false);
-  const [showAdditionalModal, setShowAdditionalModal] = useState(false);
-  // 추가지점 상세 팝업 (지도뷰와 공유)
-  const [showInsertModal, setShowInsertModal] = useState(false);
-  const [selectedAdditional, setSelectedAdditional] = useState<typeof additionalPoints[0] | null>(null);
-  // 추가지점 포함 여부 다이얼로그 (포함/미포함/취소 3버튼)
-  const [showAdditionalConfirm, setShowAdditionalConfirm] = useState(false);
-  const additionalConfirmResolveRef = useRef<((v: 'include' | 'exclude' | 'cancel') => void) | null>(null);
-  const showAdditionalConfirmDialog = (): Promise<'include' | 'exclude' | 'cancel'> => {
-    return new Promise((resolve) => {
-      additionalConfirmResolveRef.current = resolve;
-      setShowAdditionalConfirm(true);
-    });
-  };
-  const [editingAdditionalPoint, setEditingAdditionalPoint] = useState<{
-    id: number; address: string; destination: string; complaint: string; manager: string; photoUrl: string;
-    lat?: number | null; lng?: number | null; placeName?: string | null; source?: string | null; coordMessage?: string | null;
-    isAdditional: true; insertAfterOrder?: number | string | null;
-  } | null>(null);
-  const [additionalForm, setAdditionalForm] = useState({ address: '', destination: '', complaint: '', manager: '', photoUrl: '' });
-  const [additionalInsertAfter, setAdditionalInsertAfter] = useState<number | string | null>(null);
-  const [additionalCoordStatus, setAdditionalCoordStatus] = useState<'idle' | 'loading' | 'success' | 'fail'>('idle');
-  const [additionalCoord, setAdditionalCoord] = useState<{ lat: number | null; lng: number | null; placeName: string | null; source: string | null; coordMessage: string | null }>({ lat: null, lng: null, placeName: null, source: null, coordMessage: null });
+type PointStatus = {
+  status: string;
+  memo: string;
+  updatedAt: number;
+};
 
-  const [showDirectModal, setShowDirectModal] = useState(false);
-  const [editingPoint, setEditingPoint] = useState<{
-    id: number; address: string; destination: string; complaint: string; manager: string; photoUrl: string;
-  } | null>(null);
-  const [directForm, setDirectForm] = useState({ address: '', destination: '', complaint: '', manager: '', photoUrl: '' });
-  const [directCoordStatus, setDirectCoordStatus] = useState<'idle' | 'loading' | 'success' | 'fail'>('idle');
-  const [directCoord, setDirectCoord] = useState<{ lat: number | null; lng: number | null; placeName: string | null; source: string | null; coordMessage: string | null }>({ lat: null, lng: null, placeName: null, source: null, coordMessage: null });
-  // 지점 상세정보 팝업
-  const [showDetailModal, setShowDetailModal] = useState(false);
-  const [selectedPoint, setSelectedPoint] = useState<{
-    order: number; originalId?: number | null; address: string; destination: string | null; complaint: string;
-    lat: number; lng: number; placeName: string | null; source: string | null; coordMessage?: string | null;
-    photoDescription?: string | null; photoUrl?: string | null; manager?: string | null;
-  } | null>(null);
-  // 완료상태
-  const [pointStatuses, setPointStatuses] = useState<Record<string, { status: string; memo: string; updatedAt: number }>>({});
+const DONE_STATUSES = ['민원처리완료', '기처리', '확인불가'];
+const ZOOM_THRESHOLD = 14;
+const PULSE_THRESHOLD = 14; // 롱프레스 깜박임과 동일한 레벨 // 이 줌 이상부터 펄스 + 클릭 팝업 활성화 (휠 약 2번)
+
+// ★ 펄스 애니메이션 CSS (전역 style 태그로 삽입)
+const PULSE_STYLE = `
+@keyframes marker-pulse {
+  0%   { transform: scale(1);   opacity: 0.8; }
+  70%  { transform: scale(2.2); opacity: 0; }
+  100% { transform: scale(2.2); opacity: 0; }
+}
+.pulse-ring {
+  position: absolute;
+  top: 50%; left: 50%;
+  width: 28px; height: 28px;
+  margin-left: -14px; margin-top: -14px;
+  border-radius: 50%;
+  animation: marker-pulse 1.8s ease-out infinite;
+  pointer-events: none;
+}
+`;
+
+export default function MapPage() {
+  const router = useRouter();
+  const mapRef = useRef<HTMLDivElement>(null);
+  const naverMapRef = useRef<naver.maps.Map | null>(null);
+  const markersRef = useRef<naver.maps.Marker[]>([]);
+  const polylinesRef = useRef<naver.maps.Polyline[]>([]);
+  const arrowMarkersRef = useRef<naver.maps.Marker[]>([]);
+  const polygonsRef = useRef<naver.maps.Polygon[]>([]);
+  const labelsRef = useRef<naver.maps.Marker[]>([]);
+  const currentZoomRef = useRef<number>(13);
+
+  const [route, setRoute] = useState<{ date: string; version: number; points: RoutePoint[] } | null>(null);
+  const routeRef = useRef<{ date: string; version: number; points: RoutePoint[] } | null>(null);
+  const [statuses, setStatuses] = useState<Record<string, PointStatus>>({});
+  const statusesRef = useRef<Record<string, PointStatus>>({});
+  const [isLoading, setIsLoading] = useState(true);
+  const [mapReady, setMapReady] = useState(false);
+  const [routeDrawn, setRouteDrawn] = useState(false);
+  const [lineMode, setLineMode] = useState<'straight' | 'road'>('straight');
+  const lineModeRef = useRef<'straight' | 'road'>('straight');
+  const [osrmError, setOsrmError] = useState(false);
+  const [roadLoading, setRoadLoading] = useState(false);
+  const [newRouteAvailable, setNewRouteAvailable] = useState(false);
+  const [newAdditionalAvailable, setNewAdditionalAvailable] = useState(false);
+  const lastAdditionalTimestampRef = useRef<number>(-1);
+  const [is3D, setIs3D] = useState(false);
+  const [showMapHelpModal, setShowMapHelpModal] = useState(false);
+  const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const blinkIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const blinkRestoreRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const blinkPolylineRef = useRef<any>(null);
+  const blinkArrowsRef = useRef<any[]>([]);
+  const blinkOriginalPolylineRef = useRef<any>(null);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [showAdminAuthModal, setShowAdminAuthModal] = useState(false);
+  const [adminPwInput, setAdminPwInput] = useState('');
   const [savingStatus, setSavingStatus] = useState(false);
+  const [isGeneratingReport, setIsGeneratingReport] = useState(false);
 
-  // 추출지점 수정 모달
-  const [showExtractEditModal, setShowExtractEditModal] = useState(false);
-  const [extractEditTarget, setExtractEditTarget] = useState<{
-    id: number; originalId?: number | null; address: string; destination?: string | null; complaint: string;
-    lat?: number | null; lng?: number | null; placeName?: string | null;
-    source?: string | null; photoUrl?: string | null; photoDescription?: string | null;
-  } | null>(null);
-  const [extractEditForm, setExtractEditForm] = useState({
-    address: '', destination: '', complaint: '', manager: '', photoUrl: '', originalId: '' as string,
-  });
-  const [extractEditCoordStatus, setExtractEditCoordStatus] = useState<'idle' | 'loading' | 'success' | 'fail'>('idle');
-  const [extractEditCoord, setExtractEditCoord] = useState<{
-    lat: number | null; lng: number | null; placeName: string | null; source: string | null; coordMessage: string | null;
-  }>({ lat: null, lng: null, placeName: null, source: null, coordMessage: null });
+  // ★ 추가 지점 (localStorage에서 로드)
+  const [additionalPoints, setAdditionalPoints] = useState<AdditionalPoint[]>([]);
+  const additionalPointsRef = useRef<AdditionalPoint[]>([]);
+  const additionalMarkersRef = useRef<naver.maps.Marker[]>([]);
+  // ★ 도로 경로 그리는 중 플래그 (추가지점 폴리라인 중복 그리기 방지)
+  const roadDrawingRef = useRef<boolean>(false);
+  const [showInsertModal, setShowInsertModal] = useState(false);
+  const [selectedAdditional, setSelectedAdditional] = useState<AdditionalPoint | null>(null);
+  // ★ 지도뷰 추가지점 입력 팝업
+  const [showMapAddModal, setShowMapAddModal] = useState(false);
+  const [mapAddForm, setMapAddForm] = useState<{ address: string; destination: string; complaint: string; manager: string; insertAfterOrder: number | null }>({ address: '', destination: '', complaint: '', manager: '', insertAfterOrder: null });
+  const [mapAddCoordStatus, setMapAddCoordStatus] = useState<'idle'|'loading'|'success'|'error'>('idle');
+  const [mapAddCoord, setMapAddCoord] = useState<{ lat: number|null; lng: number|null; placeName: string|null; source: string|null; coordMessage: string|null }>({ lat: null, lng: null, placeName: null, source: null, coordMessage: null });
+  const [mapAddSaving, setMapAddSaving] = useState(false);
 
-  const handleDirectAdd = () => {
-    setEditingPoint(null);
-    setDirectForm({ address: '', destination: '', complaint: '', manager: '', photoUrl: '' });
-    setDirectCoordStatus('idle');
-    setDirectCoord({ lat: null, lng: null, placeName: null, source: null, coordMessage: null });
-    setShowDirectModal(true);
-  };
+  // ★ 내 위치 추적
+  const [isTracking, setIsTracking] = useState(false);
+  const myLocationMarkerRef = useRef<naver.maps.Marker | null>(null);
+  const myLocationCircleRef = useRef<any>(null);
+  const watchIdRef = useRef<number | null>(null);
 
-  const handleDirectEdit = (point: { id: number; address: string; destination: string; complaint: string; manager: string; photoUrl: string; lat?: number | null; lng?: number | null; placeName?: string | null; source?: string | null; coordMessage?: string | null }) => {
-    setEditingPoint(point);
-    setDirectForm({ address: point.address, destination: point.destination, complaint: point.complaint, manager: point.manager, photoUrl: point.photoUrl || '' });
-    setDirectCoordStatus(point.lat ? 'success' : 'idle');
-    setDirectCoord({ lat: point.lat || null, lng: point.lng || null, placeName: point.placeName || null, source: point.source || null, coordMessage: point.coordMessage || null });
-    setShowDirectModal(true);
-  };
+  // ★ 팝업 상태
+  const [selectedPoint, setSelectedPoint] = useState<RoutePoint | null>(null);
+  const [showDetailModal, setShowDetailModal] = useState(false);
+  // ★ 겹침 목록 팝업 상태
+  const [overlappingPoints, setOverlappingPoints] = useState<RoutePoint[]>([]);
+  const [showOverlapModal, setShowOverlapModal] = useState(false);
 
-  const handleDirectDelete = async (id: number) => {
-    if (deletingId !== null) return;
-    const ok = await showConfirm('이 방문지를 삭제합니다. 정말로 삭제하시겠습니까?');
-    if (!ok) return;
-    setDeletingId(id);
-    const point = directPoints.find((p) => p.id === id);
-    if (point?.photoUrl && point.photoUrl.startsWith('https://')) {
-      try { await fetch('/api/delete-blob', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url: point.photoUrl }) }); } catch (e) { console.error('Blob 삭제 오류:', e); }
-    }
-    const updated = directPoints.filter((p) => p.id !== id);
-    setDirectPoints(updated);
-    const draft = JSON.parse(localStorage.getItem('draft-route') || '{}');
-    draft.directPoints = updated;
-    draft.lastModified = Date.now();
-    localStorage.setItem('draft-route', JSON.stringify(draft));
-    setDeletingId(null);
-  };
-
-  // 추가 지점 핸들러들
-  const handleAdditionalAdd = () => {
-    setEditingAdditionalPoint(null);
-    setAdditionalForm({ address: '', destination: '', complaint: '', manager: '', photoUrl: '' });
-    setAdditionalInsertAfter(null);
-    setAdditionalCoordStatus('idle');
-    setAdditionalCoord({ lat: null, lng: null, placeName: null, source: null, coordMessage: null });
-    setShowAdditionalModal(true);
-  };
-
-  const handleAdditionalEdit = (point: typeof additionalPoints[0]) => {
-    setEditingAdditionalPoint(point);
-    setAdditionalForm({ address: point.address, destination: point.destination, complaint: point.complaint, manager: point.manager, photoUrl: point.photoUrl || '' });
-    setAdditionalInsertAfter(point.insertAfterOrder ?? null);
-    setAdditionalCoordStatus(point.lat ? 'success' : 'idle');
-    setAdditionalCoord({ lat: point.lat || null, lng: point.lng || null, placeName: point.placeName || null, source: point.source || null, coordMessage: point.coordMessage || null });
-    setShowAdditionalModal(true);
-  };
-
-  const handleAdditionalDelete = async (id: number) => {
-    if (deletingId !== null) return;
-    const ok = await showConfirm('이 방문지를 삭제합니다. 정말로 삭제하시겠습니까?');
-    if (!ok) return;
-    setDeletingId(id);
-    const point = additionalPointsRef.current.find((p) => p.id === id);
-    if (point?.photoUrl && point.photoUrl.startsWith('https://')) {
-      try { await fetch('/api/delete-blob', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url: point.photoUrl }) }); } catch (e) { console.error('Blob 삭제 오류:', e); }
-    }
-    const updated = additionalPointsRef.current.filter((p) => p.id !== id);
-    setAdditionalPoints(updated); additionalPointsRef.current = updated;
-    const draft = JSON.parse(localStorage.getItem('draft-route') || '{}');
-    draft.additionalPoints = updated;
-    draft.lastModified = Date.now();
-    localStorage.setItem('draft-route', JSON.stringify(draft));
-    // Redis 동기화
-    const today = new Date().toLocaleDateString('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/\. /g, '-').replace('.', '');
-    fetch('/api/save-additional', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ date: today, points: updated }) }).catch(() => {});
-    setDeletingId(null);
-  };
-
-  const handleAdditionalSave = async () => {
-    if (isSaving) return;
-    setIsSaving(true);
-    const coordData = additionalCoordStatus === 'success'
-      ? { lat: additionalCoord.lat, lng: additionalCoord.lng, placeName: additionalCoord.placeName, source: additionalCoord.source, coordMessage: additionalCoord.coordMessage }
-      : { lat: null, lng: null, placeName: null, source: null, coordMessage: null };
-
-    let photoUrl = additionalForm.photoUrl;
-    if (photoUrl && photoUrl.startsWith('blob:')) {
-      try {
-        const res = await fetch(photoUrl);
-        const blob = await res.blob();
-        const reader = new FileReader();
-        const base64 = await new Promise<string>((resolve) => {
-          reader.onload = () => resolve((reader.result as string));
-          reader.readAsDataURL(blob);
-        });
-        const uploadRes = await fetch('/api/upload-photo', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ imageData: base64, filename: `additional-${Date.now()}.jpg` }),
-        });
-        if (uploadRes.ok) {
-          const uploadData = await uploadRes.json();
-          photoUrl = uploadData.url;
-        }
-      } catch (e) { console.error('추가지점 사진 업로드 오류:', e); }
-    }
-
-    let updatedPoints;
-    if (editingAdditionalPoint) {
-      updatedPoints = additionalPointsRef.current.map((p) =>
-        p.id === editingAdditionalPoint.id
-          ? { ...p, ...additionalForm, photoUrl, ...coordData, isAdditional: true as const, insertAfterOrder: additionalInsertAfter }
-          : p
-      );
-    } else {
-      updatedPoints = [...additionalPointsRef.current, {
-        id: Date.now(), ...additionalForm, photoUrl, ...coordData,
-        isAdditional: true as const, insertAfterOrder: additionalInsertAfter,
-      }];
-    }
-    setAdditionalPoints(updatedPoints); additionalPointsRef.current = updatedPoints;
-    const draft = JSON.parse(localStorage.getItem('draft-route') || '{}');
-    draft.additionalPoints = updatedPoints;
-    draft.lastModified = Date.now();
-    localStorage.setItem('draft-route', JSON.stringify(draft));
-    // Redis 동기화
-    const today = new Date().toLocaleDateString('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/\. /g, '-').replace('.', '');
-    fetch('/api/save-additional', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ date: today, points: updatedPoints }) }).catch(() => {});
-    setIsSaving(false);
-    setShowAdditionalModal(false);
-  };
-
-  const handleAdditionalReset = async () => {
-    const ok = await showConfirm('추가 방문지 전체를 삭제합니다. 정말로 초기화 하시겠습니까?');
-    if (!ok) return;
-    await Promise.all(
-      additionalPoints
-        .filter(p => p.photoUrl && p.photoUrl.startsWith('https://'))
-        .map(p => fetch('/api/delete-blob', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url: p.photoUrl }) }).catch(() => {}))
-    );
-    setAdditionalPoints([]); additionalPointsRef.current = [];
-    const draft = JSON.parse(localStorage.getItem('draft-route') || '{}');
-    delete draft.additionalPoints;
-    draft.lastModified = Date.now();
-    localStorage.setItem('draft-route', JSON.stringify(draft));
-    // Redis 동기화
-    const today = new Date().toLocaleDateString('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/\. /g, '-').replace('.', '');
-    fetch('/api/save-additional', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ date: today, points: [] }) }).catch(() => {});
-  };
-
-  const handleDirectSave = async () => {
-    if (isSaving) return;
-    setIsSaving(true);
-    const coordData = directCoordStatus === 'success' ? { lat: directCoord.lat, lng: directCoord.lng, placeName: directCoord.placeName, source: directCoord.source, coordMessage: directCoord.coordMessage } : { lat: null, lng: null, placeName: null, source: null, coordMessage: null };
-
-    // 현장사진 업로드 (base64 dataURL인 경우) - 압축 후 업로드
-    let photoUrl = directForm.photoUrl;
-    if (photoUrl && photoUrl.startsWith('data:')) {
-      try {
-        // 압축
-        const compressed = await new Promise<string>((resolve) => {
-          const img = new Image();
-          img.onload = () => {
-            const canvas = document.createElement('canvas');
-            const maxSize = 1024;
-            let w = img.width, h = img.height;
-            if (w > maxSize || h > maxSize) {
-              if (w > h) { h = Math.round(h * maxSize / w); w = maxSize; }
-              else { w = Math.round(w * maxSize / h); h = maxSize; }
-            }
-            canvas.width = w; canvas.height = h;
-            canvas.getContext('2d')!.drawImage(img, 0, 0, w, h);
-            resolve(canvas.toDataURL('image/jpeg', 0.7));
-          };
-          img.src = photoUrl as string;
-        });
-        const uploadRes = await fetch('/api/upload-photo', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ imageData: compressed, filename: `direct-${Date.now()}.jpg` }),
-        });
-        if (uploadRes.ok) { const uploadData = await uploadRes.json(); photoUrl = uploadData.url; }
-      } catch (e) { console.error('직접입력 사진 업로드 오류:', e); }
-    }
-
-    let updatedPoints;
-    if (editingPoint) {
-      updatedPoints = directPoints.map((p) =>
-        p.id === editingPoint.id ? { ...p, ...directForm, photoUrl, ...coordData } : p
-      );
-    } else {
-      updatedPoints = [...directPoints, { id: Date.now(), ...directForm, photoUrl, ...coordData }];
-    }
-    setDirectPoints(updatedPoints);
-    const draft = JSON.parse(localStorage.getItem('draft-route') || '{}');
-    draft.directPoints = updatedPoints;
-    draft.lastModified = Date.now();
-    localStorage.setItem('draft-route', JSON.stringify(draft));
-    setIsSaving(false);
-    setShowDirectModal(false);
-  };
-
-  // 관리자 인증
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [showAuthModal, setShowAuthModal] = useState(false);
-  const [password, setPassword] = useState('');
-  const [authError, setAuthError] = useState('');
-
-  // 마운트 시 sessionStorage에서 인증 상태 복원 (지도뷰와 공유)
-  useEffect(() => {
-    if (sessionStorage.getItem('patrol-admin-auth') === 'true') {
-      setIsAuthenticated(true);
-    }
-  }, []);
-
-  // 이미지 업로드
-  const [uploadedImages, setUploadedImages] = useState<{ id: number; url: string; name: string }[]>([]);
-  const [extractedPoints, setExtractedPoints] = useState<{ 
-    id: number; originalId?: number | null; address: string; destination?: string | null; complaint: string;
-    lat?: number | null; lng?: number | null; placeName?: string | null;
-    source?: string | null; coordMessage?: string | null; photoDescription?: string | null; photoUrl?: string | null;
-    photoCrop?: { x: number; y: number; w: number; h: number } | null;
-  }[]>([]);
-
-  const handleInputTabClick = () => {
-    if (isAuthenticated) {
-      setActiveTab('input');
-    } else {
-      setShowAuthModal(true);
-    }
-  };
-
-  const handleViewTabClick = () => {
-    setActiveTab('view');
-    loadCurrentRoute();
-  };
-
-  useEffect(() => { loadCurrentRoute(); }, []);
-
-  // 완료상태 로드
-  const loadStatuses = async (date: string) => {
-    try {
-      const res = await fetch(`/api/get-status?date=${date}`);
-      if (res.ok) {
-        const data = await res.json();
-        setPointStatuses(data.statuses || {});
-      }
-    } catch {}
-  };
-
-  // 완료상태 키 생성 헬퍼
-  const statusKey = (point: { address: string; complaint: string; originalId?: number | null; destination?: string | null }) => {
-    // address가 비어있으면 destination을 대신 사용
+  const statusKey = (point: RoutePoint) => {
     const addrPart = point.address?.trim() || point.destination?.trim() || '';
-    // complaint가 null/undefined이면 빈 문자열로 통일
     const complaintPart = point.complaint?.trim() ?? '';
     return `${addrPart}:${complaintPart}:${point.originalId ?? 'none'}`;
   };
 
-  // 완료상태 저장
+  // ★ 펄스 CSS 삽입
+  useEffect(() => {
+    if (document.getElementById('pulse-style')) return;
+    const style = document.createElement('style');
+    style.id = 'pulse-style';
+    style.textContent = PULSE_STYLE;
+    document.head.appendChild(style);
+  }, []);
+
+  // 0. /map 직접 접근 방지 - sessionStorage 플래그 없으면 메인으로 리다이렉트
+  useEffect(() => {
+    const mapEntryFlag = sessionStorage.getItem('map-entry');
+    if (!mapEntryFlag) {
+      router.replace('/');
+      return;
+    }
+    // 플래그 소비 (1회용)
+    sessionStorage.removeItem('map-entry');
+  }, []);
+
+  // 1. 경로 + 상태 로드
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const today = new Date().toLocaleDateString('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/\. /g, '-').replace('.', '');
+        const routeRes = await fetch(`/api/get-route?date=${today}`);
+        if (!routeRes.ok) return;
+        const routeData = await routeRes.json();
+        routeRef.current = routeData;
+        setRoute(routeData);
+
+        const statusRes = await fetch(`/api/get-status?date=${routeData.date}`);
+        if (statusRes.ok) {
+          const statusData = await statusRes.json();
+          statusesRef.current = statusData.statuses || {};
+          setStatuses(statusData.statuses || {});
+        }
+      } catch (e) {
+        console.error(e);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    load();
+  }, []);
+
+  // 1-1. 경로 버전 폴링 (30초마다 새 버전 체크)
+  useEffect(() => {
+    const checkNewRoute = async () => {
+      try {
+        const today = new Date().toLocaleDateString('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/\. /g, '-').replace('.', '');
+        const res = await fetch(`/api/get-route?date=${today}`);
+        if (!res.ok) return;
+        const data = await res.json();
+        const currentVersion = routeRef.current?.version ?? -1;
+        if (data.version > currentVersion) {
+          setNewRouteAvailable(true);
+        }
+      } catch {}
+    };
+    const timer = setInterval(checkNewRoute, 30000);
+    return () => clearInterval(timer);
+  }, []);
+
+  // 1-2. 추가 방문지 폴링 (15초마다 변경 감지 - updatedAt 타임스탬프 비교)
+  useEffect(() => {
+    const checkNewAdditional = async () => {
+      try {
+        const today = new Date().toLocaleDateString('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/\. /g, '-').replace('.', '');
+        const res = await fetch(`/api/get-additional?date=${today}`);
+        if (!res.ok) return;
+        const data = await res.json();
+        const serverTs = data.updatedAt ?? 0;
+        const localTs = lastAdditionalTimestampRef.current;
+        // 초기 로드 후부터 비교 (-1이면 아직 초기화 전)
+        if (localTs >= 0 && serverTs > localTs) {
+          setNewAdditionalAvailable(true);
+        }
+      } catch {}
+    };
+    const timer = setInterval(checkNewAdditional, 15000);
+    return () => clearInterval(timer);
+  }, []);
+
+  // 2. 네이버 지도 SDK 로드
+  useEffect(() => {
+    // additionalPoints Redis API로 로드 (localStorage는 기기간 공유 안 됨)
+    const loadAdditionalPoints = async () => {
+      try {
+        const today = new Date().toLocaleDateString('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/\. /g, '-').replace('.', '');
+        const res = await fetch(`/api/get-additional?date=${today}`);
+        if (res.ok) {
+          const data = await res.json();
+          const validPoints = (data.points || []).filter((p: { lat?: number; lng?: number }) => p.lat && p.lng);
+          // 초기 카운트 기록 (폴링 비교용)
+          lastAdditionalTimestampRef.current = Date.now();
+          if (data.points?.length > 0) {
+            setAdditionalPoints(data.points);
+            additionalPointsRef.current = data.points;
+            console.log('[additional] Redis에서 추가지점 로드:', data.points.length, '개');
+          }
+        }
+      } catch (e) {
+        // Redis 실패 시 localStorage fallback
+        try {
+          const draft = JSON.parse(localStorage.getItem('draft-route') || '{}');
+          if (draft.additionalPoints?.length > 0) {
+            setAdditionalPoints(draft.additionalPoints);
+            additionalPointsRef.current = draft.additionalPoints;
+            console.log('[additional] localStorage fallback:', draft.additionalPoints.length, '개');
+          }
+        } catch {}
+      }
+    };
+    loadAdditionalPoints();
+  }, []);
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if ((window as any).naver?.maps) {
+      setMapReady(true);
+      return;
+    }
+    const script = document.createElement('script');
+    const clientId = process.env.NEXT_PUBLIC_NAVER_CLIENT_ID;
+    script.src = `https://oapi.map.naver.com/openapi/v3/maps.js?ncpKeyId=${clientId}&submodules=geocoder`;
+    script.async = true;
+    script.onload = () => setMapReady(true);
+    document.head.appendChild(script);
+  }, []);
+
+  // 3. 지도 초기화
+  useEffect(() => {
+    if (!mapReady || !mapRef.current || naverMapRef.current) return;
+    const map = new (window as any).naver.maps.Map(mapRef.current, {
+      center: new (window as any).naver.maps.LatLng(37.7381, 127.0338),
+      zoom: 13,
+      mapTypeId: (window as any).naver.maps.MapTypeId.NORMAL,
+      heading: 0,
+      rotateControl: false,
+    });
+    naverMapRef.current = map;
+
+    loadGeoJson(map);
+
+    (window as any).naver.maps.Event.addListener(map, 'zoom_changed', (zoom: number) => {
+      currentZoomRef.current = zoom;
+      applyZoomVisibility(zoom);
+    });
+  }, [mapReady]);
+
+  // 4. 경로 + 지도 모두 준비되면 그리기
+  useEffect(() => {
+    if (!naverMapRef.current || !route || routeDrawn) return;
+    drawRoute();
+    setRouteDrawn(true);
+  }, [naverMapRef.current, route, mapReady]);
+
+  // 5. 상태 변경시 마커 색상 업데이트
+  useEffect(() => {
+    if (!routeDrawn) return;
+    updateMarkerColors();
+  }, [statuses, routeDrawn]);
+
+  // 5-2. 마운트 시 admin 인증 상태 확인 - sessionStorage로 세션 내 유지 (탭 닫으면 초기화)
+  useEffect(() => {
+    if (sessionStorage.getItem('patrol-admin-auth') === 'true') setIsAdmin(true);
+  }, []);
+
+  // 5-3. additionalPoints 변경 시 마커 재렌더링
+  useEffect(() => {
+    if (!naverMapRef.current) return;
+    drawAdditionalMarkers(additionalPoints);
+  }, [additionalPoints, routeDrawn]);
+
+  // 5-3. 언마운트 시 위치 감시 정리
+  useEffect(() => {
+    return () => {
+      if (watchIdRef.current !== null) {
+        navigator.geolocation.clearWatch(watchIdRef.current);
+      }
+    };
+  }, []);
+
+  // 6. lineMode 변경시 경로선 재그리기 + localStorage 저장
+  useEffect(() => {
+    localStorage.setItem('patrol-linemode', lineMode);
+    if (!routeDrawn) return;
+    lineModeRef.current = lineMode;
+    redrawLines();
+  }, [lineMode]);
+
+  // 7. 위성/일반 지도 토글
+  const toggle3D = () => {
+    const map = naverMapRef.current;
+    if (!map) return;
+    const next = !is3D;
+    setIs3D(next);
+    const naver = (window as any).naver;
+    (map as any).setMapTypeId(next ? naver.maps.MapTypeId.HYBRID : naver.maps.MapTypeId.NORMAL);
+  };
+
+  const applyZoomVisibility = (zoom: number) => {
+    const showMarkers = zoom >= ZOOM_THRESHOLD;
+    const showPulse = zoom >= PULSE_THRESHOLD;
+    const showLabels = zoom < ZOOM_THRESHOLD;
+
+    // 마커 표시/숨김 + 펄스 ON/OFF 재렌더링 (routeRef로 클로저 문제 회피)
+    const currentRoute = routeRef.current;
+    if (currentRoute) {
+      currentRoute.points.forEach((point, idx) => {
+        const marker = markersRef.current[idx];
+        if (!marker) return;
+        const color = getMarkerColor(point);
+        marker.setIcon({
+          content: makeMarkerContent(point, color, showPulse, zoom),
+        });
+        marker.setMap(showMarkers ? naverMapRef.current : null);
+      });
+    } else {
+      markersRef.current.forEach(marker => {
+        marker.setMap(showMarkers ? naverMapRef.current : null);
+      });
+    }
+
+    labelsRef.current.forEach(label => {
+      label.setMap(showLabels ? naverMapRef.current : null);
+    });
+
+    // 추가지점 마커 가시성 업데이트
+    updateAdditionalMarkersVisibility(zoom);
+
+    // 펄스 활성화 시 DOM 반영 후 애니메이션 시작
+    if (showPulse) {
+      setTimeout(() => startPulseAnimations(), 300);
+    }
+  };
+
+  const loadGeoJson = async (map: naver.maps.Map) => {
+    try {
+      const res = await fetch('/uijeongbu.geojson');
+      const geoJson = await res.json();
+      const naver = (window as any).naver;
+
+      geoJson.features.forEach((feature: any) => {
+        const coords = feature.geometry.type === 'MultiPolygon'
+          ? feature.geometry.coordinates
+          : [feature.geometry.coordinates];
+
+        coords.forEach((polygon: any) => {
+          polygon.forEach((ring: any) => {
+            const path = ring.map((c: number[]) =>
+              new naver.maps.LatLng(c[1], c[0])
+            );
+            new naver.maps.Polygon({
+              map,
+              paths: [path],
+              fillColor: 'rgba(100,180,255,0.05)',
+              fillOpacity: 1,
+              strokeColor: 'rgba(100,180,255,0.5)',
+              strokeWeight: 1.5,
+              strokeOpacity: 1,
+            });
+          });
+        });
+
+        if (feature.geometry.type === 'Polygon' || feature.geometry.type === 'MultiPolygon') {
+          const nm: string = feature.properties.adm_nm || '';
+          const shortNm = nm.replace('경기도 의정부시 ', '');
+          const coords0 = feature.geometry.type === 'MultiPolygon'
+            ? feature.geometry.coordinates[0][0]
+            : feature.geometry.coordinates[0];
+          let sumLat = 0, sumLng = 0;
+          coords0.forEach((c: number[]) => { sumLng += c[0]; sumLat += c[1]; });
+          const centerLat = sumLat / coords0.length;
+          const centerLng = sumLng / coords0.length;
+
+          const label = new naver.maps.Marker({
+            map,
+            position: new naver.maps.LatLng(centerLat, centerLng),
+            icon: {
+              content: `<div style="color:rgba(180,220,255,0.9);font-size:13px;font-weight:bold;white-space:nowrap;text-shadow:0 1px 3px #000,0 0 8px rgba(0,0,0,0.8);">${shortNm}</div>`,
+              anchor: new naver.maps.Point(0, 0),
+            },
+            zIndex: 1,
+          });
+          labelsRef.current.push(label);
+        }
+      });
+    } catch (e) {
+      console.error('GeoJSON 로드 실패:', e);
+    }
+  };
+
+  const getMarkerColor = (point: RoutePoint) => {
+    if (point.source === 'fixed') return '#f57f17';
+    const st = statusesRef.current[statusKey(point)];
+    if (st && DONE_STATUSES.includes(st.status)) return '#1565c0';
+    return '#FF6B35';
+  };
+
+  const getLineColor = (fromPoint: RoutePoint, toPoint: RoutePoint) => {
+    // toPoint가 fixed(종점)이면 fromPoint 완료 여부로 결정
+    if (toPoint.source === 'fixed') {
+      const fromSt = statusesRef.current[statusKey(fromPoint)];
+      return fromSt && DONE_STATUSES.includes(fromSt.status) ? '#1565c0' : '#FF6B35';
+    }
+    // fromPoint가 fixed(기점)이면 toPoint 완료 여부로 결정 (일반 로직과 동일)
+    const toSt = statusesRef.current[statusKey(toPoint)];
+    return toSt && DONE_STATUSES.includes(toSt.status) ? '#1565c0' : '#FF6B35';
+  };
+
+  // ★ 추가지점 경로선 색상 결정 (추가지점 완료 + toPoint 완료 모두 체크)
+  const getAdditionalLineColor = (point: AdditionalPoint, isFromSegment: boolean, toPoint?: RoutePoint) => {
+    const addrPart = point.address?.trim() || point.destination?.trim() || '';
+    const key = `${addrPart}:${(point.complaint || '').trim()}:none`;
+    const addSt = statusesRef.current[key];
+    const addDone = addSt && DONE_STATUSES.includes(addSt.status);
+    if (isFromSegment) {
+      // fromPoint → A1 구간: A1 완료 여부
+      return addDone ? '#1565c0' : '#FF6B35';
+    } else {
+      // A1 → toPoint 구간: A1 완료 + toPoint 완료 모두 되어야 파란색
+      if (!addDone) return '#FF6B35';
+      if (toPoint) {
+        const toSt = statusesRef.current[statusKey(toPoint)];
+        return toSt && DONE_STATUSES.includes(toSt.status) ? '#1565c0' : '#FF6B35';
+      }
+      return '#FF6B35';
+    }
+  };
+
+  // ★ 추가 지점 마름모 마커 콘텐츠 생성
+  // ★ 추가지점 마커 애니메이션 CSS 삽입
+  useEffect(() => {
+    if (document.getElementById('additional-marker-style')) return;
+    const style = document.createElement('style');
+    style.id = 'additional-marker-style';
+    style.textContent = `
+      @keyframes additional-pulse {
+        0%   { transform: scale(1) rotate(0deg);   opacity: 0.9; }
+        50%  { transform: scale(1.15) rotate(5deg); opacity: 1; }
+        100% { transform: scale(1) rotate(0deg);   opacity: 0.9; }
+      }
+      .additional-marker-anim {
+        animation: additional-pulse 2s ease-in-out infinite;
+        display: block;
+      }
+    `;
+    document.head.appendChild(style);
+  }, []);
+  const additionalMarkerUrlsRef = useRef<Record<string, string>>({});
+
+  const getAdditionalMarkerUrl = (label: string, isDone: boolean): string => {
+    const cacheKey = `${label}_${isDone}`;
+    if (additionalMarkerUrlsRef.current[cacheKey]) {
+      return additionalMarkerUrlsRef.current[cacheKey];
+    }
+    if (typeof window === 'undefined' || typeof document === 'undefined') return '';
+    const size = 48;
+    try {
+      const canvas = document.createElement('canvas');
+      canvas.width = size;
+      canvas.height = size;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return '';
+      const cx = size / 2;
+      const cy = size / 2;
+      const r = size / 2 - 3;
+      ctx.beginPath();
+      ctx.moveTo(cx, cy - r);
+      ctx.lineTo(cx + r, cy);
+      ctx.lineTo(cx, cy + r);
+      ctx.lineTo(cx - r, cy);
+      ctx.closePath();
+      ctx.shadowColor = 'rgba(0,0,0,0.4)';
+      ctx.shadowBlur = 4;
+      ctx.shadowOffsetY = 2;
+      ctx.fillStyle = isDone ? '#7b1fa2' : '#f97316';
+      ctx.fill();
+      ctx.shadowColor = 'transparent';
+      ctx.strokeStyle = 'white';
+      ctx.lineWidth = 2.5;
+      ctx.stroke();
+      ctx.fillStyle = 'white';
+      ctx.font = `bold 11px Arial, sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(label, cx, cy + 1);
+      const url = canvas.toDataURL('image/png');
+      additionalMarkerUrlsRef.current[cacheKey] = url;
+      return url;
+    } catch (e) {
+      console.error('[additional] Canvas 마커 생성 실패:', e);
+      return '';
+    }
+  };
+
+  // ★ 추가 지점 마커 전체 그리기 + insertAfterOrder 경로선 연결
+  const drawAdditionalMarkers = (points: AdditionalPoint[]) => {
+    if (!naverMapRef.current) return;
+    const naver = (window as any).naver;
+    const map = naverMapRef.current;
+    const showMarkers = currentZoomRef.current >= ZOOM_THRESHOLD;
+
+    additionalMarkersRef.current.forEach(m => m.setMap(null));
+    additionalMarkersRef.current = [];
+
+    points.forEach((point, idx) => {
+      if (!point.lat || !point.lng) return;
+
+      const addrPart = point.address?.trim() || point.destination?.trim() || '';
+      const key = `${addrPart}:${(point.complaint || '').trim()}:none`;
+      const st = statusesRef.current[key];
+      const isDone = !!(st && DONE_STATUSES.includes(st.status));
+      const label = `A${idx + 1}`;
+      const dataUrl = getAdditionalMarkerUrl(label, isDone);
+      const name = (point.destination || point.address).slice(0, 10);
+
+      // ★ content HTML + 애니메이션 — icon.url은 CSS 애니메이션 불가
+      const marker = new naver.maps.Marker({
+        map: showMarkers ? map : null,
+        position: new naver.maps.LatLng(point.lat, point.lng),
+        icon: {
+          content: `<div style="position:relative;width:48px;height:56px;cursor:pointer;">
+            <div style="position:absolute;bottom:50px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,0.5);color:#fff;font-size:9px;padding:1px 4px;border-radius:3px;white-space:nowrap;max-width:80px;overflow:hidden;text-overflow:ellipsis;">${name}</div>
+            <img src="${dataUrl}" width="48" height="48" style="position:absolute;top:0;left:0;display:block;" class="additional-marker-anim" />
+          </div>`,
+          anchor: new naver.maps.Point(24, 24),
+        },
+        zIndex: 10,
+      });
+
+      naver.maps.Event.addListener(marker, 'click', () => {
+        if (currentZoomRef.current >= PULSE_THRESHOLD) {
+          setSelectedAdditional(point);
+          setShowInsertModal(true);
+        }
+      });
+
+      const startLongPress = () => {
+        longPressTimerRef.current = setTimeout(() => {
+          blinkAdditionalSegment(point);
+        }, 700);
+      };
+      const cancelLongPress = () => {
+        if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current);
+      };
+      naver.maps.Event.addListener(marker, 'mousedown', startLongPress);
+      naver.maps.Event.addListener(marker, 'mouseup', cancelLongPress);
+      naver.maps.Event.addListener(marker, 'touchstart', startLongPress);
+      naver.maps.Event.addListener(marker, 'touchend', cancelLongPress);
+
+      additionalMarkersRef.current.push(marker);
+    });
+
+    // drawAdditionalPolylines 자체에서 roadDrawingRef 체크함
+    drawAdditionalPolylines(points);
+  };
+
+  // ★ fromPoint → 추가지점 구간 blink (14번 롱프레스용)
+  const blinkFromPointToAdditional = (fromPoint: RoutePoint, addPoint: AdditionalPoint) => {
+    if (!naverMapRef.current || !addPoint.lat || !addPoint.lng) return;
+    const naver = (window as any).naver;
+    const map = naverMapRef.current;
+
+    const cleanupBlink = () => {
+      if (blinkIntervalRef.current) { clearInterval(blinkIntervalRef.current); blinkIntervalRef.current = null; }
+      if (blinkRestoreRef.current) { clearTimeout(blinkRestoreRef.current); blinkRestoreRef.current = null; }
+      if (blinkPolylineRef.current) { blinkPolylineRef.current.setMap(null); blinkPolylineRef.current = null; }
+      blinkArrowsRef.current.forEach(a => {
+        a.setMap(null);
+        const i = arrowMarkersRef.current.indexOf(a);
+        if (i !== -1) arrowMarkersRef.current.splice(i, 1);
+      });
+      blinkArrowsRef.current = [];
+    };
+    cleanupBlink();
+
+    // ★ 저장된 실제 경로 좌표 사용 (도로 모드 경로 반영)
+    let coords: { lat: number; lng: number }[] = [];
+    const entry = additionalPolylinesByIdRef.current.get(addPoint.id);
+    if (entry && entry.fromCoords.length >= 2) {
+      coords = entry.fromCoords;
+    }
+    if (coords.length < 2) {
+      coords = [
+        { lat: fromPoint.lat, lng: fromPoint.lng },
+        { lat: addPoint.lat!, lng: addPoint.lng! },
+      ];
+    }
+
+    blinkPolylineRef.current = new naver.maps.Polyline({
+      map,
+      path: coords.map(c => new naver.maps.LatLng(c.lat, c.lng)),
+      strokeColor: '#1b5e20',
+      strokeWeight: 8,
+      strokeOpacity: 1,
+      zIndex: 100,
+    });
+
+    const countBefore = arrowMarkersRef.current.length;
+    placeArrows(coords, null, map, naver);
+    blinkArrowsRef.current = arrowMarkersRef.current.slice(countBefore);
+
+    let visible = true;
+    blinkIntervalRef.current = setInterval(() => {
+      visible = !visible;
+      if (blinkPolylineRef.current) blinkPolylineRef.current.setOptions({ strokeOpacity: visible ? 1 : 0 });
+      blinkArrowsRef.current.forEach(a => a.setMap(visible ? map : null));
+    }, 300);
+
+    blinkRestoreRef.current = setTimeout(() => { cleanupBlink(); }, 5000);
+  };
+
+  // ★ 추가지점 경로선 초록 깜박임 (A1 롱프레스용) — A1→10번 구간만
+  const blinkAdditionalSegment = (point: AdditionalPoint) => {
+    if (!naverMapRef.current || !point.lat || !point.lng || point.insertAfterOrder == null) return;
+    const naver = (window as any).naver;
+    const map = naverMapRef.current;
+    const routePoints = routeRef.current?.points ?? [];
+    const allAdditional = additionalPointsRef.current;
+
+    // ★ 체인을 거슬러 올라가 최초 route point의 order를 찾는 헬퍼
+    const findRootOrder = (ap: AdditionalPoint): number | null => {
+      if (typeof ap.insertAfterOrder === 'number') return ap.insertAfterOrder;
+      if (typeof ap.insertAfterOrder === 'string' && ap.insertAfterOrder.startsWith('add_')) {
+        const prevId = parseInt(ap.insertAfterOrder.replace('add_', ''));
+        const prev = allAdditional.find(p => p.id === prevId);
+        if (prev) return findRootOrder(prev);
+      }
+      return null;
+    };
+
+    // ★ 다음 지점 찾기 - insertAfterOrder 타입에 따라 분기
+    let fromLat = point.lat!;
+    let fromLng = point.lng!;
+    let toLat: number | null = null;
+    let toLng: number | null = null;
+
+    // 다음 추가지점이 있으면 그쪽으로, 없으면 route point로
+    const nextAdd = allAdditional.find(ap =>
+      typeof ap.insertAfterOrder === 'string' &&
+      ap.insertAfterOrder === `add_${point.id}`
+    );
+
+    if (nextAdd && nextAdd.lat && nextAdd.lng) {
+      toLat = nextAdd.lat;
+      toLng = nextAdd.lng;
+    } else {
+      // 체인 거슬러 올라가 root order 찾기
+      const rootOrder = findRootOrder(point);
+      if (rootOrder !== null) {
+        const toPoint = routePoints.find(p => p.order === rootOrder + 1);
+        if (toPoint) { toLat = toPoint.lat; toLng = toPoint.lng; }
+      }
+    }
+
+    if (toLat === null || toLng === null) return;
+
+    const cleanupBlink = () => {
+      if (blinkIntervalRef.current) { clearInterval(blinkIntervalRef.current); blinkIntervalRef.current = null; }
+      if (blinkRestoreRef.current) { clearTimeout(blinkRestoreRef.current); blinkRestoreRef.current = null; }
+      if (blinkPolylineRef.current) { blinkPolylineRef.current.setMap(null); blinkPolylineRef.current = null; }
+      blinkArrowsRef.current.forEach(a => {
+        a.setMap(null);
+        const i = arrowMarkersRef.current.indexOf(a);
+        if (i !== -1) arrowMarkersRef.current.splice(i, 1);
+      });
+      blinkArrowsRef.current = [];
+    };
+    cleanupBlink();
+
+    // ★ "현재 추가지점 → 다음 지점" 구간의 실제 경로 좌표 사용
+    // 다음이 추가지점이면 그 추가지점의 fromCoords, 다음이 route point면 현재의 toCoords
+    let coords: { lat: number; lng: number }[] = [];
+
+    if (nextAdd) {
+      // An→An+1: 다음 추가지점의 fromCoords
+      const nextEntry = additionalPolylinesByIdRef.current.get(nextAdd.id);
+      if (nextEntry && nextEntry.fromCoords.length >= 2) {
+        coords = nextEntry.fromCoords;
+      }
+    } else {
+      // A(last)→route point: 현재 추가지점의 toCoords
+      const entry = additionalPolylinesByIdRef.current.get(point.id);
+      if (entry && entry.toCoords.length >= 2) {
+        coords = entry.toCoords;
+      }
+    }
+
+    if (coords.length < 2) {
+      coords = [{ lat: fromLat, lng: fromLng }, { lat: toLat, lng: toLng }];
+    }
+
+    blinkPolylineRef.current = new naver.maps.Polyline({
+      map,
+      path: coords.map(c => new naver.maps.LatLng(c.lat, c.lng)),
+      strokeColor: '#1b5e20',
+      strokeWeight: 8,
+      strokeOpacity: 1,
+      zIndex: 100,
+    });
+
+    const countBefore = arrowMarkersRef.current.length;
+    placeArrows(coords, null, map, naver);
+    blinkArrowsRef.current = arrowMarkersRef.current.slice(countBefore);
+
+    let visible = true;
+    blinkIntervalRef.current = setInterval(() => {
+      visible = !visible;
+      if (blinkPolylineRef.current) blinkPolylineRef.current.setOptions({ strokeOpacity: visible ? 1 : 0 });
+      blinkArrowsRef.current.forEach(a => a.setMap(visible ? map : null));
+    }, 300);
+
+    blinkRestoreRef.current = setTimeout(() => { cleanupBlink(); }, 5000);
+  };
+
+  // ★ 추가지점 경로선 연결 (insertAfterOrder 기반)
+  // hiddenPolylinesRef: 추가지점 삽입으로 숨겨진 기존 경로선 인덱스 추적
+  const hiddenPolylinesRef = useRef<number[]>([]);
+  // segmentArrowsRef: 구간(order) 별 화살표 마커 추적 - 추가지점 삽입 시 숨김 처리용
+  const segmentArrowsRef = useRef<Map<number, naver.maps.Marker[]>>(new Map());
+  const additionalPolylinesRef = useRef<naver.maps.Polyline[]>([]);
+  const additionalArrowMarkersRef = useRef<naver.maps.Marker[]>([]); // ★ 추가지점 화살표 별도 추적
+  // ★ 추가지점별 구간 경로선 참조 (색상 업데이트 + 롱프레스 도로 좌표용)
+  const additionalPolylinesByIdRef = useRef<Map<number, { fromPl: naver.maps.Polyline | null; toPl: naver.maps.Polyline | null; fromCoords: {lat:number;lng:number}[]; toCoords: {lat:number;lng:number}[] }>>(new Map());
+
+  const drawAdditionalPolylines = (points: AdditionalPoint[]) => {
+    if (!naverMapRef.current || !routeRef.current) return;
+
+    // ★ 도로 경로 그리는 중이면 스킵 - applyAdditionalAfterRoad가 완료 후 처리
+    if (roadDrawingRef.current) {
+      console.log('[additional] drawAdditionalPolylines SKIP - 도로 그리는 중');
+      return;
+    }
+
+    const naver = (window as any).naver;
+    const map = naverMapRef.current;
+    const routePoints = routeRef.current.points;
+
+    console.log('[additional] drawAdditionalPolylines 호출 - 추가지점:', points.length, '/ polylinesRef:', polylinesRef.current.length);
+
+    // 기존 추가지점 경로선 + 화살표 정리
+    additionalPolylinesRef.current.forEach(p => p.setMap(null));
+    additionalPolylinesRef.current = [];
+    additionalPolylinesByIdRef.current = new Map();
+    additionalArrowMarkersRef.current.forEach(a => {
+      a.setMap(null);
+      const i = arrowMarkersRef.current.indexOf(a);
+      if (i !== -1) arrowMarkersRef.current.splice(i, 1);
+    });
+    additionalArrowMarkersRef.current = [];
+
+    // 이전에 숨겼던 기존 경로선 복원
+    hiddenPolylinesRef.current.forEach(idx => {
+      const pl = polylinesRef.current[idx];
+      if (pl) pl.setMap(map);
+      // ★ 해당 구간(order = idx번째 point의 order) 화살표도 복원
+      const routePts = routeRef.current?.points;
+      if (routePts && routePts[idx]) {
+        const segArrows = segmentArrowsRef.current.get(routePts[idx].order);
+        if (segArrows) segArrows.forEach(a => a.setMap(map));
+      }
+    });
+    hiddenPolylinesRef.current = [];
+
+    const isRoadMode = lineModeRef.current === 'road';
+
+    // ★ "add_X"를 insertAfterOrder로 사용하는 추가지점들의 prevAdd id 집합
+    // → prevAdd는 자신의 →toPoint 구간선을 그리면 안 됨 (뒤에 오는 추가지점이 대신 연결)
+    const prevAddIds = new Set<number>();
+    points.forEach(p => {
+      if (typeof p.insertAfterOrder === 'string' && p.insertAfterOrder.startsWith('add_')) {
+        prevAddIds.add(parseInt(p.insertAfterOrder.replace('add_', '')));
+      }
+    });
+
+    // ★ 앞 지점이 route point인 추가지점부터 처리 후, add_X 참조 추가지점 처리
+    const sortedPoints = [...points].sort((a, b) => {
+      const aIsAfterAdd = typeof a.insertAfterOrder === 'string';
+      const bIsAfterAdd = typeof b.insertAfterOrder === 'string';
+      if (aIsAfterAdd && !bIsAfterAdd) return 1;
+      if (!aIsAfterAdd && bIsAfterAdd) return -1;
+      return 0;
+    });
+
+    sortedPoints.forEach(point => {
+      if (!point.lat || !point.lng || point.insertAfterOrder == null) return;
+
+      const isAfterAdditional = typeof point.insertAfterOrder === 'string' && (point.insertAfterOrder as string).startsWith('add_');
+
+      let fromLat: number;
+      let fromLng: number;
+      let toPoint: RoutePoint | undefined;
+
+      if (isAfterAdditional) {
+        // ★ 앞 지점이 추가지점인 경우 — "add_${id}" 파싱
+        const prevAddId = parseInt((point.insertAfterOrder as string).replace('add_', ''));
+        const prevAdd = points.find(p => p.id === prevAddId);
+        if (!prevAdd?.lat || !prevAdd?.lng) return;
+        fromLat = prevAdd.lat!;
+        fromLng = prevAdd.lng!;
+        // toPoint: prevAdd의 insertAfterOrder 기준으로 다음 route point 찾기
+        if (typeof prevAdd.insertAfterOrder === 'number') {
+          toPoint = routePoints.find(p => p.order === (prevAdd.insertAfterOrder as number) + 1);
+          // ★ prevAdd(A2)의 기존 route 경로선(A2→15) 숨기기
+          const prevAddFromIdx = routePoints.findIndex(p => p.order === (prevAdd.insertAfterOrder as number));
+          if (prevAddFromIdx >= 0 && prevAddFromIdx < polylinesRef.current.length) {
+            const existingPl = polylinesRef.current[prevAddFromIdx];
+            if (existingPl) {
+              existingPl.setMap(null);
+              if (!hiddenPolylinesRef.current.includes(prevAddFromIdx)) {
+                hiddenPolylinesRef.current.push(prevAddFromIdx);
+              }
+            }
+            // ★ 해당 구간의 화살표도 숨기기
+            const segArrows = segmentArrowsRef.current.get(prevAdd.insertAfterOrder as number);
+            if (segArrows) segArrows.forEach(a => a.setMap(null));
+          }
+        } else if (typeof prevAdd.insertAfterOrder === 'string') {
+          // ★ 재귀적으로 체인 거슬러 올라가 root order 찾기 (A3→A2→A1→order 4)
+          let cur: AdditionalPoint | undefined = prevAdd;
+          while (cur && typeof cur.insertAfterOrder === 'string' && cur.insertAfterOrder.startsWith('add_')) {
+            const pid = parseInt(cur.insertAfterOrder.replace('add_', ''));
+            cur = points.find(p => p.id === pid);
+          }
+          if (cur && typeof cur.insertAfterOrder === 'number') {
+            toPoint = routePoints.find(p => p.order === (cur!.insertAfterOrder as number) + 1);
+          }
+        }
+      } else {
+        // ★ 앞 지점이 일반 route point인 경우 (기존 로직)
+        const fromOrder = point.insertAfterOrder as number;
+        const toOrder = fromOrder + 1;
+        const fromIdx = routePoints.findIndex(p => p.order === fromOrder);
+        if (fromIdx >= 0 && fromIdx < polylinesRef.current.length) {
+          const existingPl = polylinesRef.current[fromIdx];
+          if (existingPl) {
+            existingPl.setMap(null);
+            if (!hiddenPolylinesRef.current.includes(fromIdx)) {
+              hiddenPolylinesRef.current.push(fromIdx);
+            }
+          }
+          // ★ 해당 구간의 화살표도 숨기기
+          const segArrows = segmentArrowsRef.current.get(fromOrder);
+          if (segArrows) segArrows.forEach(a => a.setMap(null));
+        }
+        const fromPoint = routePoints.find(p => p.order === fromOrder);
+        if (!fromPoint) return;
+        fromLat = fromPoint.lat;
+        fromLng = fromPoint.lng;
+        toPoint = routePoints.find(p => p.order === toOrder);
+      }
+
+      const addLat = point.lat!;
+      const addLng = point.lng!;
+
+      if (isRoadMode) {
+        const drawRoadSegments = async () => {
+          const segPairs = [];
+          segPairs.push({ fromLng, fromLat, toLng: addLng, toLat: addLat });
+          // ★ 이 추가지점이 다른 추가지점의 앞 지점으로 쓰이면 →toPoint 구간 생략
+          if (toPoint && !prevAddIds.has(point.id)) segPairs.push({ fromLng: addLng, fromLat: addLat, toLng: toPoint.lng, toLat: toPoint.lat });
+
+          try {
+            const res = await fetch('/api/ors-route', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                date: routeRef.current?.date ?? '',
+                version: `additional_${point.id}`,
+                segments: segPairs,
+              }),
+            });
+            if (res.ok) {
+              const data = await res.json();
+              if (data.results?.length) {
+                // ★ segPairs 개수만큼만 처리 (캐시 결과가 더 많을 수 있음)
+                data.results.slice(0, segPairs.length).forEach((r: { ok: boolean; coords?: { lat: number; lng: number }[] }, i: number) => {
+                  const fallback = i === 0
+                    ? [{ lat: fromLat, lng: fromLng }, { lat: addLat, lng: addLng }]
+                    : (toPoint ? [{ lat: addLat, lng: addLng }, { lat: toPoint.lat, lng: toPoint.lng }] : []);
+                  const coords = (r.ok && r.coords && r.coords.length > 1) ? r.coords : fallback;
+                  if (coords.length < 2) return;
+                  const segColor = i === 0
+                    ? getAdditionalLineColor(point, true)
+                    : getAdditionalLineColor(point, false, toPoint);
+                  const pl = new naver.maps.Polyline({
+                    map,
+                    path: coords.map((c: { lat: number; lng: number }) => new naver.maps.LatLng(c.lat, c.lng)),
+                    strokeColor: segColor, strokeWeight: 6, strokeOpacity: 1, zIndex: 8,
+                  });
+                  additionalPolylinesRef.current.push(pl);
+                  const beforeCount = arrowMarkersRef.current.length;
+                  placeArrows(coords, null, map, naver);
+                  additionalArrowMarkersRef.current.push(...arrowMarkersRef.current.slice(beforeCount));
+                  // ★ 추가지점별 경로선 참조 저장
+                  const existing = additionalPolylinesByIdRef.current.get(point.id) || { fromPl: null, toPl: null, fromCoords: [], toCoords: [] };
+                  if (i === 0) additionalPolylinesByIdRef.current.set(point.id, { ...existing, fromPl: pl, fromCoords: coords });
+                  else additionalPolylinesByIdRef.current.set(point.id, { ...existing, toPl: pl, toCoords: coords });
+                });
+                return;
+              }
+            }
+          } catch {}
+          drawStraightAdditionalLines();
+        };
+
+        const drawStraightAdditionalLines = () => {
+          const coords1 = [{ lat: fromLat, lng: fromLng }, { lat: addLat, lng: addLng }];
+          const line1 = new naver.maps.Polyline({ map, path: coords1.map(c => new naver.maps.LatLng(c.lat, c.lng)), strokeColor: getAdditionalLineColor(point, true), strokeWeight: 6, strokeOpacity: 1, zIndex: 8 });
+          additionalPolylinesRef.current.push(line1);
+          const b1 = arrowMarkersRef.current.length;
+          placeArrows(coords1, null, map, naver);
+          additionalArrowMarkersRef.current.push(...arrowMarkersRef.current.slice(b1));
+
+          let line2: naver.maps.Polyline | null = null;
+          let coords2: {lat:number;lng:number}[] = [];
+          // ★ 이 추가지점이 다른 추가지점의 앞 지점으로 쓰이면 →toPoint 구간선 생략
+          if (toPoint && !prevAddIds.has(point.id)) {
+            coords2 = [{ lat: addLat, lng: addLng }, { lat: toPoint.lat, lng: toPoint.lng }];
+            line2 = new naver.maps.Polyline({ map, path: coords2.map(c => new naver.maps.LatLng(c.lat, c.lng)), strokeColor: getAdditionalLineColor(point, false, toPoint), strokeWeight: 6, strokeOpacity: 1, zIndex: 8 });
+            additionalPolylinesRef.current.push(line2 as naver.maps.Polyline);
+            const b2 = arrowMarkersRef.current.length;
+            placeArrows(coords2, null, map, naver);
+            additionalArrowMarkersRef.current.push(...arrowMarkersRef.current.slice(b2));
+          }
+          additionalPolylinesByIdRef.current.set(point.id, { fromPl: line1, toPl: line2, fromCoords: coords1, toCoords: coords2 });
+        };
+
+        drawRoadSegments();
+
+      } else {
+        // 직선 모드
+        const coords1 = [{ lat: fromLat, lng: fromLng }, { lat: addLat, lng: addLng }];
+        const line1 = new naver.maps.Polyline({ map, path: coords1.map(c => new naver.maps.LatLng(c.lat, c.lng)), strokeColor: getAdditionalLineColor(point, true), strokeWeight: 6, strokeOpacity: 1, zIndex: 8 });
+        additionalPolylinesRef.current.push(line1);
+        const b1 = arrowMarkersRef.current.length;
+        placeArrows(coords1, null, map, naver);
+        additionalArrowMarkersRef.current.push(...arrowMarkersRef.current.slice(b1));
+
+        let line2: naver.maps.Polyline | null = null;
+        let coords2: {lat:number;lng:number}[] = [];
+        // ★ 이 추가지점이 다른 추가지점의 앞 지점으로 쓰이면 →toPoint 구간선 생략
+        if (toPoint && !prevAddIds.has(point.id)) {
+          coords2 = [{ lat: addLat, lng: addLng }, { lat: toPoint.lat, lng: toPoint.lng }];
+          line2 = new naver.maps.Polyline({ map, path: coords2.map(c => new naver.maps.LatLng(c.lat, c.lng)), strokeColor: getAdditionalLineColor(point, false, toPoint), strokeWeight: 6, strokeOpacity: 1, zIndex: 8 });
+          additionalPolylinesRef.current.push(line2 as naver.maps.Polyline);
+          const b2 = arrowMarkersRef.current.length;
+          placeArrows(coords2, null, map, naver);
+          additionalArrowMarkersRef.current.push(...arrowMarkersRef.current.slice(b2));
+        }
+        // ★ 추가지점별 경로선 참조 저장
+        additionalPolylinesByIdRef.current.set(point.id, { fromPl: line1, toPl: line2, fromCoords: coords1, toCoords: coords2 });
+      }
+    });
+  };
+
+  // ★ 추가 지점 마커 줌 가시성 업데이트
+  const updateAdditionalMarkersVisibility = (zoom: number) => {
+    const showMarkers = zoom >= ZOOM_THRESHOLD;
+    // 마커(마름모)만 줌에 따라 표시/숨김
+    additionalMarkersRef.current.forEach(m => {
+      m.setMap(showMarkers ? naverMapRef.current : null);
+    });
+    // 경로선과 화살표는 항상 표시 (일반 route 경로선과 동일하게)
+    additionalPolylinesRef.current.forEach(p => {
+      p.setMap(naverMapRef.current);
+    });
+    additionalArrowMarkersRef.current.forEach(a => {
+      a.setMap(naverMapRef.current);
+    });
+  };
+
+  // ★ 마커 콘텐츠 - showPulse: JS 인라인 애니메이션으로 펄스 구현
+  const makeMarkerContent = (point: RoutePoint, color: string, showPulse = false, zoom = 14) => {
+    const label = point.source === 'fixed' ? '🏛' : String(point.order);
+    const isFixed = point.source === 'fixed';
+    const isDone = color === '#1565c0';
+    // 완료(파란색) 마커는 펄스 없음
+    const activePulse = showPulse && !isDone && !isFixed;
+    const pulseColor = 'rgba(255,107,53,0.75)';
+    const pulseId = `pulse-${point.order}-${point.lat}`.replace(/\./g, '_');
+    // 줌 레벨에 따라 펄스 최대 배율 동적 조정
+    // 줌 14 → scale 3.5, 줌 16 → scale 2.0, 줌 18 → scale 1.5
+    const maxScale = Math.max(1.5, 3.5 - (zoom - 14) * 0.5);
+    const pulseDiv = activePulse ? `
+      <div data-pulse="${pulseId}-0" data-delay="0" data-maxscale="${maxScale}" style="position:absolute;top:50%;left:50%;width:28px;height:28px;margin-left:-14px;margin-top:-14px;border-radius:50%;border:1.5px solid ${pulseColor};background:rgba(255,107,53,0.1);pointer-events:none;will-change:transform,opacity;transform-origin:center center;"></div>
+      <div data-pulse="${pulseId}-1" data-delay="333" data-maxscale="${maxScale}" style="position:absolute;top:50%;left:50%;width:28px;height:28px;margin-left:-14px;margin-top:-14px;border-radius:50%;border:1.5px solid ${pulseColor};background:rgba(255,107,53,0.1);pointer-events:none;will-change:transform,opacity;transform-origin:center center;"></div>
+      <div data-pulse="${pulseId}-2" data-delay="666" data-maxscale="${maxScale}" style="position:absolute;top:50%;left:50%;width:28px;height:28px;margin-left:-14px;margin-top:-14px;border-radius:50%;border:1.5px solid ${pulseColor};background:rgba(255,107,53,0.1);pointer-events:none;will-change:transform,opacity;transform-origin:center center;"></div>
+      <div data-pulse="${pulseId}-3" data-delay="1000" data-maxscale="${maxScale}" style="position:absolute;top:50%;left:50%;width:28px;height:28px;margin-left:-14px;margin-top:-14px;border-radius:50%;border:1.5px solid ${pulseColor};background:rgba(255,107,53,0.1);pointer-events:none;will-change:transform,opacity;transform-origin:center center;"></div>
+      <div data-pulse="${pulseId}-4" data-delay="1333" data-maxscale="${maxScale}" style="position:absolute;top:50%;left:50%;width:28px;height:28px;margin-left:-14px;margin-top:-14px;border-radius:50%;border:1.5px solid ${pulseColor};background:rgba(255,107,53,0.1);pointer-events:none;will-change:transform,opacity;transform-origin:center center;"></div>
+      <div data-pulse="${pulseId}-5" data-delay="1666" data-maxscale="${maxScale}" style="position:absolute;top:50%;left:50%;width:28px;height:28px;margin-left:-14px;margin-top:-14px;border-radius:50%;border:1.5px solid ${pulseColor};background:rgba(255,107,53,0.1);pointer-events:none;will-change:transform,opacity;transform-origin:center center;"></div>` : '';
+    const cursorStyle = (activePulse && !isFixed) ? 'cursor:pointer;' : 'cursor:default;';
+    return `
+      <div style="position:relative;display:flex;flex-direction:column;align-items:center;overflow:visible;user-select:none;-webkit-user-select:none;${cursorStyle}">
+        ${pulseDiv}
+        <div style="
+          position:relative;z-index:1;
+          width:28px;height:28px;border-radius:50%;
+          background:${color};
+          border:2px solid white;
+          display:flex;align-items:center;justify-content:center;
+          font-size:${isFixed ? '14px' : '11px'};
+          font-weight:bold;color:white;
+          box-shadow:0 2px 6px rgba(0,0,0,0.5);
+        ">${label}</div>
+        <div style="
+          position:absolute;z-index:2;
+          bottom:32px;left:50%;
+          transform:translateX(-50%);
+          background:rgba(0,0,0,0.38);
+          color:rgba(255,255,255,0.95);font-size:9px;
+          padding:2px 5px;border-radius:4px;
+          white-space:nowrap;max-width:80px;
+          overflow:hidden;text-overflow:ellipsis;
+          pointer-events:none;
+        ">${point.destination || point.address.slice(0, 10)}</div>
+      </div>
+    `;
+  };
+
+  // ★ mapRef 컨테이너 내부에서 data-pulse 요소 찾아 rAF 애니메이션 적용
+  const startPulseAnimations = () => {
+    // 네이버 지도 마커는 mapRef.current 내부 div에 렌더링됨
+    const container = mapRef.current;
+    if (!container) return;
+    // 디버그: 전체 document와 container 양쪽 모두 탐색
+    const pulseEls1 = document.querySelectorAll('[data-pulse]');
+    const pulseEls2 = container.querySelectorAll('[data-pulse]');
+    console.log('[pulse] document 탐색:', pulseEls1.length, '/ container 탐색:', pulseEls2.length);
+    // 둘 다 합쳐서 처리
+    const allPulse = new Set([...Array.from(pulseEls1), ...Array.from(pulseEls2)]);
+    allPulse.forEach((el) => {
+      const div = el as HTMLElement;
+      if (div.dataset.animated) return;
+      div.dataset.animated = '1';
+      const duration = 2000;
+      const delay = parseInt(div.dataset.delay || '0', 10);
+      const maxScale = parseFloat(div.dataset.maxscale || '3.5');
+      const step = (ts: number) => {
+        const progress = ((ts - delay) % duration + duration) % duration / duration;
+        let scale: number, opacity: number;
+        if (progress < 0.1) {
+          scale = 1;
+          opacity = progress / 0.1;
+        } else if (progress < 0.8) {
+          const p = (progress - 0.1) / 0.7;
+          scale = 1 + p * (maxScale - 1);
+          opacity = 1 - p;
+        } else {
+          scale = maxScale; opacity = 0;
+        }
+        if (div.isConnected) {
+          div.style.transform = `scale(${scale.toFixed(3)})`;
+          div.style.opacity = opacity.toFixed(3);
+          requestAnimationFrame(step);
+        }
+      };
+      requestAnimationFrame(step);
+    });
+  };
+
+  const calcBearing = (from: { lat: number; lng: number }, to: { lat: number; lng: number }) => {
+    const toRad = (d: number) => (d * Math.PI) / 180;
+    const dLng = toRad(to.lng - from.lng);
+    const lat1 = toRad(from.lat);
+    const lat2 = toRad(to.lat);
+    const y = Math.sin(dLng) * Math.cos(lat2);
+    const x = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLng);
+    return (Math.atan2(y, x) * 180) / Math.PI;
+  };
+
+  const makeArrowIcon = (bearing: number) => {
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="-5 -5 10 10">
+      <polygon points="0,-4 3,2 0,0 -3,2" fill="white" opacity="0.55" transform="rotate(${bearing})"/>
+    </svg>`;
+    return {
+      content: svg,
+      anchor: new (window as any).naver.maps.Point(5, 5),
+    };
+  };
+
+  const latLngDistanceM = (lat1: number, lng1: number, lat2: number, lng2: number) => {
+    const R = 6371000;
+    const toRad = (d: number) => (d * Math.PI) / 180;
+    const dLat = toRad(lat2 - lat1);
+    const dLng = toRad(lng2 - lng1);
+    const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  };
+
+  const placeArrows = (
+    coordPairs: { lat: number; lng: number }[],
+    bearing: number | null,
+    map: any,
+    naver: any,
+    intervalM = 100
+  ) => {
+    if (coordPairs.length < 2) return;
+    const totalDist = coordPairs.reduce((sum, _, i) => {
+      if (i === 0) return sum;
+      return sum + latLngDistanceM(coordPairs[i-1].lat, coordPairs[i-1].lng, coordPairs[i].lat, coordPairs[i].lng);
+    }, 0);
+    const MARKER_CLEARANCE = 50; // 마커 위치 근처 50m 이내 화살표 제외
+    let accumulated = 0;
+    let distFromStart = 0;
+    for (let i = 0; i < coordPairs.length - 1; i++) {
+      const from = coordPairs[i];
+      const to = coordPairs[i + 1];
+      const segDist = latLngDistanceM(from.lat, from.lng, to.lat, to.lng);
+      const segBearing = bearing ?? calcBearing(from, to);
+      let d = (accumulated === 0 ? intervalM / 2 : intervalM - (accumulated % intervalM));
+      while (d <= segDist) {
+        const absPos = distFromStart + d;
+        // 시작점 또는 끝점으로부터 MARKER_CLEARANCE 이내면 건너뜀
+        if (absPos > MARKER_CLEARANCE && absPos < totalDist - MARKER_CLEARANCE) {
+          const t = d / segDist;
+          const lat = from.lat + (to.lat - from.lat) * t;
+          const lng = from.lng + (to.lng - from.lng) * t;
+          const arrow = new naver.maps.Marker({
+            map,
+            position: new naver.maps.LatLng(lat, lng),
+            icon: makeArrowIcon(segBearing),
+            zIndex: 3,
+            clickable: false,
+          });
+          arrowMarkersRef.current.push(arrow);
+        }
+        d += intervalM;
+      }
+      distFromStart += segDist;
+      accumulated = (accumulated + segDist) % intervalM;
+    }
+  };
+
+  const drawStraightLines = (points: RoutePoint[], map: any, naver: any) => {
+    segmentArrowsRef.current = new Map();
+    for (let i = 0; i < points.length - 1; i++) {
+      const from = points[i];
+      const to = points[i + 1];
+      const color = getLineColor(from, to);
+      const polyline = new naver.maps.Polyline({
+        map,
+        path: [
+          new naver.maps.LatLng(from.lat, from.lng),
+          new naver.maps.LatLng(to.lat, to.lng),
+        ],
+        strokeColor: color,
+        strokeWeight: 6,
+        strokeOpacity: 1,
+      });
+      polylinesRef.current.push(polyline);
+      const bearing = calcBearing(from, to);
+      const beforeCount = arrowMarkersRef.current.length;
+      placeArrows(
+        [{ lat: from.lat, lng: from.lng }, { lat: to.lat, lng: to.lng }],
+        bearing,
+        map,
+        naver
+      );
+      // 이 구간(order=from.order)의 화살표들을 기록
+      segmentArrowsRef.current.set(from.order, arrowMarkersRef.current.slice(beforeCount));
+    }
+    // 직선 모드 완료 후 추가지점 경로선 재적용
+    setTimeout(() => drawAdditionalPolylines(additionalPointsRef.current), 0);
+  };
+
+  const drawRoadLines = async (points: RoutePoint[], map: any, naver: any) => {
+    const TIMEOUT = 8000;
+    const fetchWithTimeout = (url: string) => {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), TIMEOUT);
+      return fetch(url, { signal: controller.signal }).finally(() => clearTimeout(timer));
+    };
+
+    const segments = points.slice(0, -1).map((from, i) => ({
+      from, to: points[i + 1], color: getLineColor(from, points[i + 1]),
+    }));
+
+    // ★ 도로 경로 렌더 완료 후 추가지점 경로선 재적용 헬퍼
+    const applyAdditionalAfterRoad = () => {
+      roadDrawingRef.current = false;
+      const pts = additionalPointsRef.current;
+      console.log('[additional] applyAdditionalAfterRoad 호출 - 추가지점 수:', pts.length, '/ polylinesRef 수:', polylinesRef.current.length);
+      // 기존 추가지점 경로선 완전 정리
+      additionalPolylinesRef.current.forEach(p => p.setMap(null));
+      additionalPolylinesRef.current = [];
+      hiddenPolylinesRef.current = [];
+      if (pts.length > 0) {
+        // setTimeout 0으로 현재 렌더링 사이클 완료 후 실행 보장
+        setTimeout(() => {
+          drawAdditionalPolylines(pts);
+        }, 0);
+      }
+    };
+
+    // 공통 렌더링 함수
+    const renderResults = (results: { coords: { lat: number; lng: number }[]; color: string }[]) => {
+      segmentArrowsRef.current = new Map();
+      results.forEach(({ coords, color }, segIdx) => {
+        const path = coords.map((c: { lat: number; lng: number }) => new naver.maps.LatLng(c.lat, c.lng));
+        const polyline = new naver.maps.Polyline({
+          map, path, strokeColor: color, strokeWeight: 6, strokeOpacity: 1,
+        });
+        polylinesRef.current.push(polyline);
+        const beforeCount = arrowMarkersRef.current.length;
+        placeArrows(coords, null, map, naver);
+        // 도로 모드도 구간별 화살표 기록 (order 기반으로 저장)
+        const routePts = routeRef.current?.points;
+        if (routePts && routePts[segIdx]) {
+          segmentArrowsRef.current.set(routePts[segIdx].order, arrowMarkersRef.current.slice(beforeCount));
+        }
+      });
+      // 렌더 완료 후 추가지점 경로선 재적용
+      applyAdditionalAfterRoad();
+    };
+
+    // 직선 fallback 렌더링
+    const renderStraight = () => {
+      roadDrawingRef.current = false;
+      segments.forEach(({ from, to, color }) => {
+        const polyline = new naver.maps.Polyline({
+          map,
+          path: [new naver.maps.LatLng(from.lat, from.lng), new naver.maps.LatLng(to.lat, to.lng)],
+          strokeColor: color, strokeWeight: 6, strokeOpacity: 1,
+        });
+        polylinesRef.current.push(polyline);
+      });
+      applyAdditionalAfterRoad();
+    };
+
+    // ① ORS 시도 (주 서비스 - 안정적)
+    roadDrawingRef.current = true;
+    setRoadLoading(true);
+    try {
+      console.log('[road] ORS 요청 시작...');
+      const orsRes = await fetch('/api/ors-route', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          date: routeRef.current?.date ?? '',
+          version: routeRef.current?.version ?? 0,
+          segments: segments.map(({ from, to }) => ({
+            fromLng: from.lng, fromLat: from.lat, toLng: to.lng, toLat: to.lat,
+          })),
+        }),
+      });
+      console.log('[road] ORS 응답 상태:', orsRes.status);
+      if (!orsRes.ok) throw new Error(`ORS HTTP ${orsRes.status}`);
+      const orsData = await orsRes.json();
+      if (orsData.fromCache) setRoadLoading(false); // 캐시 히트면 즉시 숨김
+      console.log('[road] ORS 결과 수:', orsData.results?.length, '/ 성공:', orsData.results?.filter((r: {ok: boolean}) => r.ok).length, orsData.fromCache ? '(캐시)' : '(신규)');
+      if (orsData.results?.length) {
+        const results = orsData.results.map((r: { ok: boolean; coords?: { lat: number; lng: number }[] }, i: number) => ({
+          coords: r.ok && r.coords ? r.coords : [
+            { lat: segments[i].from.lat, lng: segments[i].from.lng },
+            { lat: segments[i].to.lat, lng: segments[i].to.lng },
+          ],
+          color: segments[i].color,
+        }));
+        setOsrmError(false);
+        setRoadLoading(false);
+        renderResults(results);
+        return;
+      }
+    } catch (e) {
+      console.warn('[road] ORS 실패:', e);
+    }
+
+    // ② ORS 실패 → OSRM 폴백
+    try {
+      console.log('[road] OSRM 폴백 시도...');
+      const probeCount = Math.min(3, segments.length);
+      const probes = await Promise.all(
+        segments.slice(0, probeCount).map(({ from, to }) =>
+          fetchWithTimeout(
+            `https://router.project-osrm.org/route/v1/driving/${from.lng},${from.lat};${to.lng},${to.lat}?overview=false`
+          ).then(r => { console.log('[road] OSRM probe:', r.status); return r.ok; }).catch(() => false)
+        )
+      );
+      if (probes.every(ok => ok)) {
+        const results = await Promise.all(
+          segments.map(async ({ from, to, color }) => {
+            try {
+              const res = await fetchWithTimeout(
+                `https://router.project-osrm.org/route/v1/driving/${from.lng},${from.lat};${to.lng},${to.lat}?overview=full&geometries=geojson`
+              );
+              if (!res.ok) throw new Error();
+              const data = await res.json();
+              if (data.routes?.[0]?.geometry?.coordinates) {
+                return { coords: data.routes[0].geometry.coordinates.map((c: number[]) => ({ lat: c[1], lng: c[0] })), color };
+              }
+            } catch {}
+            return { coords: [{ lat: from.lat, lng: from.lng }, { lat: to.lat, lng: to.lng }], color };
+          })
+        );
+        setOsrmError(false);
+        renderResults(results);
+        return;
+      }
+    } catch (e) {
+      console.warn('[road] OSRM 폴백 실패:', e);
+    }
+
+    // ③ 둘 다 실패 → 직선 + 에러 배너
+    console.error('[road] ORS·OSRM 모두 실패 → 직선 표시');
+    roadDrawingRef.current = false;
+    setRoadLoading(false);
+    setOsrmError(true);
+    renderStraight();
+  };
+
+  const redrawLines = () => {
+    if (!route || !naverMapRef.current) return;
+    const naver = (window as any).naver;
+    const map = naverMapRef.current;
+
+    // 진행 중인 blink 정리
+    if (blinkIntervalRef.current) { clearInterval(blinkIntervalRef.current); blinkIntervalRef.current = null; }
+    if (blinkRestoreRef.current) { clearTimeout(blinkRestoreRef.current); blinkRestoreRef.current = null; }
+    if (blinkPolylineRef.current) { blinkPolylineRef.current.setMap(null); blinkPolylineRef.current = null; }
+    blinkArrowsRef.current = [];
+    blinkOriginalPolylineRef.current = null;
+
+    // ★ 도로 모드로 전환하는 경우 즉시 플래그 설정 (useEffect 경합 방지)
+    if (lineModeRef.current === 'road') roadDrawingRef.current = true;
+
+    polylinesRef.current.forEach(p => p.setMap(null));
+    arrowMarkersRef.current.forEach(m => m.setMap(null));
+    polylinesRef.current = [];
+    arrowMarkersRef.current = [];
+    additionalArrowMarkersRef.current = []; // ★ 추가지점 화살표 추적도 리셋
+
+    // 추가지점 경로선도 초기화 (기존 숨김 복원 후 재그리기)
+    additionalPolylinesRef.current.forEach(p => p.setMap(null));
+    additionalPolylinesRef.current = [];
+    hiddenPolylinesRef.current = [];
+
+    const points = route.points;
+    if (lineModeRef.current === 'road') {
+      // 도로 모드: renderResults 콜백에서 applyAdditionalAfterRoad 호출됨
+      roadDrawingRef.current = true;
+      drawRoadLines(points, map, naver);
+    } else {
+      // 직선 모드: drawStraightLines 완료 후 drawAdditionalPolylines 호출됨
+      roadDrawingRef.current = false;
+      drawStraightLines(points, map, naver);
+    }
+  };
+
+  const drawRoute = () => {
+    if (!route || !naverMapRef.current) return;
+    const naver = (window as any).naver;
+    const map = naverMapRef.current;
+
+    markersRef.current.forEach(m => m.setMap(null));
+    polylinesRef.current.forEach(p => p.setMap(null));
+    arrowMarkersRef.current.forEach(m => m.setMap(null));
+    markersRef.current = [];
+    polylinesRef.current = [];
+    arrowMarkersRef.current = [];
+
+    const points = route.points;
+    // 저장된 lineMode로 시작 (직선/도로 기억)
+    if (lineModeRef.current === 'road') {
+      drawRoadLines(points, map, naver);
+    } else {
+      drawStraightLines(points, map, naver);
+    }
+
+    const showMarkers = currentZoomRef.current >= ZOOM_THRESHOLD;
+    const showPulse = currentZoomRef.current >= PULSE_THRESHOLD;
+
+    // ★ 마커 생성 + 클릭 이벤트 연결
+    points.forEach((point, pointArrayIdx) => {
+      const color = getMarkerColor(point);
+      // 기점(첫 번째 fixed)은 zIndex를 높여서 종점(마지막 fixed) 위에 표시
+      const isFirstFixed = point.source === 'fixed' && pointArrayIdx === 0;
+      const marker = new naver.maps.Marker({
+        map: showMarkers ? map : null,
+        position: new naver.maps.LatLng(point.lat, point.lng),
+        icon: {
+          content: makeMarkerContent(point, color, showPulse, currentZoomRef.current),
+          anchor: new naver.maps.Point(14, 14),
+        },
+      });
+
+      // ★ 마커 클릭 → 줌 PULSE_THRESHOLD 이상일 때만 팝업 (fixed 제외)
+      if (point.source !== 'fixed') {
+        naver.maps.Event.addListener(marker, 'click', () => {
+          if (currentZoomRef.current >= PULSE_THRESHOLD) {
+            // 같은 좌표 지점 탐색 (fixed 제외)
+            const currentRoute = routeRef.current;
+            const sameCoordPoints = currentRoute
+              ? currentRoute.points.filter(
+                  p => p.source !== 'fixed' &&
+                  Math.abs(p.lat - point.lat) < 0.0001 &&
+                  Math.abs(p.lng - point.lng) < 0.0001
+                )
+              : [point];
+            console.log('[overlap] 클릭 지점:', point.order, point.lat, point.lng, '/ 같은좌표:', sameCoordPoints.map(p => p.order));
+            if (sameCoordPoints.length > 1) {
+              // 겹친 지점이 2개 이상 → 목록 팝업
+              setOverlappingPoints(sameCoordPoints);
+              setShowOverlapModal(true);
+            } else {
+              // 단일 지점 → 바로 상세 팝업
+              setSelectedPoint(point);
+              setShowDetailModal(true);
+            }
+          }
+        });
+      }
+
+      // ★ 롱프레스 → 해당 구간 초록 깜박임 (fixed 포함 전체 마커)
+      const startLongPress = () => {
+        longPressTimerRef.current = setTimeout(() => {
+          blinkSegment(pointArrayIdx);
+        }, 700);
+      };
+      const cancelLongPress = () => {
+        if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current);
+      };
+      naver.maps.Event.addListener(marker, 'mousedown', startLongPress);
+      naver.maps.Event.addListener(marker, 'mouseup', cancelLongPress);
+      naver.maps.Event.addListener(marker, 'touchstart', startLongPress);
+      naver.maps.Event.addListener(marker, 'touchend', cancelLongPress);
+
+      markersRef.current.push(marker);
+    });
+
+    // 초기 줌이 이미 PULSE_THRESHOLD 이상이면 바로 펄스 시작
+    if (showPulse) {
+      setTimeout(() => startPulseAnimations(), 300);
+    }
+  };
+
+  // ★ 추가지점 경로선 색상만 업데이트 (재생성/화살표 변경 없이)
+  const updateAdditionalPolylineColors = () => {
+    if (!routeRef.current || additionalPointsRef.current.length === 0) return;
+    const routePoints = routeRef.current.points;
+
+    additionalPointsRef.current.forEach(point => {
+      if (!point.lat || !point.lng || point.insertAfterOrder == null) return;
+      const entry = additionalPolylinesByIdRef.current.get(point.id);
+      if (!entry) return;
+
+      // fromPl (from→A 구간): A의 완료 여부
+      if (entry.fromPl) {
+        entry.fromPl.setOptions({ strokeColor: getAdditionalLineColor(point, true) });
+      }
+
+      // toPl (A→to 구간): A 완료 + toPoint 완료 모두 되어야 파란색
+      if (entry.toPl) {
+        let toPoint: RoutePoint | undefined;
+        if (typeof point.insertAfterOrder === 'number') {
+          toPoint = routePoints.find(p => p.order === (point.insertAfterOrder as number) + 1);
+        } else if (typeof point.insertAfterOrder === 'string' && point.insertAfterOrder.startsWith('add_')) {
+          const firstId = parseInt(point.insertAfterOrder.replace('add_', ''));
+          let cur: AdditionalPoint | undefined = additionalPointsRef.current.find(p => p.id === firstId);
+          while (cur && typeof cur.insertAfterOrder === 'string' && cur.insertAfterOrder.startsWith('add_')) {
+            const pid = parseInt(cur.insertAfterOrder.replace('add_', ''));
+            cur = additionalPointsRef.current.find(p => p.id === pid);
+          }
+          if (cur && typeof cur.insertAfterOrder === 'number') {
+            toPoint = routePoints.find(p => p.order === (cur!.insertAfterOrder as number) + 1);
+          }
+        }
+        entry.toPl.setOptions({ strokeColor: getAdditionalLineColor(point, false, toPoint) });
+      }
+    });
+  };
+
+  const updateMarkerColors = () => {
+    if (!route || !naverMapRef.current) return;
+    const naver = (window as any).naver;
+    const showMarkers = currentZoomRef.current >= ZOOM_THRESHOLD;
+    const showPulse = currentZoomRef.current >= PULSE_THRESHOLD;
+
+    route.points.forEach((point, idx) => {
+      const marker = markersRef.current[idx];
+      if (!marker) return;
+      const color = getMarkerColor(point);
+      marker.setIcon({
+        content: makeMarkerContent(point, color, showPulse, currentZoomRef.current),
+        anchor: new naver.maps.Point(14, 14),
+      });
+      marker.setMap(showMarkers ? naverMapRef.current : null);
+    });
+
+    route.points.forEach((point, idx) => {
+      if (idx === 0) return;
+      const polyline = polylinesRef.current[idx - 1];
+      if (!polyline) return;
+      const from = route.points[idx - 1];
+      const to = point;
+      polyline.setOptions({ strokeColor: getLineColor(from, to) });
+    });
+
+    // ★ 추가지점 경로선 색상만 업데이트 (재생성 없이)
+    updateAdditionalPolylineColors();
+  };
+
+  // ★ 특정 구간 폴리라인 초록 깜박임 (롱프레스)
+  // markerIdx: markersRef 배열 인덱스 (= route.points 인덱스)
+  const blinkSegment = (markerIdx: number) => {
+    if (!route || polylinesRef.current.length === 0) return;
+    const naver = (window as any).naver;
+    const map = naverMapRef.current;
+
+    const segIdx = markerIdx;
+
+    // ★ 이 구간(segIdx → segIdx+1)에 추가지점이 삽입되어 있는지 order 기반으로 확인
+    const fromPointOrder = routeRef.current?.points[segIdx]?.order;
+    const additionalInSegment = fromPointOrder != null
+      ? additionalPointsRef.current.find(p => p.insertAfterOrder === fromPointOrder)
+      : undefined;
+
+    if (additionalInSegment && hiddenPolylinesRef.current.includes(segIdx)) {
+      // ★ 기존 깜박임 먼저 정리 (이전 폴리라인 복원 포함)
+      if (blinkIntervalRef.current) { clearInterval(blinkIntervalRef.current); blinkIntervalRef.current = null; }
+      if (blinkRestoreRef.current) { clearTimeout(blinkRestoreRef.current); blinkRestoreRef.current = null; }
+      if (blinkPolylineRef.current) { blinkPolylineRef.current.setMap(null); blinkPolylineRef.current = null; }
+      blinkArrowsRef.current.forEach(a => {
+        a.setMap(null);
+        const idx = arrowMarkersRef.current.indexOf(a);
+        if (idx !== -1) arrowMarkersRef.current.splice(idx, 1);
+      });
+      blinkArrowsRef.current = [];
+      if (blinkOriginalPolylineRef.current) {
+        const { polyline: prevPl, color: prevColor } = blinkOriginalPolylineRef.current;
+        prevPl.setOptions({ strokeColor: prevColor, strokeWeight: 6, strokeOpacity: 1, zIndex: 0 });
+        blinkOriginalPolylineRef.current = null;
+      }
+      // 이 구간에 추가지점이 삽입됨 → fromPoint→A1 방향을 blink
+      blinkFromPointToAdditional(routeRef.current!.points[segIdx], additionalInSegment);
+      return;
+    }
+
+    const polyline = polylinesRef.current[segIdx];
+    if (!polyline) return;
+
+    const from = route.points[segIdx];
+    const to = route.points[segIdx + 1];
+    if (!from || !to) return;
+    const originalColor = getLineColor(from, to);
+
+    // 기존 깜박임 완전 정리 (ref로 추적)
+    const cleanupBlink = () => {
+      if (blinkIntervalRef.current) { clearInterval(blinkIntervalRef.current); blinkIntervalRef.current = null; }
+      if (blinkRestoreRef.current) { clearTimeout(blinkRestoreRef.current); blinkRestoreRef.current = null; }
+      if (blinkPolylineRef.current) { blinkPolylineRef.current.setMap(null); blinkPolylineRef.current = null; }
+      blinkArrowsRef.current.forEach(a => {
+        a.setMap(null);
+        const idx = arrowMarkersRef.current.indexOf(a);
+        if (idx !== -1) arrowMarkersRef.current.splice(idx, 1);
+      });
+      blinkArrowsRef.current = [];
+      // 이전 원래 폴리라인 복원
+      if (blinkOriginalPolylineRef.current) {
+        const { polyline: prevPl, color: prevColor } = blinkOriginalPolylineRef.current;
+        prevPl.setOptions({ strokeColor: prevColor, strokeWeight: 6, strokeOpacity: 1, zIndex: 0 });
+        blinkOriginalPolylineRef.current = null;
+      }
+    };
+    cleanupBlink();
+
+    // 초록 깜박임용 임시 폴리라인 별도 생성
+    const coords: { lat: number; lng: number }[] = [];
+    try {
+      const path = (polyline as any).getPath();
+      if (path && path.getLength) {
+        for (let i = 0; i < path.getLength(); i++) {
+          const pt = path.getAt(i);
+          coords.push({ lat: pt.lat(), lng: pt.lng() });
+        }
+      }
+    } catch {}
+    if (coords.length < 2) {
+      coords.push({ lat: from.lat, lng: from.lng }, { lat: to.lat, lng: to.lng });
+    }
+
+    // 원래 폴리라인 숨기고 ref로 추적
+    polyline.setOptions({ strokeOpacity: 0 });
+    blinkOriginalPolylineRef.current = { polyline, color: originalColor };
+
+    // 임시 초록 폴리라인 생성 후 ref로 추적
+    blinkPolylineRef.current = new naver.maps.Polyline({
+      map,
+      path: coords.map(c => new naver.maps.LatLng(c.lat, c.lng)),
+      strokeColor: '#1b5e20',
+      strokeWeight: 8,
+      strokeOpacity: 1,
+      zIndex: 100,
+    });
+
+    // 깜박임 화살표 ref로 추적
+    const countBefore = arrowMarkersRef.current.length;
+    placeArrows(coords, null, map, naver);
+    blinkArrowsRef.current = arrowMarkersRef.current.slice(countBefore);
+
+    let visible = true;
+    blinkIntervalRef.current = setInterval(() => {
+      visible = !visible;
+      if (blinkPolylineRef.current) blinkPolylineRef.current.setOptions({ strokeOpacity: visible ? 1 : 0 });
+      blinkArrowsRef.current.forEach(a => a.setMap(visible ? map : null));
+    }, 300);
+
+    // 5초 후 원래대로
+    blinkRestoreRef.current = setTimeout(() => {
+      cleanupBlink();
+    }, 5000);
+  };
+
   // ★ save-additional 전 base64 photoUrl 제거 헬퍼
   const sanitizeForRedis = (points: any[]) => points.map(p => ({
     ...p,
     photoUrl: (p.photoUrl && p.photoUrl.startsWith('http')) ? p.photoUrl : '',
   }));
 
+  // ★ PDF 보고서 생성
+  const loadScript = (src: string): Promise<void> => {
+    return new Promise((resolve, reject) => {
+      if (document.querySelector(`script[src="${src}"]`)) { resolve(); return; }
+      const s = document.createElement('script');
+      s.src = src; s.onload = () => resolve(); s.onerror = reject;
+      document.head.appendChild(s);
+    });
+  };
+
+  const handleGenerateReport = async () => {
+    if (!route || isGeneratingReport) return;
+    setIsGeneratingReport(true);
+    try {
+      // jsPDF + html2canvas 동적 로드 (script 태그 방식)
+      await Promise.all([
+        loadScript('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js'),
+        loadScript('https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js'),
+      ]);
+      const jsPDF = (window as any).jspdf?.jsPDF || (window as any).jsPDF;
+      const html2canvas = (window as any).html2canvas;
+      if (!jsPDF || !html2canvas) throw new Error('라이브러리 로드 실패');
+
+      // 보고서 HTML 컨테이너 생성
+      const container = document.createElement('div');
+      container.style.cssText = `
+        position: fixed; top: -9999px; left: -9999px;
+        width: 794px; background: #ffffff; font-family: 'Apple SD Gothic Neo', 'Noto Sans KR', sans-serif;
+        padding: 0px; box-sizing: border-box;
+      `;
+
+      const donePoints = route.points.filter(p => p.source !== 'fixed');
+
+      // 추가 방문지를 경로 순서에 맞게 삽입 (A→A 체인도 재귀적으로 처리)
+      type ReportPoint = (typeof donePoints[0] & { isAdditional?: boolean; addLabel?: string }) | (AdditionalPoint & { isAdditional: true; addLabel: string });
+      const allReportPoints: ReportPoint[] = [];
+
+      // 특정 지점 다음에 연결된 추가지점들을 체인으로 수집하는 함수
+      const collectAddChain = (afterKey: number | string | null) => {
+        const direct = additionalPointsRef.current.filter(ap => ap.insertAfterOrder === afterKey);
+        direct.forEach(ap => {
+          allReportPoints.push({ ...ap, isAdditional: true, addLabel: '추가' });
+          // 이 추가지점 뒤에 연결된 추가지점도 재귀 수집
+          collectAddChain(`add_${ap.id}`);
+        });
+      };
+
+      donePoints.forEach((point) => {
+        allReportPoints.push(point);
+        collectAddChain(point.order);
+      });
+
+      const totalCount = allReportPoints.length;
+      const doneCount = allReportPoints.filter(p => {
+        const st = statusesRef.current[statusKey(p as any)];
+        return st && ['민원처리완료','기처리','확인불가'].includes(st.status);
+      }).length;
+
+
+
+      // ── 헤더 ──────────────────────────────────────────────
+      container.innerHTML = `
+        <div style="background: linear-gradient(135deg, #1a3a6e 0%, #1565c0 100%); padding: 20px 28px; margin-bottom: 6px;">
+          <div style="color: white; font-size: 20px; font-weight: bold; margin-bottom: 4px;">불법 옥외광고물 정비 순회 작업 결과</div>
+          <div style="color: rgba(200,230,255,0.9); font-size: 12px;">
+            일자: ${route.date} &nbsp;|&nbsp; 버전: ${route.version} &nbsp;|&nbsp; 총 지점: ${totalCount}개 &nbsp;|&nbsp; 처리완료: ${doneCount}개
+          </div>
+        </div>
+        <div style="background:#e8edf2; padding:6px 28px 12px; margin-bottom:20px; font-size:11px; color:#555;">
+          ※ 본 문서는 길도사 2.0 앱으로 자동 생성된 순회 작업 결과입니다.
+        </div>
+
+      `;
+
+      // ── 표 헤더 ──────────────────────────────────────────
+      const cellStyle = (w: string, center = false) =>
+        `style="width:${w}; padding:7px 6px; border:1px solid #b0bec5; font-size:11px; vertical-align:middle; ${center ? 'text-align:center;' : ''}"`;
+
+      const tableHtml = `
+        <table style="width:100%; border-collapse:collapse; table-layout:fixed; margin-bottom:24px;">
+          <colgroup>
+            <col style="width:5%"/>   <!-- 순회순번 -->
+            <col style="width:7%"/>   <!-- 민원번호 -->
+            <col style="width:18%"/>  <!-- 주소 -->
+            <col style="width:13%"/>  <!-- 민원내용 -->
+            <col style="width:8%"/>   <!-- 담당자 -->
+            <col style="width:10%"/>  <!-- 작업상태 -->
+            <col style="width:13%"/>  <!-- 작업메모 -->
+            <col style="width:26%"/>  <!-- 현장사진 -->
+          </colgroup>
+          <thead>
+            <tr style="background:#1a3a6e; color:white;">
+              <th style="padding:8px 4px; border:1px solid #1565c0; font-size:11px; text-align:center; font-weight:bold;">경로<br/>번호</th>
+              <th style="padding:8px 4px; border:1px solid #1565c0; font-size:11px; text-align:center; font-weight:bold;">사진<br/>번호</th>
+              <th style="padding:8px 6px; border:1px solid #1565c0; font-size:11px; text-align:center; font-weight:bold;">주소 (목적지)</th>
+              <th style="padding:8px 6px; border:1px solid #1565c0; font-size:11px; text-align:center; font-weight:bold;">민원내용</th>
+              <th style="padding:8px 4px; border:1px solid #1565c0; font-size:11px; text-align:center; font-weight:bold;">담당자</th>
+              <th style="padding:8px 4px; border:1px solid #1565c0; font-size:11px; text-align:center; font-weight:bold;">방문결과</th>
+              <th style="padding:8px 6px; border:1px solid #1565c0; font-size:11px; text-align:center; font-weight:bold;">방문메모</th>
+              <th style="padding:8px 6px; border:1px solid #1565c0; font-size:11px; text-align:center; font-weight:bold;">방문지사진</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${allReportPoints.map((point, idx) => {
+              const isAdd = (point as any).isAdditional === true;
+              const st = statusesRef.current[statusKey(point as any)];
+              const isDone = st && ['민원처리완료','기처리','확인불가'].includes(st.status);
+              const rowBg = isAdd ? '#fff8e1' : (idx % 2 === 0 ? '#ffffff' : '#f5f8fb');
+              const statusColor = isDone ? '#2e7d32' : '#e65100';
+              const statusText = st?.status || '미완료';
+              const photoHtml = (point as any).photoUrl
+                ? `<img src="${(point as any).photoUrl}" style="max-width:100%; max-height:120px; object-fit:contain; display:block; margin:0 auto;" crossorigin="anonymous" />${(point as any).photoDescription ? `<div style="font-size:9px; color:#666; margin-top:3px; text-align:center;">${(point as any).photoDescription}</div>` : ''}`
+                : '<div style="color:#aaa; font-size:10px; text-align:center;">사진 없음</div>';
+              const orderLabel = isAdd ? '<span style="color:#e65100; font-weight:bold;">추가</span>' : String((point as any).order);
+
+              return `
+                <tr style="background:${rowBg};">
+                  <td style="padding:8px 4px; border:1px solid #cfd8dc; font-size:13px; font-weight:bold; text-align:center; color:#1a3a6e;">${orderLabel}</td>
+                  <td style="padding:8px 4px; border:1px solid #cfd8dc; font-size:12px; font-weight:bold; text-align:center;">${(point as any).originalId ? (point as any).originalId + '번' : '-'}</td>
+                  <td style="padding:8px 6px; border:1px solid #cfd8dc; font-size:11px; word-break:break-all;">${(point as any).address || '-'}${(point as any).destination ? '<br/><span style="color:#1565c0;">(' + (point as any).destination + ')</span>' : ''}</td>
+                  <td style="padding:8px 6px; border:1px solid #cfd8dc; font-size:11px;">${(point as any).complaint || '-'}</td>
+                  <td style="padding:8px 4px; border:1px solid #cfd8dc; font-size:11px; text-align:center;">${(point as any).manager || '-'}</td>
+                  <td style="padding:8px 4px; border:1px solid #cfd8dc; font-size:12px; font-weight:bold; text-align:center; color:${statusColor};">${statusText}</td>
+                  <td style="padding:8px 6px; border:1px solid #cfd8dc; font-size:11px;">${st?.memo || '-'}</td>
+                  <td style="padding:6px; border:1px solid #cfd8dc; text-align:center; vertical-align:middle;">${photoHtml}</td>
+                </tr>
+              `;
+            }).join('')}
+          </tbody>
+        </table>
+      `;
+
+      container.innerHTML += tableHtml;
+      document.body.appendChild(container);
+
+      // html2canvas → jsPDF
+      const canvas = await html2canvas(container, {
+        scale: 2, useCORS: true, allowTaint: false,
+        backgroundColor: '#ffffff',
+        logging: false,
+      });
+      document.body.removeChild(container);
+
+      const imgData = canvas.toDataURL('image/jpeg', 0.92);
+      const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+      const pdfW = pdf.internal.pageSize.getWidth();
+      const pdfH = pdf.internal.pageSize.getHeight();
+      const imgH = (canvas.height * pdfW) / canvas.width;
+
+      let y = 0;
+      while (y < imgH) {
+        if (y > 0) pdf.addPage();
+        pdf.addImage(imgData, 'JPEG', 0, -y, pdfW, imgH);
+        y += pdfH;
+      }
+
+      pdf.save(`순회보고서_${route.date}_버전${route.version}.pdf`);
+    } catch (e) {
+      console.error('PDF 생성 오류:', e);
+      alert('PDF 생성 중 오류가 발생했습니다.');
+    } finally {
+      setIsGeneratingReport(false);
+    }
+  };
+
+  // ★ 내 위치 추적 시작/중지 토글
+  const toggleTracking = () => {
+    const naver = (window as any).naver;
+    const map = naverMapRef.current;
+    if (!naver || !map) return;
+
+    if (isTracking) {
+      // 추적 중지
+      if (watchIdRef.current !== null) {
+        navigator.geolocation.clearWatch(watchIdRef.current);
+        watchIdRef.current = null;
+      }
+      if (myLocationMarkerRef.current) {
+        myLocationMarkerRef.current.setMap(null);
+        myLocationMarkerRef.current = null;
+      }
+      if (myLocationCircleRef.current) {
+        myLocationCircleRef.current.setMap(null);
+        myLocationCircleRef.current = null;
+      }
+      setIsTracking(false);
+    } else {
+      // 추적 시작
+      if (!navigator.geolocation) {
+        alert('이 기기는 GPS를 지원하지 않습니다.');
+        return;
+      }
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          const { latitude, longitude, accuracy } = pos.coords;
+          const latlng = new naver.maps.LatLng(latitude, longitude);
+
+          // 내 위치 마커 생성
+          myLocationMarkerRef.current = new naver.maps.Marker({
+            map,
+            position: latlng,
+            icon: {
+              content: `
+                <div style="animation:my-bounce 1.2s ease-in-out infinite;display:inline-block;filter:drop-shadow(0 2px 4px rgba(0,0,0,0.4));">
+                  <img src="https://cdn.jsdelivr.net/gh/twitter/twemoji@latest/assets/svg/1f6fb.svg" width="40" height="40" style="display:block;" />
+                </div>
+                <style>
+                  @keyframes my-bounce {
+                    0%, 100% { transform: translateY(0px); }
+                    50% { transform: translateY(-4px); }
+                  }
+                </style>
+              `,
+              anchor: new naver.maps.Point(20, 36),
+            },
+            zIndex: 200,
+          });
+
+          // 정확도 원 생성
+          myLocationCircleRef.current = new naver.maps.Circle({
+            map,
+            center: latlng,
+            radius: accuracy,
+            fillColor: 'rgba(25,118,210,0.12)',
+            fillOpacity: 1,
+            strokeColor: 'rgba(25,118,210,0.35)',
+            strokeWeight: 1,
+          });
+
+          // 버튼 탭 시 내 위치로 화면 이동
+          map.setCenter(latlng);
+
+          setIsTracking(true);
+
+          // 이후 위치 변경 감시
+          watchIdRef.current = navigator.geolocation.watchPosition(
+            (pos) => {
+              const { latitude, longitude, accuracy } = pos.coords;
+              const latlng = new naver.maps.LatLng(latitude, longitude);
+              myLocationMarkerRef.current?.setPosition(latlng);
+              myLocationCircleRef.current?.setCenter(latlng);
+              myLocationCircleRef.current?.setRadius(accuracy);
+            },
+            (err) => console.warn('위치 감시 오류:', err),
+            { enableHighAccuracy: true, maximumAge: 3000 }
+          );
+        },
+        (err) => {
+          console.warn('위치 조회 실패:', err);
+          alert('위치 정보를 가져올 수 없습니다. GPS 권한을 확인해주세요.');
+        },
+        { enableHighAccuracy: true, timeout: 10000 }
+      );
+    }
+  };
+
+  // ★ 팝업에서 사용할 완료 상태 정보
+  const getSelectedStatus = () => {
+    if (!selectedPoint) return { curStatus: '', curMemo: '', isDone: false };
+    const st = statuses[statusKey(selectedPoint)];
+    const curStatus = st?.status || '';
+    const curMemo = st?.memo || '';
+    const isDone = DONE_STATUSES.includes(curStatus);
+    return { curStatus, curMemo, isDone };
+  };
+
+
+
+  // ★ 추가지점 삽입 위치 저장
+  const handleInsertAfterSave = (insertAfterOrder: number | string | null) => {
+    if (!selectedAdditional) return;
+    const updated = additionalPointsRef.current.map(p =>
+      p.id === selectedAdditional.id ? { ...p, insertAfterOrder } : p
+    );
+    setAdditionalPoints(updated);
+    additionalPointsRef.current = updated;
+    // localStorage + Redis 동기화
+    try {
+      const draft = JSON.parse(localStorage.getItem('draft-route') || '{}');
+      draft.additionalPoints = updated;
+      draft.lastModified = Date.now();
+      localStorage.setItem('draft-route', JSON.stringify(draft));
+    } catch {}
+    const today = routeRef.current?.date ?? new Date().toLocaleDateString('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/\. /g, '-').replace('.', '');
+    fetch('/api/save-additional', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ date: today, points: sanitizeForRedis(updated) }) }).catch(() => {});
+    setShowInsertModal(false);
+    drawAdditionalMarkers(updated);
+  };
+
+  // ★ 추가지점 삭제
+  const handleAdditionalDelete = async (id: number) => {
+    if (!window.confirm('이 추가 지점을 삭제하시겠습니까?')) return;
+    const point = additionalPointsRef.current.find(p => p.id === id);
+    if (point?.photoUrl && point.photoUrl.startsWith('https://')) {
+      try { await fetch('/api/delete-blob', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url: point.photoUrl }) }); } catch {}
+    }
+    const updated = additionalPointsRef.current.filter(p => p.id !== id);
+    setAdditionalPoints(updated);
+    additionalPointsRef.current = updated;
+    // localStorage + Redis 동기화
+    try {
+      const draft = JSON.parse(localStorage.getItem('draft-route') || '{}');
+      draft.additionalPoints = updated;
+      draft.lastModified = Date.now();
+      localStorage.setItem('draft-route', JSON.stringify(draft));
+    } catch {}
+    const today = routeRef.current?.date ?? new Date().toLocaleDateString('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/\. /g, '-').replace('.', '');
+    fetch('/api/save-additional', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ date: today, points: sanitizeForRedis(updated) }) }).catch(() => {});
+    lastAdditionalTimestampRef.current = Date.now();
+    setShowInsertModal(false);
+    drawAdditionalMarkers(updated);
+  };
+
+  // ★ 지도뷰 추가지점 좌표 확인
+  const handleMapAddCoordCheck = async () => {
+    if (!mapAddForm.address && !mapAddForm.destination) return;
+    setMapAddCoordStatus('loading');
+    try {
+      const res = await fetch('/api/geocode', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ address: mapAddForm.address, destination: mapAddForm.destination }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setMapAddCoord({ lat: data.lat, lng: data.lng, placeName: data.placeName || null, source: data.source || null, coordMessage: data.coordMessage || null });
+        setMapAddCoordStatus('success');
+      } else {
+        setMapAddCoordStatus('error');
+      }
+    } catch {
+      setMapAddCoordStatus('error');
+    }
+  };
+
+  // ★ 지도뷰 추가지점 저장
+  const handleMapAddSave = async () => {
+    if (mapAddCoordStatus !== 'success') return;
+    setMapAddSaving(true);
+    const newPoint: AdditionalPoint = {
+      id: Date.now(),
+      address: mapAddForm.address,
+      destination: mapAddForm.destination,
+      complaint: mapAddForm.complaint,
+      manager: mapAddForm.manager,
+      photoUrl: '',
+      lat: mapAddCoord.lat,
+      lng: mapAddCoord.lng,
+      placeName: mapAddCoord.placeName,
+      source: mapAddCoord.source,
+      coordMessage: mapAddCoord.coordMessage,
+      isAdditional: true,
+      insertAfterOrder: mapAddForm.insertAfterOrder ?? null,
+    };
+    const updated = [...additionalPointsRef.current, newPoint];
+    setAdditionalPoints(updated);
+    additionalPointsRef.current = updated;
+    // localStorage + Redis 동기화
+    try {
+      const draft = JSON.parse(localStorage.getItem('draft-route') || '{}');
+      draft.additionalPoints = updated;
+      draft.lastModified = Date.now();
+      localStorage.setItem('draft-route', JSON.stringify(draft));
+    } catch {}
+    const today = routeRef.current?.date ?? new Date().toLocaleDateString('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/\. /g, '-').replace('.', '');
+    await fetch('/api/save-additional', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ date: today, points: sanitizeForRedis(updated) }) }).catch(() => {});
+    drawAdditionalMarkers(updated);
+    setMapAddSaving(false);
+    setShowMapAddModal(false);
+    setMapAddForm({ address: '', destination: '', complaint: '', manager: '', insertAfterOrder: null });
+    setMapAddCoordStatus('idle');
+    setMapAddCoord({ lat: null, lng: null, placeName: null, source: null, coordMessage: null });
+  };
+
+  // 작업상태 저장 (자동저장 - 카드리스트와 동일 방식)
   const handleSaveStatus = async (status: string, memo: string) => {
-    if (!selectedPoint || !currentRoute) return;
+    if (!selectedPoint || !route) return;
     setSavingStatus(true);
     try {
       await fetch('/api/save-status', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          date: currentRoute.date,
+          date: route.date,
           address: selectedPoint.address,
           destination: selectedPoint.destination,
           complaint: selectedPoint.complaint?.trim() ?? '',
@@ -368,2083 +2050,436 @@ export default function Home() {
           memo,
         }),
       });
-      // 로컬 state 즉시 반영
-      setPointStatuses((prev) => ({
+      // 로컬 반영
+      const key = statusKey(selectedPoint);
+      setStatuses(prev => ({
         ...prev,
-        [statusKey(selectedPoint)]: { status, memo, updatedAt: Date.now() },
+        [key]: { status, memo, updatedAt: Date.now() },
       }));
+      statusesRef.current = {
+        ...statusesRef.current,
+        [key]: { status, memo, updatedAt: Date.now() },
+      };
+      // ★ 추가지점 경로선 색상도 즉시 업데이트
+      updateAdditionalPolylineColors();
     } catch {}
     setSavingStatus(false);
   };
 
-  const handleAuth = async () => {
-    try {
-      const res = await fetch('/api/auth', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password }),
-      });
-      if (res.ok) {
-        setIsAuthenticated(true);
-        sessionStorage.setItem('patrol-admin-auth', 'true');
-        setShowAuthModal(false);
-        setPassword('');
-        setAuthError('');
-        // draft-route 복원 확인
-        try {
-          const draft = JSON.parse(localStorage.getItem('draft-route') || '{}');
-          const today = new Date().toLocaleDateString('ko-KR');
-          const draftDate = draft.lastModified ? new Date(draft.lastModified).toLocaleDateString('ko-KR') : null;
-          const hasData = (draft.extractedPoints?.length > 0) || (draft.directPoints?.length > 0) || (draft.additionalPoints?.length > 0);
-          if (hasData && draftDate === today) {
-            setPendingDraft(draft);
-            setShowDraftRestoreModal(true);
-          } else {
-            if (draftDate !== today) {
-              localStorage.removeItem('draft-route');
-              setExtractedPoints([]);
-              setDirectPoints([]);
-            }
-            setActiveTab('input');
-          }
-        } catch {
-          setActiveTab('input');
-        }
-      } else {
-        setAuthError('비밀번호가 올바르지 않습니다.');
-      }
-    } catch {
-      setAuthError('서버 오류가 발생했습니다.');
-    }
-  };
-
-  const handleAuthClose = () => {
-    setShowAuthModal(false);
-    setPassword('');
-    setAuthError('');
-  };
-
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (!files) return;
-    const newImages = Array.from(files).map((file, idx) => ({
-      id: Date.now() + idx,
-      url: URL.createObjectURL(file),
-      name: file.name,
-    }));
-    setUploadedImages((prev) => [...prev, ...newImages]);
-    e.target.value = '';
-  };
-
-  const handleImageDelete = (id: number) => {
-    setUploadedImages((prev) => prev.filter((img) => img.id !== id));
-  };
-
-  // 이미지 미리보기 모달
-  const [previewIndex, setPreviewIndex] = useState<number | null>(null);
-
-  // 좌표 메시지 공통 렌더 헬퍼
-  const renderCoordMessage = (status: 'idle'|'loading'|'success'|'fail', coord: {coordMessage:string|null; placeName:string|null; source:string|null}) => {
-    if (status === 'idle') return <p className="text-xs mt-1" style={{ color: 'rgba(255,255,255,0.5)' }}>주소나 방문지를 입력한 후 좌표 확인 버튼을 누르세요.</p>;
-    if (status === 'loading') return <p className="text-xs mt-1" style={{ color: 'rgba(255,255,255,0.5)' }}>좌표를 검색하는 중입니다...</p>;
-    if (status === 'fail') return (
-      <p className="text-xs mt-1" style={{ color: 'white', fontWeight: 'bold' }}>
-        <span style={{ display: 'inline-block', width: '1.2rem' }}>⚠️</span>
-        <span style={{ animation: 'blink-text 1.2s ease-in-out infinite' }}>좌표 없음. (주소나 방문지명 확인 필요)</span>
-      </p>
-    );
-    const msg = coord.coordMessage || '';
-    const hasWarning = msg.includes('⚠️');
-    const rawMsg = msg.replace('⚠️', '').trim();
-    const isPOI = coord.source === 'place_nearest' || coord.source === 'place_single';
-    return (
-      <>
-        {hasWarning ? (
-          <p className="text-xs mt-1" style={{ color: 'white', fontWeight: 'bold' }}>
-            <span style={{ display: 'inline-block', width: '1.2rem' }}>⚠️</span>
-            <span style={{ animation: 'blink-text 1.2s ease-in-out infinite' }}>{rawMsg}</span>
-          </p>
-        ) : (
-          <p className="text-xs mt-1" style={{ color: '#fff176' }}>
-            <span style={{ display: 'inline-block', width: '1.2rem' }}>✅</span>{rawMsg}
-          </p>
-        )}
-        {isPOI && coord.placeName && (
-          <p className="text-xs mt-0.5" style={{ color: '#a5d6a7' }}>📍 플레이스명: {coord.placeName}</p>
-        )}
-      </>
-    );
-  };
-
-  // 커스텀 confirm 다이얼로그
-  const [confirmDialog, setConfirmDialog] = useState<{ message: string; onConfirm: () => void } | null>(null);
-  const showConfirm = (message: string): Promise<boolean> => {
-    return new Promise((resolve) => {
-      setConfirmDialog({ message, onConfirm: () => { setConfirmDialog(null); resolve(true); } });
-    });
-  };
-
-  const [isExtracting, setIsExtracting] = useState(false);
-  const [deletingId, setDeletingId] = useState<number | null>(null);
-  const [isSaving, setIsSaving] = useState(false);
-  const [isResetting, setIsResetting] = useState(false);
-  const [isGenerating, setIsGenerating] = useState(false);
-  const [showHelpModal, setShowHelpModal] = useState(false);
-  const [currentRoute, setCurrentRoute] = useState<{
-    date: string; version: number; createdAt: number;
-    history?: { version: number; createdAt: number }[];
-    points: { order: number; originalId?: number | null; address: string; destination: string | null; complaint: string; lat: number; lng: number; placeName: string | null; source: string | null; coordMessage?: string | null; photoDescription?: string | null; photoUrl?: string | null; manager?: string | null; }[];
-  } | null>(null);
-  const [isLoadingRoute, setIsLoadingRoute] = useState(false);
-  const [showDraftRestoreModal, setShowDraftRestoreModal] = useState(false);
-  const [pendingDraft, setPendingDraft] = useState<{ extractedPoints: any[]; directPoints: any[]; lastModified: number } | null>(null);
-  // 완료상태 폴링 (18초)
-  useEffect(() => {
-    if (!currentRoute) return;
-    loadStatuses(currentRoute.date);
-    const timer = setInterval(() => loadStatuses(currentRoute.date), 18000);
-    return () => clearInterval(timer);
-  }, [currentRoute?.date]);
-
-  // 경로 버전 폴링 (30초마다 새 버전 자동 반영)
-  useEffect(() => {
-    const checkNewRoute = async () => {
-      try {
-        const today = new Date().toLocaleDateString('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/\. /g, '-').replace('.', '');
-        const res = await fetch(`/api/get-route?date=${today}`);
-        if (!res.ok) return;
-        const data = await res.json();
-        const currentVersion = currentRoute?.version ?? -1;
-        if (data.version > currentVersion) {
-          setCurrentRoute(data);
-          loadStatuses(data.date);
-        }
-      } catch {}
-    };
-    const timer = setInterval(checkNewRoute, 30000);
-    return () => clearInterval(timer);
-  }, [currentRoute?.version]);
-
-  const cropImage = (dataUrl: string, x: number, y: number, w: number, h: number): Promise<string> => {
-    return new Promise((resolve) => {
-      const img = new Image();
-      img.onload = () => {
-        const canvas = document.createElement('canvas');
-        let sw = img.width * w;
-        let sh = img.height * h;
-        // 크롭 후 최대 1600px 제한 (파일 크기 5MB 이내 유지)
-        const MAX_PX = 1600;
-        if (sw > MAX_PX || sh > MAX_PX) {
-          if (sw > sh) { sh = Math.round(sh * MAX_PX / sw); sw = MAX_PX; }
-          else { sw = Math.round(sw * MAX_PX / sh); sh = MAX_PX; }
-        }
-        canvas.width = sw;
-        canvas.height = sh;
-        const ctx = canvas.getContext('2d')!;
-        ctx.drawImage(img, img.width * x, img.height * y, img.width * w, img.height * h, 0, 0, sw, sh);
-        resolve(canvas.toDataURL('image/jpeg', 0.92));
-      };
-      img.src = dataUrl;
-    });
-  };
-
-  const handleExtract = async () => {
-    if (uploadedImages.length === 0) {
-      alert('이미지를 먼저 업로드해주세요.');
-      return;
-    }
-
-    setIsExtracting(true);
-    const startTime = performance.now();
-    try {
-      // 이미지 압축 함수
-      const compressImage = (blob: Blob): Promise<string> => {
-        return new Promise((resolve) => {
-          const img = new Image();
-          const url = URL.createObjectURL(blob);
-          img.onload = () => {
-            const canvas = document.createElement('canvas');
-            const maxSize = 1024;
-            let w = img.width;
-            let h = img.height;
-            if (w > maxSize || h > maxSize) {
-              if (w > h) { h = Math.round(h * maxSize / w); w = maxSize; }
-              else { w = Math.round(w * maxSize / h); h = maxSize; }
-            }
-            canvas.width = w;
-            canvas.height = h;
-            const ctx = canvas.getContext('2d')!;
-            ctx.drawImage(img, 0, 0, w, h);
-            URL.revokeObjectURL(url);
-            resolve(canvas.toDataURL('image/jpeg', 0.7));
-          };
-          img.src = url;
-        });
-      };
-
-      // 이미지 압축
-      const compressedImages = await Promise.all(
-        uploadedImages.map((img) =>
-          fetch(img.url).then((r) => r.blob()).then(compressImage)
-        )
-      );
-
-      // 5장씩 배치 분할
-      const BATCH_SIZE = 5;
-      const batches: string[][] = [];
-      for (let i = 0; i < compressedImages.length; i += BATCH_SIZE) {
-        batches.push(compressedImages.slice(i, i + BATCH_SIZE));
-      }
-
-      // 배치 1회 호출 함수 (에러 시 상세 정보 반환)
-      const fetchBatch = async (batch: string[], batchIdx: number, attempt: number) => {
-        const batchStart = performance.now();
-        try {
-          const r = await fetch('/api/extract-points', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ images: batch }),
-          });
-          const data = await r.json();
-          const batchElapsed = Math.round(performance.now() - batchStart);
-          if (!r.ok) {
-            console.error(`❌ 배치 ${batchIdx + 1} 실패 (시도${attempt}, ${batchElapsed}ms) | HTTP ${r.status} | errorType: ${data.errorType} | ${data.message}`);
-            return { points: [], startIdx: batchIdx * BATCH_SIZE, failed: true, errorType: data.errorType, httpStatus: r.status, elapsed: batchElapsed, attempt };
-          }
-          console.log(`✅ 배치 ${batchIdx + 1} 완료 (시도${attempt}, ${batchElapsed}ms) | ${batch.length}장 → ${data.points?.length ?? 0}개 추출`);
-          return { points: data.points || [], startIdx: batchIdx * BATCH_SIZE, failed: false, elapsed: batchElapsed, attempt };
-        } catch (e: any) {
-          const batchElapsed = Math.round(performance.now() - batchStart);
-          console.error(`❌ 배치 ${batchIdx + 1} 예외 (시도${attempt}, ${batchElapsed}ms) | ${e?.message || e}`);
-          return { points: [], startIdx: batchIdx * BATCH_SIZE, failed: true, errorType: 'NETWORK_ERROR', elapsed: batchElapsed, attempt };
-        }
-      };
-
-      // 배치 병렬 호출 + 실패 시 1회 재시도
-      const batchResults = await Promise.all(
-        batches.map(async (batch, batchIdx) => {
-          const result = await fetchBatch(batch, batchIdx, 1);
-          if (result.failed) {
-            console.warn(`🔄 배치 ${batchIdx + 1} 재시도 중... (errorType: ${result.errorType})`);
-            await new Promise(resolve => setTimeout(resolve, 2000));
-            return fetchBatch(batch, batchIdx, 2);
-          }
-          return result;
-        })
-      );
-
-      // 실패한 배치 집계 → 사용자에게 경고
-      const failedBatches = batchResults.filter(r => r.failed);
-      if (failedBatches.length > 0) {
-        const failedImageRanges = failedBatches.map(r => {
-          const start = batchResults.indexOf(r) * BATCH_SIZE + 1;
-          const end = Math.min(start + BATCH_SIZE - 1, compressedImages.length);
-          return `${start}~${end}번`;
-        }).join(', ');
-        const errorTypes = [...new Set(failedBatches.map(r => r.errorType))].join(', ');
-        alert(`⚠️ 일부 이미지 추출 실패
-
-실패 범위: ${failedImageRanges} 이미지
-원인: ${
-          errorTypes === 'TIMEOUT' ? '응답 시간 초과 (네트워크 불안정 또는 AI 서버 과부하)' :
-          errorTypes === 'RATE_LIMIT' ? 'AI API 요청 한도 초과' :
-          errorTypes === 'API_OVERLOAD' ? 'AI 서버 일시적 과부하' :
-          errorTypes === 'NETWORK_ERROR' ? '네트워크 연결 오류' :
-          `오류 코드: ${errorTypes}`
-        }
-
-추출된 지점만 표시됩니다. 잠시 후 다시 시도해보세요.`);
-      }
-
-      // 결과 합치기 (각 지점에 원본 이미지 인덱스 포함)
-      const allPoints = batchResults.flatMap(({ points, startIdx }) =>
-        points.map((p: { complaintNumber?: number | null; address: string; destination: string; complaint: string; photoDescription?: string | null; photoCrop?: { x: number; y: number; w: number; h: number } | null; imageIndex?: number }) => ({
-          ...p,
-          imageIdx: startIdx + (p.imageIndex ?? 0),
-        }))
-      );
-
-      if (allPoints.length > 0) {
-        // 각 지점마다 좌표 검색
-        // 각 지점마다 좌표 검색
-      const pointsWithCoords = await Promise.all(
-        allPoints.map(async (p: { complaintNumber?: number | null; address: string; destination: string; complaint: string; manager?: string | null; photoDescription?: string | null; photoCrop?: { x: number; y: number; w: number; h: number } | null; imageIdx: number }, idx: number) => {
-          let lat = null;
-          let lng = null;
-          let placeName = null;
-          let source = null;
-          let coordMessage = null;
-            try {
-              const geoRes = await fetch('/api/geocode', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ destination: p.destination, address: p.address }),
-              });
-              if (geoRes.ok) {
-                const geoData = await geoRes.json();
-                lat = geoData.lat;
-                lng = geoData.lng;
-                placeName = geoData.placeName;
-                source = geoData.source;
-                coordMessage = geoData.coordMessage || null;
-              }
-            } catch (e) {
-              console.error('geocode 오류:', e);
-            }
-
-            // 현장사진 크롭 + Blob 업로드
-            let photoUrl: string | null = null;
-            if (p.photoCrop && uploadedImages[p.imageIdx]) {
-              try {
-                const crop = p.photoCrop;
-                const pad = 0.03;
-                const cx = Math.max(0, crop.x - pad);
-                const cy = Math.max(0, crop.y - pad);
-                const cw = Math.min(1 - cx, crop.w + pad * 2);
-                const ch = Math.min(1 - cy, crop.h + pad * 2);
-                // 크롭은 원본 이미지 URL에서 직접 수행 (압축본 대신 고해상도 유지)
-                const croppedDataUrl = await cropImage(uploadedImages[p.imageIdx].url, cx, cy, cw, ch);
-                const uploadRes = await fetch('/api/upload-photo', {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({
-                    imageData: croppedDataUrl,
-                    filename: `point-${Date.now()}-${idx}.jpg`,
-                  }),
-                });
-                if (uploadRes.ok) {
-                  const uploadData = await uploadRes.json();
-                  photoUrl = uploadData.url;
-                }
-              } catch (e) {
-                console.error('사진 크롭/업로드 오류:', e);
-              }
-            }
-
-            return {
-              id: idx + 1,
-              originalId: p.complaintNumber ?? null,
-              address: p.address,
-              destination: p.destination || null,
-              complaint: p.complaint,
-              manager: p.manager || null,
-              photoDescription: p.photoDescription || null,
-              photoUrl,
-              lat,
-              lng,
-              placeName,
-              source,
-              coordMessage,
-            };
-        })
-      );
-
-        const endTime = performance.now();
-        console.log(`✅ 총 소요시간: ${((endTime - startTime) / 1000).toFixed(1)}초`);
-        console.log(`📍 추출 지점 수: ${pointsWithCoords.length}개`);
-        console.log('추출된 지점들:', JSON.stringify(pointsWithCoords, null, 2));
-        setExtractedPoints(pointsWithCoords);
-        const draft = JSON.parse(localStorage.getItem('draft-route') || '{}');
-        draft.extractedPoints = pointsWithCoords;
-        draft.lastModified = Date.now();
-        localStorage.setItem('draft-route', JSON.stringify(draft));
-      } else {
-        alert('추출된 지점이 없습니다.');
-      }
-    } catch (error) {
-      alert('네트워크 오류가 발생했습니다.');
-    } finally {
-      setIsExtracting(false);
-    }
-  };
-
-  const handleExtractedDelete = async (id: number) => {
-    if (deletingId !== null) return;
-    const ok = await showConfirm('이 방문지를 삭제합니다. 정말로 삭제하시겠습니까?');
-    if (!ok) return;
-    setDeletingId(id);
-    const point = extractedPoints.find((p) => p.id === id);
-    if (point?.photoUrl && point.photoUrl.startsWith('https://')) {
-      try { await fetch('/api/delete-blob', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url: point.photoUrl }) }); } catch (e) { console.error('Blob 삭제 오류:', e); }
-    }
-    const updated = extractedPoints.filter((p) => p.id !== id);
-    setExtractedPoints(updated);
-    const draft = JSON.parse(localStorage.getItem('draft-route') || '{}');
-    draft.extractedPoints = updated;
-    draft.lastModified = Date.now();
-    localStorage.setItem('draft-route', JSON.stringify(draft));
-    setDeletingId(null);
-  };
-
-  const handleExtractedEdit = (point: typeof extractedPoints[0]) => {
-  setExtractEditTarget(point);
-  setExtractEditForm({
-    address: point.address || '',
-    destination: point.destination || '',
-    complaint: point.complaint || '',
-    manager: '',
-    photoUrl: '',
-    originalId: point.originalId != null ? String(point.originalId) : '',
-  });
-  if (point.lat && point.lng) {
-    setExtractEditCoordStatus('success');
-    setExtractEditCoord({ lat: point.lat ?? null, lng: point.lng ?? null, placeName: point.placeName ?? null, source: point.source ?? null, coordMessage: (point as any).coordMessage ?? null });
-  } else {
-    setExtractEditCoordStatus('fail');
-    setExtractEditCoord({ lat: null, lng: null, placeName: null, source: null, coordMessage: null });
-  }
-  setShowExtractEditModal(true);
-};
-
-  const handleExtractEditCheckCoord = async () => {
-    setExtractEditCoordStatus('loading');
-    try {
-      const res = await fetch('/api/geocode', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ destination: extractEditForm.destination, address: extractEditForm.address }),
-      });
-      if (res.ok) {
-        const data = await res.json();
-        if (data.lat && data.lng) {
-          setExtractEditCoord({ lat: data.lat, lng: data.lng, placeName: data.placeName, source: data.source, coordMessage: data.coordMessage || null });
-          setExtractEditCoordStatus('success');
-        } else {
-          setExtractEditCoordStatus('fail');
-        }
-      } else {
-        setExtractEditCoordStatus('fail');
-      }
-    } catch {
-      setExtractEditCoordStatus('fail');
-    }
-  };
-
-  // 추출지점 필드 실시간 저장 헬퍼
-  const handleExtractEditSaveField = (patch: Partial<typeof extractEditForm>) => {
-    if (!extractEditTarget) return;
-    const merged = { ...extractEditForm, ...patch };
-    const parsedOriginalId = merged.originalId ? Number(merged.originalId) : null;
-    const updatedPoint = {
-      ...extractEditTarget,
-      originalId: (!isNaN(parsedOriginalId as number) && parsedOriginalId !== null) ? parsedOriginalId : extractEditTarget.originalId ?? null,
-      address: merged.address,
-      destination: merged.destination || null,
-      complaint: merged.complaint,
-      lat: extractEditCoord.lat ?? extractEditTarget.lat ?? null,
-      lng: extractEditCoord.lng ?? extractEditTarget.lng ?? null,
-      placeName: extractEditCoord.placeName ?? extractEditTarget.placeName ?? null,
-      source: extractEditCoord.source ?? extractEditTarget.source ?? null,
-      coordMessage: extractEditCoord.coordMessage ?? (extractEditTarget as any).coordMessage ?? null,
-    };
-    const updatedPoints = extractedPoints.map((p) => p.id === extractEditTarget.id ? updatedPoint : p);
-    setExtractedPoints(updatedPoints);
-    const draft = JSON.parse(localStorage.getItem('draft-route') || '{}');
-    draft.extractedPoints = updatedPoints;
-    draft.lastModified = Date.now();
-    localStorage.setItem('draft-route', JSON.stringify(draft));
-  };
-
-  const handleExtractEditSave = async () => {
-    if (!extractEditTarget) return;
-    const parsedOriginalId = extractEditForm.originalId ? Number(extractEditForm.originalId) : null;
-
-    // 새로 선택한 사진이 dataURL이면 압축 후 업로드
-    let photoUrl = extractEditForm.photoUrl || extractEditTarget.photoUrl || null;
-    if (extractEditForm.photoUrl && extractEditForm.photoUrl.startsWith('data:')) {
-      try {
-        const compressed = await new Promise<string>((resolve) => {
-          const img = new Image();
-          img.onload = () => {
-            const canvas = document.createElement('canvas');
-            const maxSize = 1024;
-            let w = img.width, h = img.height;
-            if (w > maxSize || h > maxSize) {
-              if (w > h) { h = Math.round(h * maxSize / w); w = maxSize; }
-              else { w = Math.round(w * maxSize / h); h = maxSize; }
-            }
-            canvas.width = w; canvas.height = h;
-            canvas.getContext('2d')!.drawImage(img, 0, 0, w, h);
-            resolve(canvas.toDataURL('image/jpeg', 0.7));
-          };
-          img.src = extractEditForm.photoUrl as string;
-        });
-        const uploadRes = await fetch('/api/upload-photo', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ imageData: compressed, filename: `extract-${Date.now()}.jpg` }),
-        });
-        if (uploadRes.ok) { const uploadData = await uploadRes.json(); photoUrl = uploadData.url; }
-      } catch (e) { console.error('사진 업로드 오류:', e); }
-    }
-
-    const updatedPoint = {
-      ...extractEditTarget,
-      originalId: (!isNaN(parsedOriginalId as number) && parsedOriginalId !== null) ? parsedOriginalId : extractEditTarget.originalId ?? null,
-      address: extractEditForm.address,
-      destination: extractEditForm.destination || null,
-      complaint: extractEditForm.complaint,
-      photoUrl: photoUrl ?? null,
-      lat: extractEditCoord.lat ?? extractEditTarget.lat ?? null,
-      lng: extractEditCoord.lng ?? extractEditTarget.lng ?? null,
-      placeName: extractEditCoord.placeName ?? extractEditTarget.placeName ?? null,
-      source: extractEditCoord.source ?? extractEditTarget.source ?? null,
-      coordMessage: extractEditCoord.coordMessage ?? (extractEditTarget as any).coordMessage ?? null,
-    };
-    const updatedPoints = extractedPoints.map((p) => p.id === extractEditTarget.id ? updatedPoint : p);
-    setExtractedPoints(updatedPoints);
-    const draft = JSON.parse(localStorage.getItem('draft-route') || '{}');
-    draft.extractedPoints = updatedPoints;
-    draft.lastModified = Date.now();
-    localStorage.setItem('draft-route', JSON.stringify(draft));
-    setShowExtractEditModal(false);
-  };
-
-  const loadCurrentRoute = async () => {
-    setIsLoadingRoute(true);
-    try {
-      const today = new Date().toLocaleDateString('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/\. /g, '-').replace('.', '');
-      const res = await fetch(`/api/get-route?date=${today}`);
-      if (res.ok) {
-        const data = await res.json();
-        setCurrentRoute(data);
-      } else {
-        setCurrentRoute(null);
-      }
-      // ★ 추가지점 로드: localStorage 우선, Redis는 localStorage가 없을 때만 사용
-      try {
-        const draft = JSON.parse(localStorage.getItem('draft-route') || '{}');
-        const localPoints = draft.additionalPoints;
-        if (localPoints?.length > 0) {
-          // localStorage에 데이터 있으면 우선 사용 (지도뷰에서 저장한 최신 데이터)
-          setAdditionalPoints(localPoints);
-          additionalPointsRef.current = localPoints;
-        } else {
-          // localStorage에 없을 때만 Redis에서 로드
-          const addRes = await fetch(`/api/get-additional?date=${today}`);
-          if (addRes.ok) {
-            const addData = await addRes.json();
-            if (addData.points?.length > 0) {
-              setAdditionalPoints(addData.points);
-              additionalPointsRef.current = addData.points;
-            }
-          }
-        }
-      } catch {}
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setIsLoadingRoute(false);
-    }
-  };
-
-  const handleGenerateRoute = async () => {
-    if (isGenerating) return;
-
-    // 추가지점 포함 여부 확인
-    let includeAdditional = false;
-    if (additionalPoints.filter(p => p.lat && p.lng).length > 0) {
-      const answer = await showAdditionalConfirmDialog();
-      if (answer === 'cancel') return;
-      includeAdditional = answer === 'include';
-    }
-
-    const basePoints = [
-      ...extractedPoints.filter(p => p.lat && p.lng),
-      ...directPoints.filter(p => p.lat && p.lng),
-    ];
-    const addPoints = includeAdditional ? additionalPoints.filter(p => p.lat && p.lng) : [];
-    const allPoints = [...basePoints, ...addPoints];
-
-    if (allPoints.length === 0) {
-      alert('좌표가 확인된 지점이 없습니다.');
-      return;
-    }
-
-    const ok = await showConfirm(`좌표 확인된 지점 ${allPoints.length}개로 최적화 경로를 생성합니다. 계속하시겠습니까?`);
-    if (!ok) return;
-
-    setIsGenerating(true);
-    try {
-      // ① ORS Matrix API로 도로 거리 행렬 계산 시도
-      let ordered: typeof allPoints = [];
-      let usedORS = false;
-
-      const cityHallCoord = { lat: 37.7381, lng: 127.0338 };
-      const matrixLocations = [cityHallCoord, ...allPoints.map(p => ({ lat: p.lat!, lng: p.lng! }))];
-
-      try {
-        const matrixRes = await fetch('/api/ors-matrix', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ locations: matrixLocations }),
-        });
-        const matrixData = await matrixRes.json();
-
-        if (matrixData.ok && matrixData.matrix) {
-          const matrix: number[][] = matrixData.matrix;
-          const n = allPoints.length;
-
-          // ── Step 1: 최근접 이웃 알고리즘 (시청=0번 고정 출발)
-          const visited = new Array(n + 1).fill(false);
-          visited[0] = true;
-          const orderIdxs: number[] = []; // matrix 인덱스 (1~n)
-          let current = 0;
-
-          while (orderIdxs.length < n) {
-            let nearestIdx = -1;
-            let nearestDist = Infinity;
-            for (let i = 1; i <= n; i++) {
-              if (!visited[i] && matrix[current][i] < nearestDist) {
-                nearestDist = matrix[current][i];
-                nearestIdx = i;
-              }
-            }
-            if (nearestIdx === -1) break;
-            visited[nearestIdx] = true;
-            orderIdxs.push(nearestIdx);
-            current = nearestIdx;
-          }
-
-          // ── Step 2: 2-opt 개선 (교차 구간 제거)
-          // 전체 경로: [0(시청), ...orderIdxs, 0(시청 복귀)]
-          // orderIdxs만 개선 대상 (시청 위치 고정)
-          const routeCost = (idxs: number[]) => {
-            let cost = matrix[0][idxs[0]]; // 시청 → 첫 지점
-            for (let i = 0; i < idxs.length - 1; i++) cost += matrix[idxs[i]][idxs[i + 1]];
-            cost += matrix[idxs[idxs.length - 1]][0]; // 마지막 지점 → 시청
-            return cost;
-          };
-
-          let improved = true;
-          let route2opt = [...orderIdxs];
-          let iterations = 0;
-          const beforeCost = routeCost(route2opt);
-
-          while (improved && iterations < 100) {
-            improved = false;
-            iterations++;
-            const len = route2opt.length;
-            // 전체 경로 노드: [0(시청), r[0], r[1], ..., r[n-1], 0(시청복귀)]
-            // 노드 인덱스 0~n+1, 실제값: node(k) = k===0||k===len+1 ? 0 : route2opt[k-1]
-            const node = (k: number) => k === 0 || k === len + 1 ? 0 : route2opt[k - 1];
-            outer:
-            for (let i = 1; i <= len - 1; i++) {
-              for (let j = i + 1; j <= len; j++) {
-                // 엣지 i-1→i 와 j→j+1 을 교체
-                const a = node(i - 1);
-                const b = node(i);
-                const c = node(j);
-                const d = node(j + 1);
-                const before = matrix[a][b] + matrix[c][d];
-                const after  = matrix[a][c] + matrix[b][d];
-                if (after < before - 0.1) {
-                  // i~j 구간 역순
-                  route2opt = [
-                    ...route2opt.slice(0, i - 1),
-                    ...route2opt.slice(i - 1, j).reverse(),
-                    ...route2opt.slice(j),
-                  ];
-                  improved = true;
-                  break outer;
-                }
-              }
-            }
-          }
-
-          const afterCost = routeCost(route2opt);
-          const improvement = Math.round((beforeCost - afterCost) / 10) / 100; // km
-          console.log(`✅ 2-opt 완료: ${iterations}회 반복, ${improvement}km 단축`);
-
-          ordered = route2opt.map(i => allPoints[i - 1]); // matrix 인덱스 → allPoints 0-based
-          usedORS = true;
-        }
-      } catch (matrixErr) {
-        console.warn('⚠️ ORS Matrix 실패, 직선거리 fallback:', matrixErr);
-      }
-
-      // ② ORS 실패 시 직선거리 최근접 이웃 알고리즘 (기존 방식)
-      if (!usedORS) {
-        const unvisited = [...allPoints];
-        const orderedFallback = [unvisited.splice(0, 1)[0]];
-        while (unvisited.length > 0) {
-          const last = orderedFallback[orderedFallback.length - 1];
-          let nearestIdx = 0;
-          let nearestDist = Infinity;
-          unvisited.forEach((p, i) => {
-            const dist = Math.pow((p.lat! - last.lat!), 2) + Math.pow((p.lng! - last.lng!), 2);
-            if (dist < nearestDist) { nearestDist = dist; nearestIdx = i; }
-          });
-          orderedFallback.push(unvisited.splice(nearestIdx, 1)[0]);
-        }
-        ordered = orderedFallback;
-        console.log('⚠️ 직선거리 알고리즘 사용');
-      }
-
-      const today = new Date().toLocaleDateString('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/\. /g, '-').replace('.', '');
-      const cityHall = { order: 0, address: '의정부시 의정부동 358-1', destination: '의정부시청', complaint: '출발/복귀', lat: 37.7381, lng: 127.0338, placeName: '의정부시청', source: 'fixed' };
-      const routePoints = [
-        { ...cityHall, order: 0 },
-        ...ordered.map((p, i) => {
-          const rawPhotoUrl = ('photoUrl' in p ? p.photoUrl : null) || null;
-          // dataUrl(base64)은 제외하고 실제 업로드된 URL만 포함
-          const safePhotoUrl = rawPhotoUrl && rawPhotoUrl.startsWith('https://') ? rawPhotoUrl : null;
-          return {
-            order: i + 1,
-            originalId: ('originalId' in p ? (p as any).originalId : null) ?? null,
-            address: p.address,
-            destination: ('destination' in p ? p.destination : null) || null,
-            complaint: p.complaint,
-            lat: p.lat,
-            lng: p.lng,
-            placeName: p.placeName || null,
-            source: p.source || null,
-            coordMessage: ('coordMessage' in p ? p.coordMessage : null) || null,
-            photoDescription: ('photoDescription' in p ? p.photoDescription : null) || null,
-            photoUrl: safePhotoUrl,
-            manager: ('manager' in p ? p.manager : null) || null,
-          };
-        }),
-        { ...cityHall, order: ordered.length + 1 },
-      ];
-
-      const res = await fetch('/api/save-route', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ date: today, points: routePoints }),
-      });
-
-      if (!res.ok) throw new Error('저장 실패');
-      const data = await res.json();
-      console.log('✅ 경로 저장 완료:', JSON.stringify(data, null, 2));
-
-      // 추가지점 포함하여 재최적화한 경우 additionalPoints 초기화
-      if (includeAdditional) {
-        setAdditionalPoints([]); additionalPointsRef.current = [];
-        const draft = JSON.parse(localStorage.getItem('draft-route') || '{}');
-        delete draft.additionalPoints;
-        localStorage.setItem('draft-route', JSON.stringify(draft));
-      }
-
-      alert(`최적화 경로 생성 완료! (${today} 버전${data.version}, ${routePoints.length}개 지점)\n경로 계산: ${usedORS ? '도로 거리 기반 + 2-opt 개선 (ORS)' : '직선 거리 기반 (fallback)'}${includeAdditional ? '\n추가지점 포함하여 재최적화되었습니다.' : ''}`);
-      await loadCurrentRoute(); // 이력 즉시 갱신
-    } catch (e) {
-      console.error(e);
-      alert('경로 생성 중 오류가 발생했습니다.');
-    } finally {
-      setIsGenerating(false);
-    }
-  };
-
-  const handleUploadReset = async () => {
-    if (isResetting) return;
-    const ok = await showConfirm('추출된 지점 전체와 업로드 이미지를 모두 삭제합니다. 정말로 초기화 하시겠습니까?');
-    if (!ok) return;
-    setIsResetting(true);
-    // 병렬 삭제로 변경 (순차 → 동시)
-    await Promise.all(
-      extractedPoints
-        .filter(p => p.photoUrl && p.photoUrl.startsWith('https://'))
-        .map(p => fetch('/api/delete-blob', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ url: p.photoUrl }),
-        }).catch(e => console.error('Blob 삭제 오류:', e)))
-    );
-    setUploadedImages([]);
-    setExtractedPoints([]);
-    const draft = JSON.parse(localStorage.getItem('draft-route') || '{}');
-    delete draft.extractedPoints;
-    draft.lastModified = Date.now();
-    localStorage.setItem('draft-route', JSON.stringify(draft));
-    setIsResetting(false);
-  };
-
-  const handleDirectReset = async () => {
-    const ok = await showConfirm('직접입력 지점 전체를 삭제합니다. 정말로 초기화 하시겠습니까?');
-    if (!ok) return;
-    setIsResetting(true);
-    await Promise.all(
-      directPoints
-        .filter(p => p.photoUrl && p.photoUrl.startsWith('https://'))
-        .map(p => fetch('/api/delete-blob', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ url: p.photoUrl }),
-        }).catch(e => console.error('Blob 삭제 오류:', e)))
-    );
-    setDirectPoints([]);
-    const draft = JSON.parse(localStorage.getItem('draft-route') || '{}');
-    delete draft.directPoints;
-    draft.lastModified = Date.now();
-    localStorage.setItem('draft-route', JSON.stringify(draft));
-    setIsResetting(false);
-  };
-
   return (
-    <div className="min-h-screen" style={{ background: 'linear-gradient(180deg, #1a3a6e 0%, #1565c0 40%, #1976d2 100%)' }}>
-      {/* 헤더 */}
-      <header className="px-4 py-3 text-white" style={{ background: 'linear-gradient(180deg, #0d2444 0%, #1a3a6e 100%)' }}>
-        <h1 className="text-lg font-bold text-center">길도사 2.0 <span className="text-xs font-normal">(No헤맴 보장)</span></h1>
-        <p className="text-xs text-blue-200 mt-1 text-center leading-relaxed">
-          방문지를 입력하면 AI가 가장 효율적인 순서로 길을 짜드립니다. 클로드 AI가 네이버 지도와 ORS 도로 데이터를 분석해 최적 경로를 만듭니다.
-        </p>
-      </header>
-
-      {/* 탭바 */}
-      <div className="flex" style={{ background: '#1a3a6e' }}>
-        <button
-          onClick={handleViewTabClick}
-          className={`py-3 text-sm font-medium transition-all ${activeTab === 'view' ? 'w-2/3 text-white font-bold' : 'w-1/3 text-blue-300'}`}
-          style={activeTab === 'view' ? { background: 'linear-gradient(180deg, #2196f3 0%, #1565c0 100%)' } : { background: '#2a4a7e' }}
-        >
-          최적 경로
-        </button>
-        <button
-          onClick={handleInputTabClick}
-          className={`py-3 text-sm font-medium transition-all ${activeTab === 'input' ? 'w-2/3 text-white font-bold' : 'w-1/3 text-blue-300'}`}
-          style={activeTab === 'input' ? { background: 'linear-gradient(180deg, #b0bec5 0%, #78909c 100%)' } : { background: '#2a4a7e' }}
-        >
-          방문지 입력
-        </button>
+    <div style={{ width: '100vw', height: '100dvh', background: '#0d1b2e', display: 'flex', flexDirection: 'column' }}>
+      {/* 상단 헤더 */}
+      <div
+        style={{
+          background: 'linear-gradient(180deg, #1a3a6e 0%, #0d2444 100%)',
+          padding: '8px 12px',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '5px',
+          flexShrink: 0,
+          borderBottom: '1px solid rgba(100,180,255,0.3)',
+          touchAction: 'none',
+          userSelect: 'none',
+          WebkitUserSelect: 'none',
+        }}
+        onTouchStart={e => e.stopPropagation()}
+        onTouchMove={e => e.stopPropagation()}
+        onTouchEnd={e => e.stopPropagation()}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <button
+            onClick={() => { window.location.href = '/'; }}
+            style={{
+              background: 'rgba(255,255,255,0.1)',
+              border: '1px solid rgba(255,255,255,0.2)',
+              color: 'white',
+              borderRadius: '6px',
+              padding: '5px 10px',
+              fontSize: '12px',
+              cursor: 'pointer',
+              flexShrink: 0,
+            }}>
+            ← 메인화면
+          </button>
+          <div style={{ color: 'white', fontWeight: 'bold', fontSize: '15px', flex: 1 }}>최적 경로 지도</div>
+          {/* 관리자 인증 버튼 */}
+          <button
+            onClick={() => {
+              if (isAdmin) {
+                // 인증 해제
+                setIsAdmin(false); sessionStorage.removeItem('patrol-admin-auth');
+                
+              } else {
+                setShowAdminAuthModal(true);
+              }
+            }}
+            title={isAdmin ? '관리자 인증됨 (탭하여 해제)' : '관리자 인증'}
+            style={{
+              width: '28px', height: '28px',
+              borderRadius: '50%',
+              background: isAdmin ? 'rgba(249,115,22,0.85)' : 'rgba(255,255,255,0.12)',
+              border: isAdmin ? '1.5px solid #f97316' : '1px solid rgba(255,255,255,0.3)',
+              color: 'white', fontSize: '14px',
+              cursor: 'pointer', flexShrink: 0,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              transition: 'all 0.2s',
+            }}>
+            {isAdmin ? '🔓' : '🔒'}
+          </button>
+          <button
+            onClick={() => setShowMapHelpModal(true)}
+            title="지도뷰 도움말"
+            style={{
+              width: '24px', height: '24px',
+              borderRadius: '50%',
+              background: 'rgba(255,255,255,0.2)',
+              border: '1px solid rgba(255,255,255,0.4)',
+              color: 'white', fontSize: '12px', fontWeight: 'bold',
+              cursor: 'pointer', flexShrink: 0,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}>?</button>
+        </div>
+        {route && (
+          <div style={{ color: 'rgba(150,200,255,0.85)', fontSize: '11px', textAlign: 'right', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '8px' }}>
+            <span>{route.date} · 버전{route.version} · {route.points.filter(p => p.source !== 'fixed').length}개 지점</span>
+            {additionalPoints.filter(p => p.lat && p.lng).length > 0 && (
+              <span style={{ background: '#f97316', color: 'white', fontSize: '10px', fontWeight: 'bold', padding: '2px 6px', borderRadius: '10px' }}>
+                +{additionalPoints.filter(p => p.lat && p.lng).length} 추가
+              </span>
+            )}
+          </div>
+        )}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'nowrap', overflow: 'hidden', justifyContent: 'flex-end' }}>
+          {/* 2D/3D 토글 */}
+          <button
+            onClick={toggle3D}
+            style={{
+              padding: '4px 9px',
+              fontSize: '11px',
+              fontWeight: 'bold',
+              cursor: 'pointer',
+              border: '1px solid rgba(255,255,255,0.25)',
+              borderRadius: '6px',
+              background: is3D ? 'rgba(100,220,180,0.35)' : 'rgba(255,255,255,0.08)',
+              color: is3D ? '#a0ffd8' : 'rgba(255,255,255,0.5)',
+              flexShrink: 0,
+              whiteSpace: 'nowrap',
+            }}>
+            {is3D ? '일반' : '위성'}
+          </button>
+          <div style={{ display: 'flex', borderRadius: '6px', overflow: 'hidden', border: '1px solid rgba(255,255,255,0.25)', flexShrink: 0 }}>
+            <button
+              onClick={() => setLineMode('straight')}
+              style={{
+                padding: '4px 8px',
+                fontSize: '11px',
+                fontWeight: 'bold',
+                cursor: 'pointer',
+                border: 'none',
+                whiteSpace: 'nowrap',
+                background: lineMode === 'straight' ? 'rgba(100,180,255,0.4)' : 'rgba(255,255,255,0.08)',
+                color: lineMode === 'straight' ? 'white' : 'rgba(255,255,255,0.5)',
+              }}>직선</button>
+            <button
+              onClick={() => setLineMode('road')}
+              style={{
+                padding: '4px 8px',
+                fontSize: '11px',
+                fontWeight: 'bold',
+                cursor: 'pointer',
+                border: 'none',
+                borderLeft: '1px solid rgba(255,255,255,0.25)',
+                whiteSpace: 'nowrap',
+                background: lineMode === 'road' ? 'rgba(100,180,255,0.4)' : 'rgba(255,255,255,0.08)',
+                color: lineMode === 'road' ? 'white' : 'rgba(255,255,255,0.5)',
+              }}>도로</button>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
+              <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#FF6B35', border: '1px solid white', flexShrink: 0 }} />
+              <span style={{ color: 'rgba(255,255,255,0.7)', fontSize: '10px', whiteSpace: 'nowrap' }}>미완료</span>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
+              <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#1565c0', border: '1px solid white', flexShrink: 0 }} />
+              <span style={{ color: 'rgba(255,255,255,0.7)', fontSize: '10px', whiteSpace: 'nowrap' }}>완료</span>
+            </div>
+            {/* ★ 추가방문 버튼 - 관리자 전용 */}
+            <button
+              onClick={() => {
+                if (!isAdmin) {
+                  alert('관리자 인증이 필요합니다.\n상단의 🔒 버튼을 눌러 인증해주세요.');
+                  return;
+                }
+                setShowMapAddModal(true);
+              }}
+              style={{
+                background: isAdmin ? 'rgba(249,115,22,0.85)' : 'rgba(255,255,255,0.15)',
+                border: '1px solid rgba(255,255,255,0.25)',
+                color: isAdmin ? 'white' : 'rgba(255,255,255,0.4)', fontSize: '10px', fontWeight: 'bold',
+                padding: '3px 7px', borderRadius: '6px',
+                cursor: 'pointer', whiteSpace: 'nowrap',
+                flexShrink: 0,
+              }}>
+              {isAdmin ? '+추가방문' : '🔒추가'}
+            </button>
+          </div>
+        </div>
       </div>
 
-      {/* 탭 콘텐츠 */}
-      <style>{`
-        @keyframes pulse-btn {
-          0%, 100% { background-color: #16a34a; }
-          50% { background-color: #f97316; }
-        }
-        @keyframes blink-text {
-          0%, 100% { opacity: 1; }
-          50% { opacity: 0; }
-        }
-      `}</style>
-      <main className="px-3 py-3 max-w-lg mx-auto space-y-2">
-
-        {/* ── 최적 경로 탭 ── */}
-        {activeTab === 'view' && (
-          <>
-            {isLoadingRoute && (
-              <div className="text-center py-8 text-blue-200 text-sm">경로 불러오는 중...</div>
-            )}
-            {!isLoadingRoute && !currentRoute && (
-              <div className="text-center py-8 text-blue-200 text-sm">오늘 생성된 경로가 없습니다.</div>
-            )}
-            {!isLoadingRoute && currentRoute && (
-              <>
-                {/* 지도로 보기 - 상단 배치 */}
-                <div className="rounded overflow-hidden">
-                  <div className="w-full flex justify-between items-center px-4 py-3 text-white font-medium text-sm"
-                    style={{ background: 'linear-gradient(180deg, #4a90d9 0%, #1a5fb4 100%)' }}>
-                    <button
-                      onClick={() => { sessionStorage.setItem('map-entry', '1'); window.location.href = '/map'; }}
-                      style={{ background: 'none', border: 'none', color: 'white', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center', gap: '8px', flex: 1 }}>
-                      <span className="font-medium text-sm">지도로 보기</span>
-                      <span className="text-xs" style={{ color: 'rgba(200,230,255,0.85)' }}>{currentRoute.date} 버전{currentRoute.version}</span>
-                    </button>
-                    <span className="flex items-center gap-1">
-                      <button
-                        onClick={(e) => { e.stopPropagation(); loadCurrentRoute(); }}
-                        title="최신 정보로 가져오기"
-                        style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '2px 4px', display: 'flex', alignItems: 'center' }}>
-                        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                          <path d="M17.65 6.35C16.2 4.9 14.21 4 12 4C7.58 4 4.01 7.58 4.01 12C4.01 16.42 7.58 20 12 20C15.73 20 18.84 17.45 19.73 14H17.65C16.83 16.33 14.61 18 12 18C8.69 18 6 15.31 6 12C6 8.69 8.69 6 12 6C13.66 6 15.14 6.69 16.22 7.78L13 11H20V4L17.65 6.35Z" fill="#7dd3fc"/>
-                        </svg>
-                      </button>
-                      <button
-                        onClick={() => { sessionStorage.setItem('map-entry', '1'); window.location.href = '/map'; }}
-                        style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '2px 4px', color: 'white', fontSize: '14px', lineHeight: 1 }}>
-                        ▼
-                      </button>
-                    </span>
-                  </div>
-                </div>
-
-                {/* 목록으로 보기 - 하단 배치, 기본 닫힘 */}
-                <div className="rounded overflow-hidden mt-2">
-                  <button
-                    onClick={() => setCardListOpen(!cardListOpen)}
-                    className="w-full flex justify-between items-center px-4 py-3 text-white font-medium text-sm"
-                    style={{ background: 'linear-gradient(180deg, #4a90d9 0%, #1a5fb4 100%)' }}
-                  >
-                    <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <span>목록으로 보기</span>
-                      <span className="text-xs" style={{ color: 'rgba(200,230,255,0.85)' }}>{currentRoute.date} 버전{currentRoute.version}</span>
-                    </span>
-                    <span className="flex items-center gap-1">
-                      <button
-                        onClick={(e) => { e.stopPropagation(); loadCurrentRoute(); }}
-                        title="최신 정보로 가져오기"
-                        style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '2px 4px', display: 'flex', alignItems: 'center' }}>
-                        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                          <path d="M17.65 6.35C16.2 4.9 14.21 4 12 4C7.58 4 4.01 7.58 4.01 12C4.01 16.42 7.58 20 12 20C15.73 20 18.84 17.45 19.73 14H17.65C16.83 16.33 14.61 18 12 18C8.69 18 6 15.31 6 12C6 8.69 8.69 6 12 6C13.66 6 15.14 6.69 16.22 7.78L13 11H20V4L17.65 6.35Z" fill="#7dd3fc"/>
-                        </svg>
-                      </button>
-                      <span>{cardListOpen ? '▲' : '▼'}</span>
-                    </span>
-                  </button>
-                  {cardListOpen && (
-                    <div className="pt-0 pb-2">
-                      {currentRoute.points.map((point, idx) => {
-                        // 이 지점 다음에 삽입된 추가지점 찾기
-                        const insertedAfter = additionalPoints.filter(
-                          ap => ap.insertAfterOrder === point.order && ap.lat && ap.lng
-                        );
-                        return (
-                        <div key={point.order} style={idx === 0 ? { marginTop: '28px' } : {}}>
-                        {(() => {
-                          const st = pointStatuses[statusKey(point)];
-                          const isDone = st && ['민원처리완료','기처리','확인불가'].includes(st.status);
-                          // 의정부시청(fixed) 카드는 1번 지점 완료 여부로 색상 결정
-                          const firstPoint = currentRoute?.points.find(p => p.source !== 'fixed');
-                          const firstDone = firstPoint && (() => { const fst = pointStatuses[statusKey(firstPoint)]; return fst && ['민원처리완료','기처리','확인불가'].includes(fst.status); })();
-                          const cardBg = point.source === 'fixed'
-                            ? (firstDone ? 'rgba(255,255,255,0.12)' : 'rgba(235,100,0,0.55)')
-                            : (isDone ? 'rgba(255,255,255,0.12)' : 'rgba(235,100,0,0.55)');
-                          return (
-                        <div className="mx-2 rounded px-3 py-3"
-                          style={{ background: cardBg, cursor: point.source !== 'fixed' ? 'pointer' : 'default' }}
-                          onClick={() => { if (point.source !== 'fixed') { setSelectedPoint(point); setShowDetailModal(true); document.body.style.overflow = 'hidden'; } }}>
-                          <div style={{ display: 'flex', alignItems: point.source === 'fixed' ? 'center' : 'flex-start', gap: '8px' }}>
-                            <div style={{
-                              flexShrink: 0, width: '32px', height: '32px', borderRadius: '50%',
-                              background: point.source === 'fixed' ? (firstDone ? '#1565c0' : '#f57f17') : 'rgba(0,0,0,0.35)',
-                              display: 'flex', alignItems: 'center', justifyContent: 'center',
-                              color: 'white', fontWeight: 'bold', fontSize: '13px',
-                            }}>
-                              {point.source === 'fixed'
-                                ? <svg width="16" height="16" viewBox="0 0 24 24" fill="white"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/></svg>
-                                : point.order}
-                            </div>
-                            {/* 정보 영역 + 버튼 */}
-                            <div style={{ flex: 1, display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
-                              {/* 정보 영역 */}
-                              <div className="flex-1">
-                                <p className="text-sm leading-snug font-medium">
-                                  {point.source === 'fixed' ? (
-                                    <span style={{ color: firstDone ? '#a5d6a7' : '#ffcc80' }}>{point.destination || point.address}</span>
-                                  ) : point.source ? (
-                                    <span style={{ color: '#a5d6a7' }}>{point.address}{point.destination ? ` (${point.destination})` : ''}</span>
-                                  ) : (
-                                    <span className="text-white">{point.address}{point.destination ? ` (${point.destination})` : ''}</span>
-                                  )}
-                                </p>
-                                {point.source !== 'fixed' && (
-                                  <div style={{ display: 'flex', gap: '6px', marginTop: '2px', fontSize: '12px' }}>
-                                    <span style={{ flexShrink: 0 }}>{point.coordMessage?.includes('⚠️') ? '⚠️' : '✅'}</span>
-                                    <span style={{ color: point.coordMessage?.includes('⚠️') ? '#ffb74d' : '#fff176' }}>
-                                      {point.coordMessage || (point.source ? '' : '좌표 없음. (⚠️주소나 목적지명 확인 필요)')}
-                                    </span>
-                                  </div>
-                                )}
-                                {point.source !== 'fixed' && (point.source === 'place_nearest' || point.source === 'place_single') && point.placeName && (
-                                  <div style={{ display: 'flex', gap: '6px', marginTop: '2px', color: '#a5d6a7', fontSize: '12px' }}>
-                                    <span style={{ flexShrink: 0 }}>📍</span>
-                                    <span>플레이스명: {point.placeName}</span>
-                                  </div>
-                                )}
-                                {point.source !== 'fixed' && (
-                                  <div style={{ borderTop: '1px solid rgba(255,255,255,0.15)', marginTop: 5, marginBottom: 4 }} />
-                                )}
-                                {point.source !== 'fixed' && (
-                                  <div style={{ display: 'flex', gap: '6px', marginTop: '2px' }}>
-                                    <span style={{ color: 'rgba(255,255,255,0.6)', fontSize: '12px', width: '4rem', flexShrink: 0 }}>사진번호:</span>
-                                    <span style={{ color: '#a5d6a7', fontSize: '12px' }}>{point.originalId ? `${point.originalId} 번` : ''}</span>
-                                  </div>
-                                )}
-                                {point.source !== 'fixed' && (
-                                  <div style={{ display: 'flex', gap: '6px', marginTop: '2px' }}>
-                                    <span style={{ color: 'rgba(255,255,255,0.6)', fontSize: '12px', width: '4rem', flexShrink: 0 }}>방문내용:</span>
-                                    <span style={{ color: '#a5d6a7', fontSize: '12px' }}>{point.complaint || ''}</span>
-                                  </div>
-                                )}
-                                {point.source !== 'fixed' && (
-                                  <div style={{ display: 'flex', gap: '6px', marginTop: '2px' }}>
-                                    <span style={{ color: 'rgba(255,255,255,0.6)', fontSize: '12px', width: '4rem', flexShrink: 0 }}>사진설명:</span>
-                                    <span style={{ color: '#a5d6a7', fontSize: '12px' }}>{point.photoDescription || ''}</span>
-                                  </div>
-                                )}
-                                {point.source !== 'fixed' && (
-                                  <>
-                                    <div style={{ borderTop: '1px solid rgba(255,255,255,0.2)', marginTop: 6, marginBottom: 4 }} />
-                                    <div style={{ display: 'flex', gap: '6px', marginTop: '2px' }}>
-                                      <span style={{ color: 'rgba(255,255,255,0.6)', fontSize: '12px', width: '4rem', flexShrink: 0 }}>방문상태:</span>
-                                      <span style={{ color: '#80cbc4', fontWeight: 'bold', fontSize: '12px' }}>{st?.status || ''}</span>
-                                    </div>
-                                    <div style={{ display: 'flex', gap: '6px', marginTop: '2px' }}>
-                                      <span style={{ color: 'rgba(255,255,255,0.6)', fontSize: '12px', width: '4rem', flexShrink: 0 }}>방문메모:</span>
-                                      <span style={{ color: '#a5d6a7', fontSize: '12px' }}>{st?.memo || ''}</span>
-                                    </div>
-                                  </>
-                                )}
-                              </div>
-                              {/* 버튼 영역 - 우측 하단 정렬 */}
-                              {point.source !== 'fixed' && (
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', flexShrink: 0, justifyContent: 'flex-end', alignSelf: 'flex-end' }}>
-                                  <button
-                                    onClick={(e) => { e.stopPropagation(); window.open(`timemarkcamera://`); }}
-                                    className="text-xs px-3 py-1.5 rounded font-bold" style={{ background: '#FFD600', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                      <path d="M12 15.5C13.933 15.5 15.5 13.933 15.5 12C15.5 10.067 13.933 8.5 12 8.5C10.067 8.5 8.5 10.067 8.5 12C8.5 13.933 10.067 15.5 12 15.5Z" fill="#111"/>
-                                      <path d="M20 6h-2.18l-1.64-2H7.82L6.18 6H4C2.9 6 2 6.9 2 8v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2Z" fill="#111"/>
-                                      <circle cx="12" cy="12" r="3" fill="#FFD600"/>
-                                    </svg>
-                                  </button>
-                                  <button
-                                    onClick={(e) => { e.stopPropagation(); window.open(`tmap://route?goalname=${encodeURIComponent(point.destination || point.address)}&goaly=${point.lat}&goalx=${point.lng}`); }}
-                                    className="text-xs text-white px-3 py-1.5 rounded font-bold" style={{ background: '#0a3d8f' }}>티맵</button>
-                                  <button
-                                    onClick={(e) => { e.stopPropagation(); window.open(`nmap://navigation?dlat=${point.lat}&dlng=${point.lng}&dname=${encodeURIComponent(point.destination || point.address)}&appname=patrol-optimizer`); }}
-                                    className="text-xs text-white px-3 py-1.5 rounded font-bold" style={{ background: '#1b5e20' }}>네이버</button>
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-                          );
-                        })()}
-
-                        {/* ★ 이 지점 다음에 삽입된 추가지점 카드 */}
-                        {insertedAfter.map((ap) => {
-                          const apIdx2 = additionalPoints.findIndex(p => p.id === ap.id);
-                          const label = `A${apIdx2 + 1}`;
-                          const addrPart = ap.address?.trim() || ap.destination?.trim() || '';
-                          const apKey = `${addrPart}:${(ap.complaint || '').trim()}:none`;
-                          const apSt = pointStatuses[apKey];
-                          const apDone = apSt && ['민원처리완료','기처리','확인불가'].includes(apSt.status);
-                          const apCardBg = apDone ? 'rgba(255,255,255,0.12)' : 'rgba(235,100,0,0.55)';
-                          return (
-                            <div key={`ap-${ap.id}`}>
-                              <div className="flex justify-center py-1.5">
-                                <div className="flex flex-col items-center">
-                                  <div style={{ width: 6, height: 10, background: 'rgba(249,115,22,0.6)', borderRadius: 3 }} />
-                                  <svg width="20" height="12" viewBox="0 0 20 12" fill="none">
-                                    <path d="M10 12C9.6 12 9.2 11.8 9 11.5L0.5 1.5C0.1 1 0.4 0 1 0H19C19.6 0 19.9 1 19.5 1.5L11 11.5C10.8 11.8 10.4 12 10 12Z" fill="rgba(249,115,22,0.8)" />
-                                  </svg>
-                                </div>
-                              </div>
-                              <div className="mx-2 rounded px-3 py-3"
-                                style={{ background: apCardBg, cursor: 'pointer' }}
-                                onClick={() => { setSelectedAdditional(ap); setShowInsertModal(true); document.body.style.overflow = 'hidden'; }}>
-                                <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
-                                  {/* 마름모 배지 */}
-                                  <div style={{ flexShrink: 0, width: '32px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                    <svg width="32" height="32" viewBox="0 0 32 32">
-                                      <polygon points="16,2 30,16 16,30 2,16" fill={apDone ? '#1565c0' : '#f97316'} stroke="white" strokeWidth="1.5"/>
-                                      <text x="16" y="20" textAnchor="middle" fontSize="9" fontWeight="bold" fill="white" fontFamily="Arial,sans-serif">{label}</text>
-                                    </svg>
-                                  </div>
-                                  <div style={{ flex: 1, display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
-                                    <div className="flex-1">
-                                      <p className="text-sm leading-snug font-medium">
-                                        <span style={{ color: '#a5d6a7' }}>{ap.address}{ap.destination ? ` (${ap.destination})` : ''}</span>
-                                      </p>
-                                      {ap.coordMessage && (
-                                        <div style={{ display: 'flex', gap: '6px', marginTop: '2px', fontSize: '12px' }}>
-                                          <span style={{ flexShrink: 0 }}>{ap.coordMessage?.includes('⚠️') ? '⚠️' : '✅'}</span>
-                                          <span style={{ color: ap.coordMessage?.includes('⚠️') ? '#ffb74d' : '#fff176' }}>{ap.coordMessage}</span>
-                                        </div>
-                                      )}
-                                      {(ap.source === 'place_nearest' || ap.source === 'place_single') && ap.placeName && (
-                                        <div style={{ display: 'flex', gap: '6px', marginTop: '2px', color: '#a5d6a7', fontSize: '12px' }}>
-                                          <span style={{ flexShrink: 0 }}>📍</span>
-                                          <span>플레이스명: {ap.placeName}</span>
-                                        </div>
-                                      )}
-                                      <div style={{ borderTop: '1px solid rgba(255,255,255,0.15)', marginTop: 5, marginBottom: 4 }} />
-                                      <div style={{ display: 'flex', gap: '6px', marginTop: '2px' }}>
-                                        <span style={{ color: 'rgba(255,255,255,0.6)', fontSize: '12px', width: '4rem', flexShrink: 0 }}>방문내용:</span>
-                                        <span style={{ color: '#a5d6a7', fontSize: '12px' }}>{ap.complaint || ''}</span>
-                                      </div>
-                                      <div style={{ display: 'flex', gap: '6px', marginTop: '2px' }}>
-                                        <span style={{ color: 'rgba(255,255,255,0.6)', fontSize: '12px', width: '4rem', flexShrink: 0 }}>담당자:</span>
-                                        <span style={{ color: '#a5d6a7', fontSize: '12px' }}>{ap.manager || ''}</span>
-                                      </div>
-                                      <div style={{ borderTop: '1px solid rgba(255,255,255,0.2)', marginTop: 6, marginBottom: 4 }} />
-                                      <div style={{ display: 'flex', gap: '6px', marginTop: '2px' }}>
-                                        <span style={{ color: 'rgba(255,255,255,0.6)', fontSize: '12px', width: '4rem', flexShrink: 0 }}>방문상태:</span>
-                                        <span style={{ color: '#80cbc4', fontWeight: 'bold', fontSize: '12px' }}>{apSt?.status || ''}</span>
-                                      </div>
-                                      <div style={{ display: 'flex', gap: '6px', marginTop: '2px' }}>
-                                        <span style={{ color: 'rgba(255,255,255,0.6)', fontSize: '12px', width: '4rem', flexShrink: 0 }}>방문메모:</span>
-                                        <span style={{ color: '#a5d6a7', fontSize: '12px' }}>{apSt?.memo || ''}</span>
-                                      </div>
-                                    </div>
-                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', flexShrink: 0, justifyContent: 'flex-end', alignSelf: 'flex-end' }}>
-                                      <button
-                                        onClick={(e) => { e.stopPropagation(); window.open(`timemarkcamera://`); }}
-                                        className="text-xs px-3 py-1.5 rounded font-bold" style={{ background: '#FFD600', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                          <path d="M12 15.5C13.933 15.5 15.5 13.933 15.5 12C15.5 10.067 13.933 8.5 12 8.5C10.067 8.5 8.5 10.067 8.5 12C8.5 13.933 10.067 15.5 12 15.5Z" fill="#111"/>
-                                          <path d="M20 6h-2.18l-1.64-2H7.82L6.18 6H4C2.9 6 2 6.9 2 8v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2Z" fill="#111"/>
-                                          <circle cx="12" cy="12" r="3" fill="#FFD600"/>
-                                        </svg>
-                                      </button>
-                                      <button
-                                        onClick={(e) => { e.stopPropagation(); window.open(`tmap://route?goalname=${encodeURIComponent(ap.destination || ap.address)}&goaly=${ap.lat}&goalx=${ap.lng}`); }}
-                                        className="text-xs text-white px-3 py-1.5 rounded font-bold" style={{ background: '#0a3d8f' }}>티맵</button>
-                                      <button
-                                        onClick={(e) => { e.stopPropagation(); window.open(`nmap://navigation?dlat=${ap.lat}&dlng=${ap.lng}&dname=${encodeURIComponent(ap.destination || ap.address)}&appname=patrol-optimizer`); }}
-                                        className="text-xs text-white px-3 py-1.5 rounded font-bold" style={{ background: '#1b5e20' }}>네이버</button>
-                                    </div>
-                                  </div>
-                                </div>
-                              </div>
-                            </div>
-                          );
-                        })}
-
-                          <div className="flex justify-center py-1.5">
-                            <div className="flex flex-col items-center">
-                              {idx < currentRoute.points.length - 1 && (
-                                <div style={{ width: 6, height: 10, background: 'rgba(100,180,255,0.6)', borderRadius: 3 }} />
-                              )}
-                              {idx < currentRoute.points.length - 1 && (
-                                <svg width="20" height="12" viewBox="0 0 20 12" fill="none">
-                                  <path d="M10 12C9.6 12 9.2 11.8 9 11.5L0.5 1.5C0.1 1 0.4 0 1 0H19C19.6 0 19.9 1 19.5 1.5L11 11.5C10.8 11.8 10.4 12 10 12Z" fill="rgba(100,180,255,0.8)" />
-                                </svg>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-
-              </>
-            )}
-
-          </>
-        )}
-
-        {/* ── 방문지 입력 탭 ── */}
-        {activeTab === 'input' && (
-          <>
-            {/* 이미지 업로드 아코디언 */}
-            <div className="rounded overflow-hidden">
-              <button
-                onClick={() => setUploadOpen(!uploadOpen)}
-                className="w-full flex justify-between items-center px-4 py-3 text-white font-medium text-sm"
-                style={{ background: 'linear-gradient(180deg, #b0bec5 0%, #78909c 100%)' }}
-              >
-                <span className="flex items-center gap-2">
-                  사진에서 뽑기
-                  {extractedPoints.length > 0 && (
-                    <span className="text-xs px-1.5 py-0.5 rounded-full font-bold" style={{ background: '#78909c', color: 'white', border: '1px solid rgba(255,255,255,0.4)' }}>
-                      {extractedPoints.length}
-                    </span>
-                  )}
-                </span>
-                <span className="flex items-center gap-2">
-                  <div
-                    onClick={(e) => { e.stopPropagation(); handleUploadReset(); }}
-                    className="text-white text-xs px-2 py-1 rounded cursor-pointer"
-                    style={{ background: isResetting ? '#888' : '#2e7d32', cursor: isResetting ? 'not-allowed' : 'pointer' }}
-                  >{isResetting ? '초기화 중...' : '초기화'}</div>
-                  <span>{uploadOpen ? '▲' : '▼'}</span>
-                </span>
-              </button>
-
-              {uploadOpen && (
-                <div className="px-3 py-3 space-y-3" style={{ background: 'rgba(255,255,255,0.08)' }}>
-
-                  {/* 사진 불러오기 */}
-                  <div>
-                    <label className="inline-block text-white text-xs font-bold px-4 py-2 rounded cursor-pointer w-32 text-center"
-                      style={{ background: '#0a3d8f' }}>
-                      사진 불러오기
-                      <input type="file" accept="image/*" multiple className="hidden" onChange={handleImageUpload} />
-                    </label>
-
-                    {/* 썸네일 목록 */}
-                    {uploadedImages.length > 0 && (
-                      <div className="flex flex-wrap gap-2 mt-2">
-                        {uploadedImages.map((img, idx) => (
-                          <div key={img.id} className="relative w-16 h-16">
-                            <img
-                              src={img.url} alt={img.name}
-                              className="w-16 h-16 object-cover rounded cursor-pointer"
-                              onClick={() => setPreviewIndex(idx)}
-                            />
-                            <button
-                              onClick={() => handleImageDelete(img.id)}
-                              className="absolute -top-1 -right-1 w-5 h-5 rounded-full text-white text-xs flex items-center justify-center font-bold"
-                              style={{ background: '#c62828' }}
-                            >✕</button>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* 방문지 추출하기 버튼 + 도움말 버튼 */}
-                  <div className="flex items-center justify-between">
-                    <button
-                      onClick={isExtracting ? undefined : handleExtract}
-                      disabled={isExtracting}
-                      className="py-2 rounded text-white text-xs font-bold w-32"
-                      style={{ background: isExtracting ? '#f97316' : '#0a3d8f', animation: isExtracting ? 'pulse-btn 1s ease-in-out infinite' : 'none' }}
-                    >
-                      {isExtracting ? '추출 중...' : '방문지 추출하기'}
-                    </button>
-                    <button
-                      onClick={() => setShowHelpModal(true)}
-                      title="좌표 생성 도움말"
-                      className="flex items-center justify-center rounded-full text-white text-xs font-bold"
-                      style={{ width: '24px', height: '24px', background: 'rgba(255,255,255,0.2)', border: '1px solid rgba(255,255,255,0.4)', flexShrink: 0 }}
-                    >?</button>
-                  </div>
-
-                  {/* 추출된 지점카드 */}
-                  {extractedPoints.length > 0 && (
-                    <div className="space-y-2">
-                      {extractedPoints.map((point) => (
-                        <div key={point.id} className="rounded px-3 py-2"
-                          style={{ background: 'rgba(255,255,255,0.12)' }}>
-                          <div className="flex justify-between items-start gap-2">
-                            <div className="flex-shrink-0 w-7 h-7 rounded-full flex items-center justify-center text-white font-bold text-sm"
-                              style={{ background: 'rgba(0,0,0,0.35)' }}>
-                              {point.id}
-                            </div>
-                            <div className="flex-1 cursor-pointer" onClick={() => handleExtractedEdit(point)}>
-                              <p className="text-sm leading-snug font-medium">
-                                {point.source ? (
-                                  <span style={{ color: '#a5d6a7' }}>{point.address}{point.destination ? ` (${point.destination})` : ''}</span>
-                                ) : (
-                                  <span className="text-white">{point.address}{point.destination ? ` (${point.destination})` : ''}</span>
-                                )}
-                              </p>
-                              {/* 좌표 생성 메시지 */}
-                              {(() => {
-                                const hasWarning = point.coordMessage?.includes('⚠️');
-                                const noCoord = !point.source;
-                                const isWarningMsg = hasWarning || noCoord;
-                                const icon = isWarningMsg ? '⚠️' : '✅';
-                                const rawMsg = point.coordMessage
-                                  ? point.coordMessage.replace('⚠️', '').trim()
-                                  : '좌표 없음. (주소나 방문지명 확인 필요)';
-                                if (isWarningMsg) {
-                                  return (
-                                    <p className="text-xs mt-0.5" style={{ color: 'white', fontWeight: 'bold' }}>
-                                      <span style={{ display: 'inline-block', width: '1.2rem' }}>⚠️</span>
-                                      <span style={{ animation: 'blink-text 1.2s ease-in-out infinite' }}>{rawMsg}</span>
-                                    </p>
-                                  );
-                                }
-                                return (
-                                  <p className="text-xs mt-0.5" style={{ color: '#fff176' }}>
-                                    <span style={{ display: 'inline-block', width: '1.2rem' }}>✅</span>
-                                    {rawMsg}
-                                  </p>
-                                );
-                              })()}
-                              <p className="text-xs mt-0.5" style={{ color: '#a5d6a7' }}>
-                                <span style={{ color: 'rgba(255,255,255,0.6)', display: 'inline-block', width: '4rem' }}>방문내용:</span><span style={{ color: '#a5d6a7' }}>{point.complaint || ''}</span>
-                              </p>
-                              <p className="text-xs mt-0.5" style={{ color: '#a5d6a7' }}>
-                                <span style={{ color: 'rgba(255,255,255,0.6)', display: 'inline-block', width: '4rem' }}>사진설명:</span><span style={{ color: '#a5d6a7' }}>{point.photoDescription || '(사진없음)'}</span>
-                              </p>
-                            </div>
-                            <button
-                              onClick={() => handleExtractedDelete(point.id)}
-                              disabled={deletingId !== null}
-                              className="text-xs text-white px-2 py-1 rounded flex-shrink-0"
-                              style={{ background: deletingId === point.id ? '#888' : '#c62828', cursor: deletingId !== null ? 'not-allowed' : 'pointer' }}>
-                              {deletingId === point.id ? '삭제 중' : '삭제'}
-                            </button>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-
-            {/* 직접 입력 아코디언 */}
-            <div className="rounded overflow-hidden">
-              <button
-                onClick={() => setDirectOpen(!directOpen)}
-                className="w-full flex justify-between items-center px-4 py-3 text-white font-medium text-sm"
-                style={{ background: 'linear-gradient(180deg, #b0bec5 0%, #78909c 100%)' }}
-              >
-                <span className="flex items-center gap-2">
-                  손으로 입력
-                  {directPoints.length > 0 && (
-                    <span className="text-xs px-1.5 py-0.5 rounded-full font-bold" style={{ background: '#78909c', color: 'white', border: '1px solid rgba(255,255,255,0.4)' }}>
-                      {directPoints.length}
-                    </span>
-                  )}
-                </span>
-                <span className="flex items-center gap-2">
-                  <div
-                    onClick={(e) => { e.stopPropagation(); handleDirectReset(); }}
-                    className="text-white text-xs px-2 py-1 rounded cursor-pointer"
-                    style={{ background: '#2e7d32' }}
-                  >초기화</div>
-                  <span>{directOpen ? '▲' : '▼'}</span>
-                </span>
-              </button>
-              {directOpen && (
-                <div className="px-3 py-3 space-y-2" style={{ background: 'rgba(255,255,255,0.08)' }}>
-                  {/* 직접입력 지점카드 목록 */}
-                  {directPoints.map((point, index) => (
-                    <div key={point.id} className="rounded px-3 py-2"
-                      style={{ background: 'rgba(255,255,255,0.12)' }}>
-                      <div className="flex justify-between items-start gap-2">
-                        <div className="flex-shrink-0 w-7 h-7 rounded-full flex items-center justify-center text-white font-bold text-xs"
-                          style={{ background: 'rgba(0,0,0,0.35)' }}>
-                          D{index + 1}
-                        </div>
-                        <div className="flex-1 cursor-pointer" onClick={() => handleDirectEdit(point)}>
-                          <p className="text-sm leading-snug font-medium">
-                            {point.source ? (
-                              <span style={{ color: '#a5d6a7' }}>{point.address || '주소 없음'}{point.destination ? ` (${point.destination})` : ''}</span>
-                            ) : (
-                              <span className="text-white">{point.address || '주소 없음'}{point.destination ? ` (${point.destination})` : ''}</span>
-                            )}
-                          </p>
-                          {(() => {
-                            const hasWarning = point.coordMessage?.includes('⚠️');
-                            const noCoord = !point.source;
-                            const isWarningMsg = hasWarning || noCoord;
-                            const rawMsg = point.coordMessage
-                              ? point.coordMessage.replace('⚠️', '').trim()
-                              : '좌표 없음. (주소나 방문지명 확인 필요)';
-                            if (isWarningMsg) {
-                              return (
-                                <p className="text-xs mt-0.5" style={{ color: 'white', fontWeight: 'bold' }}>
-                                  <span style={{ display: 'inline-block', width: '1.2rem' }}>⚠️</span>
-                                  <span style={{ animation: 'blink-text 1.2s ease-in-out infinite' }}>{rawMsg}</span>
-                                </p>
-                              );
-                            }
-                            return (
-                              <p className="text-xs mt-0.5" style={{ color: '#fff176' }}>
-                                <span style={{ display: 'inline-block', width: '1.2rem' }}>✅</span>
-                                {rawMsg}
-                              </p>
-                            );
-                          })()}
-                          <p className="text-xs mt-0.5">
-                            <span style={{ color: 'rgba(255,255,255,0.6)', display: 'inline-block', width: '4rem' }}>방문내용:</span>
-                            <span style={{ color: '#a5d6a7' }}>{point.complaint || ''}</span>
-                          </p>
-                          <p className="text-xs mt-0.5">
-                            <span style={{ color: 'rgba(255,255,255,0.6)', display: 'inline-block', width: '4rem' }}>사진설명:</span>
-                            <span style={{ color: '#a5d6a7' }}>{(point as any).photoDescription || '(사진없음)'}</span>
-                          </p>
-                        </div>
-                        <button
-                          onClick={() => handleDirectDelete(point.id)}
-                          disabled={deletingId !== null}
-                          className="text-xs text-white px-2 py-1 rounded flex-shrink-0"
-                          style={{ background: deletingId === point.id ? '#888' : '#c62828', cursor: deletingId !== null ? 'not-allowed' : 'pointer' }}>
-                          {deletingId === point.id ? '삭제 중' : '삭제'}
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-
-                  {/* 지점 추가 아이콘 */}
-                  <div
-                    onClick={() => handleDirectAdd()}
-                    className="flex items-center justify-center w-10 h-10 rounded-full cursor-pointer mx-auto mt-1"
-                    style={{ background: 'rgba(255,255,255,0.2)', border: '2px dashed rgba(255,255,255,0.5)' }}
-                  >
-                    <span className="text-white text-xl font-bold">+</span>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* 추가 지점 아코디언 */}
-            <div className="rounded overflow-hidden">
-              <button
-                onClick={() => setAdditionalOpen(!additionalOpen)}
-                className="w-full flex justify-between items-center px-4 py-3 text-white font-medium text-sm"
-                style={{ background: 'linear-gradient(180deg, #b0bec5 0%, #78909c 100%)' }}
-              >
-                <span className="flex items-center gap-2">
-                  완성 루트에 끼워넣기
-                  {additionalPoints.length > 0 && (
-                    <span className="text-xs px-1.5 py-0.5 rounded-full font-bold" style={{ background: '#78909c', color: 'white', border: '1px solid rgba(255,255,255,0.4)' }}>
-                      {additionalPoints.length}
-                    </span>
-                  )}
-                </span>
-                <span className="flex items-center gap-2">
-                  {additionalPoints.length > 0 && (
-                    <div
-                      onClick={(e) => { e.stopPropagation(); handleAdditionalReset(); }}
-                      className="text-white text-xs px-2 py-1 rounded cursor-pointer"
-                      style={{ background: '#2e7d32' }}
-                    >초기화</div>
-                  )}
-                  <span>{additionalOpen ? '▲' : '▼'}</span>
-                </span>
-              </button>
-              {additionalOpen && (
-                <div className="px-3 py-3 space-y-2" style={{ background: 'rgba(255,255,255,0.08)' }}>
-                  {/* 추가지점 설명 */}
-                  <p className="text-xs px-1" style={{ color: 'white' }}>
-                    경로 완성 후 현장에서 방문지를 추가할 수 있습니다. 추가된 방문지는 지도에 마름모 마커로 표시됩니다.
-                  </p>
-                  {/* 추가지점 카드 목록 */}
-                  {additionalPoints.map((point, index) => (
-                    <div key={point.id} className="rounded px-3 py-2"
-                      style={{ background: 'rgba(255,255,255,0.12)' }}>
-                      <div className="flex justify-between items-start gap-2">
-                        {/* 마름모 마커 */}
-                        <div className="flex-shrink-0 flex items-center justify-center" style={{ width: '28px', height: '28px' }}>
-                          <svg width="26" height="26" viewBox="0 0 26 26">
-                            <polygon points="13,1 25,13 13,25 1,13" fill="#f97316" stroke="none"/>
-                            <text x="13" y="17" textAnchor="middle" fontSize="8" fontWeight="bold" fill="white">A{index + 1}</text>
-                          </svg>
-                        </div>
-                        <div className="flex-1 cursor-pointer" onClick={() => handleAdditionalEdit(point)}>
-                          <p className="text-sm leading-snug font-medium">
-                            {point.source ? (
-                              <span style={{ color: '#a5d6a7' }}>{point.address || '주소 없음'}{point.destination ? ` (${point.destination})` : ''}</span>
-                            ) : (
-                              <span className="text-white">{point.address || '주소 없음'}{point.destination ? ` (${point.destination})` : ''}</span>
-                            )}
-                          </p>
-                          {(() => {
-                            const hasWarning = point.coordMessage?.includes('⚠️');
-                            const noCoord = !point.source;
-                            const isWarningMsg = hasWarning || noCoord;
-                            const rawMsg = point.coordMessage
-                              ? point.coordMessage.replace('⚠️', '').trim()
-                              : '좌표 없음. (주소나 방문지명 확인 필요)';
-                            if (isWarningMsg) {
-                              return (
-                                <p className="text-xs mt-0.5" style={{ color: 'white', fontWeight: 'bold' }}>
-                                  <span style={{ display: 'inline-block', width: '1.2rem' }}>⚠️</span>
-                                  <span style={{ animation: 'blink-text 1.2s ease-in-out infinite' }}>{rawMsg}</span>
-                                </p>
-                              );
-                            }
-                            return (
-                              <p className="text-xs mt-0.5" style={{ color: '#fff176' }}>
-                                <span style={{ display: 'inline-block', width: '1.2rem' }}>✅</span>
-                                {rawMsg}
-                              </p>
-                            );
-                          })()}
-                          <p className="text-xs mt-0.5">
-                            <span style={{ color: 'rgba(255,255,255,0.6)', display: 'inline-block', width: '4rem' }}>방문내용:</span>
-                            <span style={{ color: '#a5d6a7' }}>{point.complaint || ''}</span>
-                          </p>
-                          <p className="text-xs mt-0.5">
-                            <span style={{ color: 'rgba(255,255,255,0.6)', display: 'inline-block', width: '4rem' }}>사진설명:</span>
-                            <span style={{ color: '#a5d6a7' }}>{(point as any).photoDescription || '(사진없음)'}</span>
-                          </p>
-                          {point.insertAfterOrder != null && (
-                            <p className="text-xs mt-0.5" style={{ color: '#c4b5fd' }}>
-                              📌 {point.insertAfterOrder}번 지점 다음 삽입
-                            </p>
-                          )}
-                        </div>
-                        <button
-                          onClick={() => handleAdditionalDelete(point.id)}
-                          disabled={deletingId !== null}
-                          className="text-xs text-white px-2 py-1 rounded flex-shrink-0"
-                          style={{ background: deletingId === point.id ? '#888' : '#c62828', cursor: deletingId !== null ? 'not-allowed' : 'pointer' }}>
-                          {deletingId === point.id ? '삭제 중' : '삭제'}
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                  {/* 추가 버튼 - 손으로 입력과 동일한 스타일 */}
-                  <div
-                    onClick={handleAdditionalAdd}
-                    className="flex items-center justify-center w-10 h-10 rounded-full cursor-pointer mx-auto mt-1"
-                    style={{ background: 'rgba(255,255,255,0.2)', border: '2px dashed rgba(255,255,255,0.5)' }}
-                  >
-                    <span className="text-white text-xl font-bold">+</span>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* 최적 경로 짜기 */}
-            <div className="rounded mt-2" style={{ background: '#0d2444' }}>
-              <button
-                onClick={handleGenerateRoute}
-                className="w-full py-3 text-white text-sm font-medium"
-                style={{ opacity: isGenerating ? 0.6 : 1, cursor: isGenerating ? 'not-allowed' : 'pointer' }}
-              >{isGenerating ? '경로 생성 중...' : '최적 경로 짜기'}</button>
-            </div>
-
-            {/* 오늘 버전 이력 */}
-            {currentRoute?.history && currentRoute.history.length > 0 && (
-              <div className="mt-2 px-1">
-                {currentRoute.history.map((h) => {
-                  const d = new Date(h.createdAt);
-                  const timeStr = d.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', hour12: false });
-                  return (
-                    <div key={h.version} style={{ color: 'rgba(180,210,255,0.55)', fontSize: '11px', lineHeight: '1.9' }}>
-                      {currentRoute.date} 버전{h.version} · {timeStr}
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </>
-        )}
-      </main>
-
-      {/* 관리자 인증 모달 */}
-      {showAuthModal && (
-        <div className="fixed inset-0 flex items-center justify-center z-50"
-          style={{ background: 'rgba(0,0,0,0.6)' }}>
-          <div className="rounded-lg px-6 py-6 w-72" style={{ background: '#1a3a6e' }}>
-            <h2 className="text-white font-bold text-base text-center mb-4">관리자 인증</h2>
-            <input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleAuth()}
-              placeholder="비밀번호"
-              className="w-full px-3 py-2 rounded text-sm mb-2 outline-none"
-              style={{ background: 'rgba(255,255,255,0.15)', color: 'white' }}
-            />
-            {authError && (
-              <p className="text-red-300 text-xs text-center mb-2">{authError}</p>
-            )}
-            <div className="flex gap-2 mt-3">
-              <button onClick={handleAuthClose}
-                className="flex-1 py-2 rounded text-sm text-white font-medium"
-                style={{ background: '#455a64' }}>닫기</button>
-              <button onClick={handleAuth}
-                className="flex-1 py-2 rounded text-sm text-white font-bold"
-                style={{ background: '#0a3d8f' }}>인증</button>
-            </div>
-          </div>
-        </div>
-      )}
-      {/* 직접 입력 지점정보 모달 */}
-      {showDirectModal && (
-        <div className="fixed inset-0 z-50 flex flex-col" style={{ background: '#1a3a6e' }}
-          onTouchMove={e => e.stopPropagation()}>
-          {/* 타이틀 바 */}
-          <div className="flex items-center gap-3 px-4 py-3 flex-shrink-0" style={{ background: '#0d2444', borderBottom: '1px solid rgba(255,255,255,0.15)' }}>
-            <span className="w-8 h-8 rounded-full bg-white text-blue-900 text-sm font-bold flex items-center justify-center flex-shrink-0">
-              {editingPoint ? `D${directPoints.findIndex(p => p.id === editingPoint.id) + 1}` : `D${directPoints.length + 1}`}
-            </span>
-            <span className="text-white font-bold text-sm flex-1">방문지 수정 (직접 입력)</span>
-            <button onClick={() => { handleDirectSave(); }}
-              style={{ background: '#c62828', border: 'none', borderRadius: '6px', width: '36px', height: '36px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}>
-              <span style={{ color: 'white', fontWeight: 'bold', fontSize: '16px' }}>✕</span>
-            </button>
-          </div>
-
-          {/* 내용 - 스크롤 격리 */}
-          <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3"
-            style={{ overscrollBehavior: 'contain' }}
-            onWheel={e => e.stopPropagation()}
-            onTouchMove={e => e.stopPropagation()}>
-
-            {/* 주소 */}
-            <div className="flex items-center gap-2">
-              <label className="text-blue-200 text-xs flex-shrink-0" style={{ width: '5rem' }}>주소</label>
-              <input type="text" value={directForm.address} placeholder=""
-                onChange={(e) => { setDirectForm((prev) => ({ ...prev, address: e.target.value })); setDirectCoordStatus('idle'); setDirectCoord({ lat: null, lng: null, placeName: null, source: null, coordMessage: null }); }}
-                className="flex-1 px-2 py-1.5 rounded text-xs outline-none"
-                style={{ background: 'rgba(255,255,255,0.15)', color: 'white' }} />
-            </div>
-
-            {/* 방문지 */}
-            <div className="flex items-center gap-2">
-              <label className="text-blue-200 text-xs flex-shrink-0" style={{ width: '5rem' }}>방문지</label>
-              <input type="text" value={directForm.destination} placeholder=""
-                onChange={(e) => { setDirectForm((prev) => ({ ...prev, destination: e.target.value })); setDirectCoordStatus('idle'); setDirectCoord({ lat: null, lng: null, placeName: null, source: null, coordMessage: null }); }}
-                className="flex-1 px-2 py-1.5 rounded text-xs outline-none"
-                style={{ background: 'rgba(255,255,255,0.15)', color: 'white' }} />
-            </div>
-
-            {/* 좌표 확인하기 버튼 */}
-            <div className="flex items-center gap-2">
-              <div style={{ width: '5rem', flexShrink: 0 }} />
-              <button
-                onClick={async () => {
-                  setDirectCoordStatus('loading');
-                  try {
-                    const res = await fetch('/api/geocode', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ address: directForm.address, destination: directForm.destination }) });
-                    const data = await res.json();
-                    if (res.ok && data.lat && data.lng) {
-                      setDirectCoord({ lat: data.lat, lng: data.lng, placeName: data.placeName || null, source: data.source || null, coordMessage: data.coordMessage || null });
-                      setDirectCoordStatus('success');
-                    } else { setDirectCoordStatus('fail'); }
-                  } catch { setDirectCoordStatus('fail'); }
-                }}
-                disabled={directCoordStatus === 'loading'}
-                className="flex-1 py-2 rounded text-xs font-bold text-white"
-                style={{ background: directCoordStatus === 'loading' ? '#555' : '#1565c0', boxShadow: '0 2px 6px rgba(0,0,0,0.4)', border: '1px solid rgba(255,255,255,0.2)' }}>
-                {directCoordStatus === 'loading' ? '확인 중...' : '좌표 확인하기'}
-              </button>
-            </div>
-
-            {/* 좌표 메시지 */}
-            {directCoordStatus !== 'idle' && (
-              <div className="flex items-start gap-2">
-                <div style={{ width: '5rem', flexShrink: 0 }} />
-                <div className="flex-1">{renderCoordMessage(directCoordStatus, directCoord)}</div>
-              </div>
-            )}
-
-            {/* 구분선 */}
-            <div style={{ borderTop: '1px solid rgba(255,255,255,0.2)' }} />
-
-            {/* 사진번호 */}
-            <div className="flex items-center gap-2">
-              <label className="text-blue-200 text-xs flex-shrink-0" style={{ width: '5rem' }}>사진번호</label>
-              <input type="number" placeholder="" value={(directForm as any).originalId || ''}
-                onChange={(e) => setDirectForm((prev) => ({ ...prev, originalId: e.target.value } as any))}
-                className="flex-1 px-2 py-1.5 rounded text-xs outline-none"
-                style={{ background: 'rgba(255,255,255,0.15)', color: '#a5d6a7' }} />
-            </div>
-
-            {/* 방문내용 */}
-            <div className="flex items-center gap-2">
-              <label className="text-blue-200 text-xs flex-shrink-0" style={{ width: '5rem' }}>방문내용</label>
-              <input type="text" value={directForm.complaint} placeholder=""
-                onChange={(e) => setDirectForm((prev) => ({ ...prev, complaint: e.target.value }))}
-                className="flex-1 px-2 py-1.5 rounded text-xs outline-none"
-                style={{ background: 'rgba(255,255,255,0.15)', color: '#a5d6a7' }} />
-            </div>
-
-            {/* 담당자 */}
-            <div className="flex items-center gap-2">
-              <label className="text-blue-200 text-xs flex-shrink-0" style={{ width: '5rem' }}>담당자</label>
-              <input type="text" value={directForm.manager} placeholder=""
-                onChange={(e) => setDirectForm((prev) => ({ ...prev, manager: e.target.value }))}
-                className="flex-1 px-2 py-1.5 rounded text-xs outline-none"
-                style={{ background: 'rgba(255,255,255,0.15)', color: '#a5d6a7' }} />
-            </div>
-
-            {/* 방문지사진 */}
-            <div className="flex items-start gap-2">
-              <label className="text-blue-200 text-xs flex-shrink-0 pt-1" style={{ width: '5rem' }}>방문지사진</label>
-              <div className="flex-1">
-                {directForm.photoUrl && (
-                  <div className="relative w-full mb-1">
-                    <img
-                      src={directForm.photoUrl}
-                      alt="방문지사진"
-                      className="w-full rounded"
-                      onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
-                    />
-                  </div>
-                )}
-                <label className="flex items-center justify-center w-full h-9 rounded cursor-pointer font-bold"
-                  style={{ background: '#1565c0', boxShadow: '0 2px 6px rgba(0,0,0,0.4)', border: '1px solid rgba(255,255,255,0.2)', color: 'white', fontSize: '12px' }}>
-                  사진 선택
-                  <input type="file" accept="image/*" className="hidden"
-                    onChange={(e) => {
-                      const file = e.target.files?.[0];
-                      if (file) {
-                        const reader = new FileReader();
-                        reader.onload = (ev) => {
-                          const dataUrl = ev.target?.result as string;
-                          setDirectForm((prev) => ({ ...prev, photoUrl: dataUrl }));
-                        };
-                        reader.readAsDataURL(file);
-                      }
-                      e.target.value = '';
-                    }} />
-                </label>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-      {/* draft-route 복원 확인 팝업 */}
-      {showDraftRestoreModal && pendingDraft && (
-        <div className="fixed inset-0 flex items-center justify-center z-50"
-          style={{ background: 'rgba(0,0,0,0.6)' }}>
-          <div className="rounded-lg px-5 py-5 w-80" style={{ background: '#1a3a6e' }}>
-            <h2 className="text-white font-bold text-base mb-3">📋 이전 작업 내역 복원</h2>
-            <p className="text-blue-200 text-sm mb-2">오늘 작업하던 내역이 있습니다.</p>
-            <div className="rounded px-3 py-2 mb-4" style={{ background: 'rgba(255,255,255,0.1)' }}>
-              <p className="text-white text-xs">📅 {new Date(pendingDraft.lastModified).toLocaleString('ko-KR')}</p>
-              {pendingDraft.extractedPoints?.length > 0 && (
-                <p className="text-xs mt-1" style={{ color: '#a5d6a7' }}>🔍 추출 지점 {pendingDraft.extractedPoints.length}건</p>
-              )}
-              {pendingDraft.directPoints?.length > 0 && (
-                <p className="text-xs mt-1" style={{ color: '#a5d6a7' }}>✏️ 직접입력 지점 {pendingDraft.directPoints.length}건</p>
-              )}
-              {(pendingDraft as any).additionalPoints?.length > 0 && (
-                <p className="text-xs mt-1" style={{ color: '#fbbf77' }}>◆ 추가지점 {(pendingDraft as any).additionalPoints.length}건</p>
-              )}
-            </div>
-            <p className="text-blue-200 text-xs mb-4">복원하시겠습니까? 취소하면 이전 내역이 삭제됩니다.</p>
-            <div className="flex gap-2">
-              <button
-                onClick={async () => {
-                  localStorage.removeItem('draft-route');
-                  // ★ pendingDraft의 날짜가 오늘과 같을 때만 Redis 추가지점 삭제
-                  // (오늘 날짜로 이미 저장된 추가지점을 실수로 지우지 않도록)
-                  const today = new Date().toLocaleDateString('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/\. /g, '-').replace('.', '');
-                  const draftDate = (pendingDraft as any).date;
-                  if ((pendingDraft as any).additionalPoints?.length > 0 && draftDate === today) {
-                    fetch('/api/save-additional', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ date: today, points: [] }) }).catch(() => {});
-                  }
-                  setAdditionalPoints([]); additionalPointsRef.current = [];
-                  setPendingDraft(null);
-                  setShowDraftRestoreModal(false);
-                  setActiveTab('input');
-                }}
-                className="flex-1 py-2 rounded text-sm text-white font-medium"
-                style={{ background: '#455a64' }}>취소 (삭제)</button>
-              <button
-                onClick={() => {
-                  if (pendingDraft.extractedPoints?.length > 0) setExtractedPoints(pendingDraft.extractedPoints);
-                  if (pendingDraft.directPoints?.length > 0) setDirectPoints(pendingDraft.directPoints);
-                  if ((pendingDraft as any).additionalPoints?.length > 0) setAdditionalPoints((pendingDraft as any).additionalPoints); additionalPointsRef.current = (pendingDraft as any).additionalPoints;
-                  setPendingDraft(null);
-                  setShowDraftRestoreModal(false);
-                  setActiveTab('input');
-                }}
-                className="flex-1 py-2 rounded text-sm text-white font-bold"
-                style={{ background: '#0a3d8f' }}>복원하기</button>
-            </div>
-          </div>
+      {isLoading && (
+        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'rgba(150,200,255,0.8)', fontSize: '14px' }}>
+          경로 불러오는 중...
         </div>
       )}
 
-      {/* 전체 잠금 오버레이 */}
-      {(isExtracting || isResetting || isGenerating || deletingId !== null) && (
-        <div className="fixed inset-0 z-40" style={{ background: 'rgba(0,0,0,0.3)', cursor: 'not-allowed' }} />
+      {!isLoading && !route && (
+        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'rgba(150,200,255,0.8)', fontSize: '14px' }}>
+          오늘 생성된 경로가 없습니다.
+        </div>
       )}
 
-      {/* ★ 추가지점 상세 팝업 (지도뷰와 동일한 AdditionalPointModal 공유) */}
-      {showInsertModal && selectedAdditional && (() => {
-        const addrPart = selectedAdditional.address?.trim() || selectedAdditional.destination?.trim() || '';
-        const apKey = `${addrPart}:${(selectedAdditional.complaint || '').trim()}:none`;
-        const apSt = pointStatuses[apKey];
-        const addIdx = additionalPoints.findIndex(p => p.id === selectedAdditional.id);
-        const label = `A${addIdx + 1}`;
-        const insertOptions: { value: number | string | null; label: string }[] = [
-          { value: null, label: '연결 안 함' },
-          ...(currentRoute?.points
-            .filter(p => p.source !== 'fixed' || p.order === 0)
-            .map(p => ({ value: p.order, label: p.order === 0 ? '출발지 다음' : `${p.order}번 다음` })) ?? []),
-          ...additionalPoints
-            .filter(ap => ap.id !== selectedAdditional.id && ap.lat && ap.lng)
-            .map((ap, i) => ({ value: `add_${ap.id}`, label: `A${i + 1} 다음` })),
-        ];
-        return (
-          <AdditionalPointModal
-            key={selectedAdditional.id}
-            label={label}
-            point={selectedAdditional}
-            apSt={apSt}
-            insertOptions={insertOptions}
-            isAdmin={isAuthenticated}
-            onClose={() => { setShowInsertModal(false); setSelectedAdditional(null); document.body.style.overflow = ''; }}
-            onSave={async (data) => {
-              // ★ 클로저 문제 방지: state 대신 ref 사용
-              const updated = additionalPointsRef.current.map(p =>
-                p.id === selectedAdditional.id
-                  ? { ...p,
-                      address: data.address, destination: data.destination,
-                      complaint: data.complaint, manager: data.manager,
-                      photoUrl: data.photoUrl || p.photoUrl,
-                      lat: data.lat ?? p.lat, lng: data.lng ?? p.lng,
-                      placeName: data.placeName ?? p.placeName,
-                      source: data.source ?? p.source,
-                      coordMessage: data.coordMessage ?? p.coordMessage,
-                      insertAfterOrder: data.insertAfterOrder,
-                    }
-                  : p
-              );
-              setAdditionalPoints(updated);
-              additionalPointsRef.current = updated;
-              try {
-                const draft = JSON.parse(localStorage.getItem('draft-route') || '{}');
-                draft.additionalPoints = updated;
-                draft.lastModified = Date.now();
-                localStorage.setItem('draft-route', JSON.stringify(draft));
-              } catch {}
-              const today = currentRoute?.date ?? new Date().toLocaleDateString('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/\. /g, '-').replace('.', '');
-              await fetch('/api/save-additional', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ date: today, points: updated }) }).catch(() => {});
-              if (data.status !== undefined) {
-                await fetch('/api/save-status', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ date: today, address: data.address, destination: data.destination, complaint: data.complaint?.trim() ?? '', originalId: null, status: data.status, memo: data.memo }) });
-                setPointStatuses(prev => ({ ...prev, [apKey]: { status: data.status, memo: data.memo, updatedAt: Date.now() } }));
-              }
-            }}
-            onDelete={async () => {
-              const updated = additionalPointsRef.current.filter(p => p.id !== selectedAdditional.id);
-              setAdditionalPoints(updated);
-              additionalPointsRef.current = updated;
-              const today = currentRoute?.date ?? new Date().toLocaleDateString('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/\. /g, '-').replace('.', '');
-              await fetch('/api/save-additional', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ date: today, points: updated }) }).catch(() => {});
-              setShowInsertModal(false); setSelectedAdditional(null); document.body.style.overflow = '';
-            }}
-            onPhotoUpload={async (file) => {
-              const reader = new FileReader();
-              const base64 = await new Promise<string>(res => { reader.onload = () => res(reader.result as string); reader.readAsDataURL(file); });
-              const uploadRes = await fetch('/api/upload-photo', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ imageData: base64, filename: `additional-list-${Date.now()}.jpg` }) });
-              if (uploadRes.ok) { const { url } = await uploadRes.json(); return url as string; }
-              return null;
-            }}
-          />
-        );
-      })()}
+      {/* 지도 */}
+      <div style={{ position: 'relative', flex: 1, width: '100%' }}>
+        <div ref={mapRef} style={{ width: '100%', height: '100%' }} />
+        {/* 비네팅 오버레이 */}
+        <div style={{
+          position: 'absolute', inset: 0, pointerEvents: 'none',
+          background: 'radial-gradient(ellipse at center, transparent 60%, rgba(13,27,46,0.55) 100%)',
+        }} />
+      </div>
 
-      {/* 추가 지점 입력/수정 모달 */}
-      {showAdditionalModal && (() => {
-        const addIdx = editingAdditionalPoint
-          ? additionalPoints.findIndex(p => p.id === editingAdditionalPoint.id)
-          : additionalPoints.length;
-        const label = `A${addIdx + 1}`;
-        const apSt = editingAdditionalPoint ? (() => {
-          const addrPart = editingAdditionalPoint.address?.trim() || editingAdditionalPoint.destination?.trim() || '';
-          const apKey = `${addrPart}:${(editingAdditionalPoint.complaint || '').trim()}:none`;
-          return pointStatuses[apKey];
-        })() : undefined;
+      {/* 도로 모드 로딩 안내 */}
+      {lineMode === 'road' && routeDrawn === false && route && mapReady && !osrmError && (
+        <div style={{
+          position: 'absolute', bottom: 16, left: '50%', transform: 'translateX(-50%)',
+          background: 'rgba(0,0,0,0.7)', color: 'white', fontSize: '12px',
+          padding: '6px 14px', borderRadius: '20px',
+        }}>
+          도로 경로 계산 중...
+        </div>
+      )}
 
-        const insertOptions: InsertOption[] = [
-          { value: null, label: '선택 안 함 (지도에만 표시)' },
-        ];
-        if (currentRoute) {
-          currentRoute.points
-            .filter(p => p.source !== 'fixed' || p.order === 0)
-            .forEach(p => {
-              insertOptions.push({ value: p.order, label: p.order === 0 ? '출발지(시청) 다음' : `${p.order}번 (${p.destination || p.address}) 다음` });
-            });
-        }
-        // 다른 추가지점 "An 다음" 옵션
-        additionalPoints.forEach((ap, i) => {
-          if (!editingAdditionalPoint || ap.id !== editingAdditionalPoint.id) {
-            if (ap.lat && ap.lng) {
-              insertOptions.push({ value: `add_${ap.id}`, label: `A${i + 1} 다음` });
-            }
-          }
-        });
+      {/* ORS 도로 경로 로딩 메시지 - 초록색, 화면 중앙 */}
+      {roadLoading && (
+        <div style={{
+          position: 'absolute',
+          top: '50%', left: '50%',
+          transform: 'translate(-50%, -50%)',
+          background: 'rgba(27,94,32,0.92)',
+          color: 'white', fontSize: '13px', fontWeight: 'bold',
+          padding: '12px 24px', borderRadius: '12px',
+          display: 'flex', alignItems: 'center', gap: '10px',
+          boxShadow: '0 4px 16px rgba(0,0,0,0.4)',
+          whiteSpace: 'nowrap', zIndex: 300,
+        }}>
+          <span style={{ fontSize: '16px' }}>🛣️</span>
+          <span>도로 경로를 불러오는 중...</span>
+        </div>
+      )}
 
-        const pointForModal: AdditionalPointData = editingAdditionalPoint
-          ? { ...editingAdditionalPoint, insertAfterOrder: additionalInsertAfter ?? editingAdditionalPoint.insertAfterOrder }
-          : { id: 0, address: additionalForm.address, destination: additionalForm.destination, complaint: additionalForm.complaint, manager: additionalForm.manager, photoUrl: additionalForm.photoUrl, lat: additionalCoord.lat, lng: additionalCoord.lng, placeName: additionalCoord.placeName, source: additionalCoord.source, coordMessage: additionalCoord.coordMessage, isAdditional: true, insertAfterOrder: additionalInsertAfter };
+      {/* OSRM 서버 오류 배너 - 하단 표시, 직선 모드 선택시 숨김 */}
+      {lineMode === 'road' && osrmError && (
+        <div style={{
+          position: 'absolute', bottom: 40, left: '50%', transform: 'translateX(-50%)',
+          background: 'rgba(160,30,10,0.92)', color: 'white',
+          fontSize: '12px', padding: '7px 14px', borderRadius: '20px',
+          display: 'flex', alignItems: 'center', gap: '6px',
+          boxShadow: '0 2px 8px rgba(0,0,0,0.4)', whiteSpace: 'nowrap',
+          zIndex: 200,
+        }}>
+          <span>⚠️</span>
+          <span>도로 경로 서버(OSRM·ORS) 모두 응답 없음 — 직선으로 표시합니다</span>
+        </div>
+      )}
 
-        return (
-          <AdditionalPointModal
-            key={editingAdditionalPoint?.id ?? `new-${additionalPoints.length}`}
-            label={label}
-            point={pointForModal}
-            apSt={apSt}
-            insertOptions={insertOptions}
-            isNew={!editingAdditionalPoint}
-            isAdmin={true}
-            onClose={async () => {
-              setShowAdditionalModal(false);
-            }}
-            onSave={async (data) => {
-              const coordData = { lat: data.lat, lng: data.lng, placeName: data.placeName, source: data.source, coordMessage: data.coordMessage };
-              let photoUrl = data.photoUrl;
-              if (photoUrl && (photoUrl.startsWith('blob:') || photoUrl.startsWith('data:'))) {
-                try {
-                  let base64 = photoUrl;
-                  if (photoUrl.startsWith('blob:')) {
-                    const res = await fetch(photoUrl);
-                    const blob = await res.blob();
-                    const reader = new FileReader();
-                    base64 = await new Promise<string>((resolve) => { reader.onload = () => resolve(reader.result as string); reader.readAsDataURL(blob); });
-                  }
-                  // 압축
-                  const compressed = await new Promise<string>((resolve) => {
-                    const img = new Image();
-                    img.onload = () => {
-                      const canvas = document.createElement('canvas');
-                      const maxSize = 1024;
-                      let w = img.width, h = img.height;
-                      if (w > maxSize || h > maxSize) {
-                        if (w > h) { h = Math.round(h * maxSize / w); w = maxSize; }
-                        else { w = Math.round(w * maxSize / h); h = maxSize; }
-                      }
-                      canvas.width = w; canvas.height = h;
-                      canvas.getContext('2d')!.drawImage(img, 0, 0, w, h);
-                      resolve(canvas.toDataURL('image/jpeg', 0.7));
-                    };
-                    img.src = base64;
-                  });
-                  const uploadRes = await fetch('/api/upload-photo', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ imageData: compressed, filename: `additional-${Date.now()}.jpg` }) });
-                  if (uploadRes.ok) { const uploadData = await uploadRes.json(); photoUrl = uploadData.url; }
-                } catch {}
-              }
-              let updatedPoints: typeof additionalPoints;
-              if (editingAdditionalPoint) {
-                updatedPoints = additionalPointsRef.current.map(p =>
-                  p.id === editingAdditionalPoint.id
-                    ? { ...p, address: data.address, destination: data.destination, complaint: data.complaint, manager: data.manager, photoUrl, ...coordData, isAdditional: true as const, insertAfterOrder: data.insertAfterOrder }
-                    : p
-                );
-                if (data.status !== undefined) {
-                  const addrPart = data.address?.trim() || data.destination?.trim() || '';
-                  const apKey = `${addrPart}:${(data.complaint || '').trim()}:none`;
-                  const today = new Date().toLocaleDateString('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/\. /g, '-').replace('.', '');
-                  await fetch('/api/save-status', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ date: today, address: data.address, destination: data.destination, complaint: data.complaint?.trim() ?? '', originalId: null, status: data.status, memo: data.memo }) }).catch(() => {});
-                  setPointStatuses(prev => ({ ...prev, [apKey]: { status: data.status, memo: data.memo, updatedAt: Date.now() } }));
-                }
-              } else {
-                updatedPoints = [...additionalPointsRef.current, { id: Date.now(), address: data.address, destination: data.destination, complaint: data.complaint, manager: data.manager, photoUrl, ...coordData, isAdditional: true as const, insertAfterOrder: data.insertAfterOrder }];
-              }
-              setAdditionalPoints(updatedPoints); additionalPointsRef.current = updatedPoints;
-              const draft = JSON.parse(localStorage.getItem('draft-route') || '{}');
-              draft.additionalPoints = updatedPoints;
-              draft.lastModified = Date.now();
-              localStorage.setItem('draft-route', JSON.stringify(draft));
+      {/* 새 경로 알림 배너 */}
+      {newRouteAvailable && (
+        <div
+          onClick={() => window.location.reload()}
+          style={{
+            position: 'absolute', top: 56, left: '50%', transform: 'translateX(-50%)',
+            background: 'rgba(21,101,192,0.95)', color: 'white',
+            fontSize: '12px', fontWeight: 'bold',
+            padding: '8px 18px', borderRadius: '20px',
+            display: 'flex', alignItems: 'center', gap: '8px',
+            boxShadow: '0 2px 8px rgba(0,0,0,0.4)',
+            whiteSpace: 'nowrap', zIndex: 300, cursor: 'pointer',
+          }}>
+          <span>🔄</span>
+          <span>새 경로가 생성되었습니다 — 탭하여 갱신</span>
+        </div>
+      )}
+
+      {/* ★ 추가 방문지 업데이트 알림 배너 */}
+      {newAdditionalAvailable && (
+        <div
+          onClick={async () => {
+            // 최신 추가 방문지 다시 로드
+            try {
               const today = new Date().toLocaleDateString('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/\. /g, '-').replace('.', '');
-              await fetch('/api/save-additional', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ date: today, points: updatedPoints }) }).catch(() => {});
+              const res = await fetch(`/api/get-additional?date=${today}`);
+              if (res.ok) {
+                const data = await res.json();
+                const validPoints = (data.points || []).filter((p: { lat?: number; lng?: number }) => p.lat && p.lng);
+                setAdditionalPoints(data.points || []);
+                additionalPointsRef.current = data.points || [];
+                lastAdditionalTimestampRef.current = data.updatedAt ?? Date.now();
+                // localStorage도 업데이트
+                try {
+                  const draft = JSON.parse(localStorage.getItem('draft-route') || '{}');
+                  draft.additionalPoints = data.points || [];
+                  localStorage.setItem('draft-route', JSON.stringify(draft));
+                } catch {}
+                setNewAdditionalAvailable(false);
+              }
+            } catch {}
+          }}
+          style={{
+            position: 'absolute', top: newRouteAvailable ? 100 : 56, left: '50%', transform: 'translateX(-50%)',
+            background: 'rgba(249,115,22,0.95)', color: 'white',
+            fontSize: '12px', fontWeight: 'bold',
+            padding: '8px 18px', borderRadius: '20px',
+            display: 'flex', alignItems: 'center', gap: '8px',
+            boxShadow: '0 2px 8px rgba(0,0,0,0.4)',
+            whiteSpace: 'nowrap', zIndex: 300, cursor: 'pointer',
+          }}>
+          <span>📍</span>
+          <span>추가 방문지가 업데이트되었습니다 — 탭하여 갱신</span>
+        </div>
+      )}
+
+      {/* ★ 지도뷰 추가지점 입력 팝업 — page.tsx와 동일한 구조 */}
+      {showOverlapModal && overlappingPoints.length > 0 && (
+        <div
+          style={{
+            position: 'fixed', inset: 0, display: 'flex', alignItems: 'center',
+            justifyContent: 'center', zIndex: 50, background: 'rgba(0,0,0,0.6)',
+          }}
+          onClick={() => setShowOverlapModal(false)}>
+          <div
+            style={{
+              background: '#1a3a6e', borderRadius: '12px', padding: '20px',
+              width: '88%', maxWidth: '400px',
+              boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
             }}
-            onDelete={editingAdditionalPoint ? () => handleAdditionalDelete(editingAdditionalPoint.id) : undefined}
-            onPhotoUpload={async (file) => {
-              const reader = new FileReader();
-              const base64 = await new Promise<string>(res => { reader.onload = () => res(reader.result as string); reader.readAsDataURL(file); });
-              const uploadRes = await fetch('/api/upload-photo', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ imageData: base64, filename: `additional-${Date.now()}.jpg` }) });
-              if (uploadRes.ok) { const { url } = await uploadRes.json(); return url as string; }
-              return null;
-            }}
-          />
-        );
-      })()}
-
-      {/* 추출지점 수정 모달 */}
-      {showExtractEditModal && extractEditTarget && (
-        <div className="fixed inset-0 z-50 flex flex-col" style={{ background: '#1a3a6e' }}
-          onTouchMove={e => e.stopPropagation()}>
-          {/* 타이틀 바 */}
-          <div className="flex items-center gap-3 px-4 py-3 flex-shrink-0" style={{ background: '#0d2444', borderBottom: '1px solid rgba(255,255,255,0.15)' }}>
-            <span className="w-8 h-8 rounded-full bg-white text-blue-900 text-sm font-bold flex items-center justify-center flex-shrink-0">
-              {extractEditTarget?.id}
-            </span>
-            <span className="text-white font-bold text-sm flex-1">방문지 수정 (사진 추출)</span>
-            <button onClick={handleExtractEditSave}
-              style={{ background: '#c62828', border: 'none', borderRadius: '6px', width: '36px', height: '36px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}>
-              <span style={{ color: 'white', fontWeight: 'bold', fontSize: '16px' }}>✕</span>
-            </button>
-          </div>
-
-          {/* 내용 - 스크롤 격리 */}
-          <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3"
-            style={{ overscrollBehavior: 'contain' }}
-            onWheel={e => e.stopPropagation()}
-            onTouchMove={e => e.stopPropagation()}>
-
-            {/* 주소 */}
-            <div className="flex items-center gap-2">
-              <label className="text-blue-200 text-xs flex-shrink-0" style={{ width: '5rem' }}>주소</label>
-              <input type="text" value={extractEditForm.address} placeholder=""
-                onChange={(e) => { setExtractEditForm((prev) => ({ ...prev, address: e.target.value })); setExtractEditCoordStatus('idle'); setExtractEditCoord({ lat: null, lng: null, placeName: null, source: null, coordMessage: null }); }}
-                className="flex-1 px-2 py-1.5 rounded text-xs outline-none"
-                style={{ background: 'rgba(255,255,255,0.15)', color: 'white' }} />
+            onClick={e => e.stopPropagation()}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
+              <h2 style={{ color: 'white', fontWeight: 'bold', fontSize: '14px', margin: 0 }}>
+                📍 같은 위치 {overlappingPoints.length}개 지점
+              </h2>
+              <span style={{ color: 'white', cursor: 'pointer', fontSize: '18px' }}
+                onClick={() => setShowOverlapModal(false)}>✕</span>
             </div>
-
-            {/* 방문지 */}
-            <div className="flex items-center gap-2">
-              <label className="text-blue-200 text-xs flex-shrink-0" style={{ width: '5rem' }}>방문지</label>
-              <input type="text" value={extractEditForm.destination} placeholder=""
-                onChange={(e) => { setExtractEditForm((prev) => ({ ...prev, destination: e.target.value })); setExtractEditCoordStatus('idle'); setExtractEditCoord({ lat: null, lng: null, placeName: null, source: null, coordMessage: null }); }}
-                className="flex-1 px-2 py-1.5 rounded text-xs outline-none"
-                style={{ background: 'rgba(255,255,255,0.15)', color: 'white' }} />
-            </div>
-
-            {/* 좌표 확인하기 버튼 */}
-            <div className="flex items-center gap-2">
-              <div style={{ width: '5rem', flexShrink: 0 }} />
-              <button onClick={handleExtractEditCheckCoord} disabled={extractEditCoordStatus === 'loading'}
-                className="flex-1 py-2 rounded text-xs font-bold text-white"
-                style={{ background: extractEditCoordStatus === 'loading' ? '#555' : '#1565c0', boxShadow: '0 2px 6px rgba(0,0,0,0.4)', border: '1px solid rgba(255,255,255,0.2)' }}>
-                {extractEditCoordStatus === 'loading' ? '확인 중...' : '좌표 확인하기'}
-              </button>
-            </div>
-
-            {/* 좌표 메시지 */}
-            {extractEditCoordStatus !== 'idle' && (
-              <div className="flex items-start gap-2">
-                <div style={{ width: '5rem', flexShrink: 0 }} />
-                <div className="flex-1">{renderCoordMessage(extractEditCoordStatus, extractEditCoord)}</div>
-              </div>
-            )}
-
-            {/* 구분선 */}
-            <div style={{ borderTop: '1px solid rgba(255,255,255,0.2)' }} />
-
-            {/* 사진번호 */}
-            <div className="flex items-center gap-2">
-              <label className="text-blue-200 text-xs flex-shrink-0" style={{ width: '5rem' }}>사진번호</label>
-              <input type="number" placeholder="" value={extractEditForm.originalId}
-                onChange={(e) => { setExtractEditForm((prev) => ({ ...prev, originalId: e.target.value })); handleExtractEditSaveField({ originalId: e.target.value }); }}
-                className="flex-1 px-2 py-1.5 rounded text-xs outline-none"
-                style={{ background: 'rgba(255,255,255,0.15)', color: '#a5d6a7' }} />
-            </div>
-
-            {/* 방문내용 */}
-            <div className="flex items-center gap-2">
-              <label className="text-blue-200 text-xs flex-shrink-0" style={{ width: '5rem' }}>방문내용</label>
-              <input type="text" placeholder="" value={extractEditForm.complaint}
-                onChange={(e) => { setExtractEditForm((prev) => ({ ...prev, complaint: e.target.value })); handleExtractEditSaveField({ complaint: e.target.value }); }}
-                className="flex-1 px-2 py-1.5 rounded text-xs outline-none"
-                style={{ background: 'rgba(255,255,255,0.15)', color: '#a5d6a7' }} />
-            </div>
-
-            {/* 담당자 */}
-            <div className="flex items-center gap-2">
-              <label className="text-blue-200 text-xs flex-shrink-0" style={{ width: '5rem' }}>담당자</label>
-              <input type="text" placeholder="" value={extractEditForm.manager}
-                onChange={(e) => { setExtractEditForm((prev) => ({ ...prev, manager: e.target.value })); handleExtractEditSaveField({ manager: e.target.value }); }}
-                className="flex-1 px-2 py-1.5 rounded text-xs outline-none"
-                style={{ background: 'rgba(255,255,255,0.15)', color: '#a5d6a7' }} />
-            </div>
-
-            {/* 방문지사진 */}
-            <div className="flex items-start gap-2">
-              <label className="text-blue-200 text-xs flex-shrink-0 pt-1" style={{ width: '5rem' }}>방문지사진</label>
-              <div className="flex-1">
-                {(extractEditForm.photoUrl || extractEditTarget?.photoUrl) ? (
-                  <div className="relative w-full mb-1">
-                    <img src={extractEditForm.photoUrl || extractEditTarget?.photoUrl || ''} alt="방문지사진" className="w-full rounded"
-                      onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              {overlappingPoints.map((p) => {
+                const st = statuses[statusKey(p)];
+                const isDone = st && DONE_STATUSES.includes(st.status);
+                return (
+                  <div
+                    key={p.order}
+                    onClick={() => { setShowOverlapModal(false); setSelectedPoint(p); setShowDetailModal(true); }}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: '12px',
+                      background: isDone ? 'rgba(255,255,255,0.12)' : 'rgba(235,100,0,0.45)',
+                      borderRadius: '8px', padding: '10px 12px', cursor: 'pointer',
+                    }}>
+                    <div style={{
+                      width: '28px', height: '28px', borderRadius: '50%',
+                      background: isDone ? '#1565c0' : '#FF6B35',
+                      border: '2px solid white', flexShrink: 0,
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      color: 'white', fontWeight: 'bold', fontSize: '12px',
+                    }}>{p.order}</div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ color: 'white', fontSize: '13px', fontWeight: 'bold',
+                        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {p.destination ? `${p.address} (${p.destination})` : p.address}
+                      </div>
+                      <div style={{ color: 'rgba(255,255,255,0.7)', fontSize: '11px', marginTop: '2px' }}>
+                        {p.complaint || '-'}
+                        {st?.status && <span style={{ color: '#80cbc4', marginLeft: '8px', fontWeight: 'bold' }}>{st.status}</span>}
+                      </div>
+                    </div>
+                    <span style={{ color: 'rgba(255,255,255,0.5)', fontSize: '16px' }}>›</span>
                   </div>
-                ) : null}
-                {/* 사진설명 - 사진과 버튼 사이 */}
-                {extractEditTarget?.photoDescription && (
-                  <p className="text-xs mb-1 px-1" style={{ color: '#a5d6a7' }}>{extractEditTarget.photoDescription}</p>
-                )}
-                <label className="flex items-center justify-center w-full h-9 rounded cursor-pointer font-bold"
-                  style={{ background: '#1565c0', boxShadow: '0 2px 6px rgba(0,0,0,0.4)', border: '1px solid rgba(255,255,255,0.2)', color: 'white', fontSize: '12px' }}>
-                  사진 선택
-                  <input type="file" accept="image/*" className="hidden"
-                    onChange={(e) => {
-                      const file = e.target.files?.[0];
-                      if (file) {
-                        const reader = new FileReader();
-                        reader.onload = (ev) => {
-                          const dataUrl = ev.target?.result as string;
-                          setExtractEditForm((prev) => ({ ...prev, photoUrl: dataUrl }));
-                        };
-                        reader.readAsDataURL(file);
-                      }
-                      e.target.value = '';
-                    }} />
-                </label>
-              </div>
+                );
+              })}
             </div>
           </div>
         </div>
       )}
-      {/* 지점 상세정보 팝업 */}
-      {/* ★ 지점 상세정보 팝업 (지도뷰와 동일한 풀스크린 스타일) */}
+
+      {/* ★ 내 위치 추적 버튼 - 우측 하단 */}
+
+      {!showDetailModal && !showOverlapModal && (
+        <>
+          {/* 보고서 버튼 - 🛻 위 */}
+          <button
+            onClick={handleGenerateReport}
+            disabled={isGeneratingReport || !route}
+            title="순회 결과 PDF 보고서 생성"
+            style={{
+              position: 'absolute',
+              bottom: 104,
+              right: 12,
+              width: '44px',
+              height: '44px',
+              borderRadius: '50%',
+              background: isGeneratingReport ? 'rgba(150,150,150,0.9)' : 'rgba(255,255,255,0.95)',
+              border: '2px solid rgba(100,150,255,0.4)',
+              boxShadow: '0 2px 8px rgba(0,0,0,0.35)',
+              cursor: isGeneratingReport ? 'default' : 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              zIndex: 150,
+              fontSize: '20px',
+              transition: 'background 0.2s',
+            }}>
+            {isGeneratingReport ? '⏳' : '📄'}
+          </button>
+          {/* 내 위치 버튼 */}
+          <button
+            onClick={toggleTracking}
+            title={isTracking ? '위치 추적 중지' : '내 위치 보기'}
+            style={{
+              position: 'absolute',
+              bottom: 52,
+              right: 12,
+              width: '44px',
+              height: '44px',
+              borderRadius: '50%',
+              background: isTracking ? '#1976d2' : 'rgba(255,255,255,0.95)',
+              border: isTracking ? '2px solid white' : '2px solid rgba(100,150,255,0.4)',
+              boxShadow: '0 2px 8px rgba(0,0,0,0.35)',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              zIndex: 150,
+              fontSize: '22px',
+              transition: 'background 0.2s',
+            }}>
+            🛻
+          </button>
+        </>
+      )}
+
+      {/* 줌 안내 토스트 - 팝업 없을 때만 표시 */}
+      {routeDrawn && !showDetailModal && !showOverlapModal && (
+        <div style={{
+          position: 'absolute', bottom: 16, left: '50%', transform: 'translateX(-50%)',
+          background: 'rgba(0,0,0,0.55)', color: 'rgba(200,230,255,0.85)',
+          fontSize: '11px', padding: '5px 12px', borderRadius: '20px',
+          pointerEvents: 'none', whiteSpace: 'nowrap',
+        }}>
+          확대하면 지점 마커 표시 · 더 확대하면 마커 클릭으로 상세정보 확인
+        </div>
+      )}
+
+      {/* ★ 지점 상세정보 팝업 */}
       {showDetailModal && selectedPoint && (() => {
-        const st = pointStatuses[statusKey(selectedPoint)];
-        const curStatus = st?.status || '';
-        const curMemo = st?.memo || '';
-        const isDone = ['민원처리완료','기처리','확인불가'].includes(curStatus);
+        const { curStatus, curMemo, isDone } = getSelectedStatus();
         const isPOI = selectedPoint.source === 'place_nearest' || selectedPoint.source === 'place_single';
         const hasWarning = selectedPoint.coordMessage?.includes('⚠️');
         const rawMsg = selectedPoint.coordMessage ? selectedPoint.coordMessage.replace('⚠️', '').trim() : '';
@@ -2458,7 +2493,7 @@ export default function Home() {
               <span style={{ color: 'white', fontWeight: 'bold', fontSize: '14px', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 {selectedPoint.destination ? `${selectedPoint.address} (${selectedPoint.destination})` : selectedPoint.address}
               </span>
-              <button onClick={() => { setShowDetailModal(false); document.body.style.overflow = ''; }}
+              <button onClick={() => setShowDetailModal(false)}
                 style={{ background: '#c62828', border: 'none', borderRadius: '6px', width: '36px', height: '36px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}>
                 <span style={{ color: 'white', fontWeight: 'bold', fontSize: '16px' }}>✕</span>
               </button>
@@ -2466,6 +2501,7 @@ export default function Home() {
 
             {/* 내용 - 스크롤 격리 */}
             <div style={{ flex: 1, overflowY: 'auto', padding: '16px', display: 'flex', flexDirection: 'column', gap: '10px', overscrollBehavior: 'contain' }}>
+
               {/* 주소 */}
               <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
                 <span style={{ color: '#90caf9', fontSize: '11px', width: '5rem', flexShrink: 0, paddingTop: '2px' }}>주소</span>
@@ -2490,8 +2526,10 @@ export default function Home() {
                   <span style={{ color: '#a5d6a7', fontSize: '12px', flex: 1 }}>📍 플레이스명: {selectedPoint.placeName}</span>
                 </div>
               )}
+
               {/* 구분선 */}
               <div style={{ borderTop: '1px solid rgba(255,255,255,0.2)' }} />
+
               {/* 사진번호 */}
               <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
                 <span style={{ color: '#90caf9', fontSize: '11px', width: '5rem', flexShrink: 0, paddingTop: '2px' }}>사진번호</span>
@@ -2523,12 +2561,13 @@ export default function Home() {
                   )}
                 </div>
               </div>
-              {/* 방문결과/방문메모 */}
+
+              {/* 방문결과/방문메모 - 항상 표시, 관리자만 수정 가능 */}
               <>
                 <div style={{ borderTop: '1px solid rgba(255,255,255,0.2)' }} />
                 <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
                   <span style={{ color: '#90caf9', fontSize: '11px', width: '5rem', flexShrink: 0 }}>방문결과</span>
-                  {isAuthenticated ? (
+                  {isAdmin ? (
                     <select value={curStatus} onChange={e => handleSaveStatus(e.target.value, curMemo)} disabled={savingStatus}
                       style={{ flex: 1, background: isDone ? 'rgba(255,255,255,0.15)' : 'rgba(235,100,0,0.65)', color: 'white', border: '1px solid rgba(255,255,255,0.3)', borderRadius: '6px', padding: '6px 8px', fontSize: '12px', fontWeight: 'bold' }}>
                       <option value="" style={{ background: '#1a3a6e' }}>선택 (미완료)</option>
@@ -2544,7 +2583,7 @@ export default function Home() {
                 </div>
                 <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
                   <span style={{ color: '#90caf9', fontSize: '11px', width: '5rem', flexShrink: 0, paddingTop: '6px' }}>방문메모</span>
-                  {isAuthenticated ? (
+                  {isAdmin ? (
                     <textarea rows={2} placeholder="메모 입력..." defaultValue={curMemo}
                       onBlur={(e) => { if (e.target.value !== curMemo) handleSaveStatus(curStatus, e.target.value); }}
                       style={{ flex: 1, background: 'rgba(255,255,255,0.1)', color: 'white', border: '1px solid rgba(255,255,255,0.3)', borderRadius: '6px', padding: '6px 8px', fontSize: '12px', resize: 'none' }} />
@@ -2576,188 +2615,331 @@ export default function Home() {
         );
       })()}
 
-      {/* 이미지 미리보기 모달 */}
-      {previewIndex !== null && uploadedImages.length > 0 && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center"
-          style={{ background: 'rgba(0,0,0,0.85)' }}
-          onClick={() => setPreviewIndex(null)}>
-          <div
-            className="relative flex items-center justify-center w-full h-full px-4"
+
+
+      {showMapAddModal && (() => {
+        const addIdx = additionalPointsRef.current.length;
+        const label = `A${addIdx + 1}`;
+        const emptyPoint = {
+          id: 0, address: '', destination: '', complaint: '', manager: '', photoUrl: '',
+          lat: null, lng: null, placeName: null, source: null, coordMessage: null,
+          isAdditional: true as const, insertAfterOrder: null,
+        };
+        const insertOptions = [
+          { value: null, label: '선택 안 함 (지도에만 표시)' },
+          ...(route?.points
+            .filter(p => p.source !== 'fixed' || p.order === 0)
+            .map(p => ({ value: p.order, label: p.order === 0 ? '출발지(시청) 다음' : `${p.order}번 (${p.destination || p.address}) 다음` })) ?? []),
+          ...additionalPoints
+            .filter(ap => ap.lat && ap.lng)
+            .map((ap, i) => ({ value: `add_${ap.id}`, label: `A${i + 1} 다음` })),
+        ];
+        return (
+          <AdditionalPointModal
+            key={`map-add-new-${addIdx}`}
+            label={label}
+            point={emptyPoint}
+            insertOptions={insertOptions}
+            isNew={true}
+            isAdmin={isAdmin}
+            onClose={() => {
+              setShowMapAddModal(false);
+              // onSave 완료 후 최신 additionalPointsRef로 마커 재그리기
+              drawAdditionalMarkers(additionalPointsRef.current);
+            }}
+            onSave={async (data) => {
+              const newPoint = {
+                id: Date.now(),
+                address: data.address,
+                destination: data.destination,
+                complaint: data.complaint,
+                manager: data.manager,
+                photoUrl: data.photoUrl || '',
+                lat: data.lat,
+                lng: data.lng,
+                placeName: data.placeName,
+                source: data.source,
+                coordMessage: data.coordMessage,
+                isAdditional: true as const,
+                insertAfterOrder: data.insertAfterOrder,
+              };
+              const updated = [...additionalPointsRef.current, newPoint];
+              setAdditionalPoints(updated);
+              additionalPointsRef.current = updated;
+              try {
+                const draft = JSON.parse(localStorage.getItem('draft-route') || '{}');
+                draft.additionalPoints = updated;
+                draft.lastModified = Date.now();
+                localStorage.setItem('draft-route', JSON.stringify(draft));
+              } catch {}
+              const today = routeRef.current?.date ?? new Date().toLocaleDateString('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/\. /g, '-').replace('.', '');
+              await fetch('/api/save-additional', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ date: today, points: sanitizeForRedis(updated) }) }).catch(() => {});
+              // ★ 저장 후 카운트 갱신 (자신에게 배너 뜨지 않도록)
+              lastAdditionalTimestampRef.current = Date.now();
+              // 모달 닫기와 마커 재그리기는 onClose에서 처리
+            }}
+            onPhotoUpload={async (file) => {
+              const compressImageForUpload = (f: File): Promise<string> => new Promise((resolve) => {
+                const img = new Image(); const url = URL.createObjectURL(f);
+                img.onload = () => {
+                  const canvas = document.createElement('canvas');
+                  const maxSize = 1024; let w = img.width; let h = img.height;
+                  if (w > maxSize || h > maxSize) { if (w > h) { h = Math.round(h * maxSize / w); w = maxSize; } else { w = Math.round(w * maxSize / h); h = maxSize; } }
+                  canvas.width = w; canvas.height = h;
+                  canvas.getContext('2d')!.drawImage(img, 0, 0, w, h);
+                  URL.revokeObjectURL(url);
+                  resolve(canvas.toDataURL('image/jpeg', 0.7));
+                }; img.src = url;
+              });
+              const base64 = await compressImageForUpload(file);
+              const uploadRes = await fetch('/api/upload-photo', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ imageData: base64, filename: `additional-map-${Date.now()}.jpg` }) });
+              if (uploadRes.ok) { const { url } = await uploadRes.json(); return url as string; }
+              return null;
+            }}
+          />
+        );
+      })()}
+
+      {showInsertModal && selectedAdditional && (() => {
+        const addrPart = selectedAdditional.address?.trim() || selectedAdditional.destination?.trim() || '';
+        const apKey = `${addrPart}:${(selectedAdditional.complaint || '').trim()}:none`;
+        const apSt = statuses[apKey];
+        const addIdx = additionalPoints.findIndex(p => p.id === selectedAdditional.id);
+        const label = `A${addIdx + 1}`;
+
+        const insertOptions: { value: number | string | null; label: string }[] = [
+          { value: null, label: '연결 안 함' },
+        ];
+        if (route) {
+          route.points.forEach(p => {
+            if (p.source === 'fixed' && p.order === 0) {
+              insertOptions.push({ value: p.order, label: '출발지 다음' });
+            } else if (p.source !== 'fixed') {
+              insertOptions.push({ value: p.order, label: `${p.order}번 다음` });
+            }
+          });
+        }
+        additionalPoints.forEach((ap, i) => {
+          if (ap.id !== selectedAdditional.id && ap.lat && ap.lng) {
+            insertOptions.push({ value: `add_${ap.id}`, label: `A${i + 1} 다음` });
+          }
+        });
+
+        return (
+          <AdditionalPointModal
+            key={selectedAdditional.id}
+            label={label}
+            point={selectedAdditional}
+            apSt={apSt}
+            insertOptions={insertOptions}
+            isAdmin={isAdmin}
+            onClose={() => {
+              setShowInsertModal(false);
+              drawAdditionalMarkers(additionalPointsRef.current);
+            }}
+            onSave={async (data) => {
+              // ★ additionalPoints(state) 대신 additionalPointsRef.current 사용 - 클로저 문제 방지
+              const updated = additionalPointsRef.current.map(p =>
+                p.id === selectedAdditional.id
+                  ? { ...p,
+                      address: data.address, destination: data.destination,
+                      complaint: data.complaint, manager: data.manager,
+                      photoUrl: data.photoUrl || p.photoUrl,
+                      lat: data.lat ?? p.lat, lng: data.lng ?? p.lng,
+                      placeName: data.placeName ?? p.placeName,
+                      source: data.source ?? p.source,
+                      coordMessage: data.coordMessage ?? p.coordMessage,
+                      insertAfterOrder: data.insertAfterOrder,
+                    }
+                  : p
+              );
+              setAdditionalPoints(updated);
+              additionalPointsRef.current = updated;
+              try {
+                const draft = JSON.parse(localStorage.getItem('draft-route') || '{}');
+                draft.additionalPoints = updated;
+                draft.lastModified = Date.now();
+                localStorage.setItem('draft-route', JSON.stringify(draft));
+              } catch {}
+              const today = routeRef.current?.date ?? new Date().toLocaleDateString('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/\. /g, '-').replace('.', '');
+              await fetch('/api/save-additional', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ date: today, points: sanitizeForRedis(updated) }) }).catch(() => {});
+              // ★ 저장 후 카운트 갱신 (자신에게 배너 뜨지 않도록)
+              lastAdditionalTimestampRef.current = Date.now();
+              if (data.status !== undefined) {
+                await fetch('/api/save-status', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ date: route?.date ?? today, address: data.address, destination: data.destination, complaint: data.complaint?.trim() ?? '', originalId: null, status: data.status, memo: data.memo }) });
+                statusesRef.current = { ...statusesRef.current, [apKey]: { status: data.status, memo: data.memo, updatedAt: Date.now() } };
+                setStatuses(prev => ({ ...prev, [apKey]: { status: data.status, memo: data.memo, updatedAt: Date.now() } }));
+              }
+              // 모달 닫기는 onClose에서 처리
+            }}
+            onDelete={() => handleAdditionalDelete(selectedAdditional.id)}
+            onPhotoUpload={async (file) => {
+              const compressImageForUpload = (f: File): Promise<string> => new Promise((resolve) => {
+                const img = new Image(); const url = URL.createObjectURL(f);
+                img.onload = () => {
+                  const canvas = document.createElement('canvas');
+                  const maxSize = 1024; let w = img.width; let h = img.height;
+                  if (w > maxSize || h > maxSize) { if (w > h) { h = Math.round(h * maxSize / w); w = maxSize; } else { w = Math.round(w * maxSize / h); h = maxSize; } }
+                  canvas.width = w; canvas.height = h;
+                  canvas.getContext('2d')!.drawImage(img, 0, 0, w, h);
+                  URL.revokeObjectURL(url);
+                  resolve(canvas.toDataURL('image/jpeg', 0.7));
+                }; img.src = url;
+              });
+              const base64 = await compressImageForUpload(file);
+              const uploadRes = await fetch('/api/upload-photo', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ imageData: base64, filename: `additional-map-${Date.now()}.jpg` }) });
+              if (uploadRes.ok) { const { url } = await uploadRes.json(); return url as string; }
+              return null;
+            }}
+          />
+        );
+      })()}
+
+      {/* 지도뷰 도움말 팝업 */}
+      {/* 관리자 인증 팝업 */}
+      {showAdminAuthModal && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 500, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+          onClick={() => { setShowAdminAuthModal(false); setAdminPwInput(''); }}>
+          <div style={{ background: '#1a3a6e', borderRadius: '12px', padding: '24px', width: '80%', maxWidth: '320px', boxShadow: '0 8px 32px rgba(0,0,0,0.5)' }}
             onClick={e => e.stopPropagation()}>
-
-            {/* 닫기 버튼 */}
-            <button
-              onClick={() => setPreviewIndex(null)}
-              className="absolute top-4 right-4 z-10 w-9 h-9 rounded-full flex items-center justify-center text-white font-bold text-lg"
-              style={{ background: 'rgba(0,0,0,0.6)', border: '1px solid rgba(255,255,255,0.3)' }}>✕</button>
-
-            {/* 이미지 번호 */}
-            <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10 px-3 py-1 rounded-full text-white text-xs font-bold"
-              style={{ background: 'rgba(0,0,0,0.55)' }}>
-              {previewIndex + 1} / {uploadedImages.length}
+            <div style={{ textAlign: 'center', marginBottom: '16px' }}>
+              <div style={{ fontSize: '32px', marginBottom: '8px' }}>🔓</div>
+              <div style={{ color: 'white', fontWeight: 'bold', fontSize: '16px' }}>관리자 인증</div>
+              <div style={{ color: 'rgba(255,255,255,0.6)', fontSize: '12px', marginTop: '4px' }}>비밀번호를 입력하세요</div>
             </div>
-
-            {/* 이전 버튼 */}
-            {uploadedImages.length > 1 && (
-              <button
-                onClick={() => setPreviewIndex((previewIndex - 1 + uploadedImages.length) % uploadedImages.length)}
-                className="absolute left-2 z-10 w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-xl"
-                style={{ background: 'rgba(0,0,0,0.55)', border: '1px solid rgba(255,255,255,0.25)' }}>‹</button>
-            )}
-
-            {/* 메인 이미지 */}
-            <img
-              src={uploadedImages[previewIndex].url}
-              alt={uploadedImages[previewIndex].name}
-              style={{ maxWidth: '100%', maxHeight: '80vh', objectFit: 'contain', borderRadius: '8px', boxShadow: '0 4px 32px rgba(0,0,0,0.6)' }}
+            <input
+              type="password"
+              value={adminPwInput}
+              onChange={e => setAdminPwInput(e.target.value)}
+              onKeyDown={async e => {
+                if (e.key === 'Enter') {
+                  const res = await fetch('/api/auth', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password: adminPwInput }) });
+                  if (res.ok) {
+                    setIsAdmin(true); sessionStorage.setItem('patrol-admin-auth', 'true');
+                    
+                    setShowAdminAuthModal(false);
+                    setAdminPwInput('');
+                  } else {
+                    alert('비밀번호가 틀렸습니다.');
+                    setAdminPwInput('');
+                  }
+                }
+              }}
+              placeholder="비밀번호"
+              autoFocus
+              style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.3)', background: 'rgba(255,255,255,0.1)', color: 'white', fontSize: '14px', boxSizing: 'border-box', marginBottom: '12px', outline: 'none' }}
             />
-
-            {/* 다음 버튼 */}
-            {uploadedImages.length > 1 && (
-              <button
-                onClick={() => setPreviewIndex((previewIndex + 1) % uploadedImages.length)}
-                className="absolute right-2 z-10 w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-xl"
-                style={{ background: 'rgba(0,0,0,0.55)', border: '1px solid rgba(255,255,255,0.25)' }}>›</button>
-            )}
-
-            {/* 파일명 */}
-            <div className="absolute bottom-4 left-1/2 -translate-x-1/2 px-3 py-1 rounded-full text-xs text-white"
-              style={{ background: 'rgba(0,0,0,0.55)', maxWidth: '80%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {uploadedImages[previewIndex].name}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* 좌표 생성 도움말 팝업 */}
-      {showHelpModal && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center"
-          style={{ background: 'rgba(0,0,0,0.6)' }}
-          onClick={() => setShowHelpModal(false)}>
-          <div
-            className="rounded-xl mx-3 overflow-y-auto"
-            style={{ background: '#1a3a6e', border: '1px solid rgba(100,180,255,0.3)', maxHeight: '85vh', width: '100%', maxWidth: '480px' }}
-            onClick={e => e.stopPropagation()}>
-            {/* 헤더 */}
-            <div className="flex items-center justify-between px-4 py-3" style={{ borderBottom: '1px solid rgba(255,255,255,0.15)' }}>
-              <span className="text-white font-bold text-sm">좌표는 어떻게 만들어지나요?</span>
-              <button onClick={() => setShowHelpModal(false)} className="text-white text-lg">✕</button>
-            </div>
-
-            {/* 설명 한 줄 */}
-            <p className="px-4 pt-3 pb-1" style={{ color: 'rgba(255,255,255,0.8)', fontSize: '11px', lineHeight: '1.6' }}>
-              방문지의 좌표는 네이버 클라우드 <span style={{ color: '#90caf9', fontWeight: 'bold' }}>Geocoding API</span>(도로명·지번 주소 → 좌표 변환)와 <span style={{ color: '#90caf9', fontWeight: 'bold' }}>Local Search API</span>(방문지명으로 POI 검색)를 통해 자동으로 생성됩니다.
-            </p>
-
-            {/* 표 */}
-            <div className="px-4 pt-1 pb-2 overflow-x-auto">
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11px', tableLayout: 'fixed' }}>
-                <colgroup>
-                  <col style={{ width: '12%' }} />
-                  <col style={{ width: '10%' }} />
-                  <col style={{ width: '11%' }} />
-                  <col style={{ width: '32%' }} />
-                  <col style={{ width: '35%' }} />
-                </colgroup>
-                <thead>
-                  <tr style={{ background: 'rgba(255,255,255,0.1)' }}>
-                    {[['도로명', '주소'], ['지번', '주소'], ['방문지명'], ['좌표 생성 기준'], ['메시지']].map((h, i) => (
-                      <th key={i} style={{ padding: '6px 4px', color: '#90caf9', fontWeight: 'bold', textAlign: 'center', borderBottom: '1px solid rgba(255,255,255,0.15)', lineHeight: '1.3', fontSize: '10px' }}>
-                        {h[0]}<br />{h[1] || ''}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {[
-                    ['○', '', '○', '도로명 주소로 직접 변환', '→ 도로명 주소로 좌표 생성'],
-                    ['○', '', '', '도로명 주소로 직접 변환', '→ 도로명 주소로 좌표 생성'],
-                    ['', '○', '○', '방문지명 POI 검색 (100m 내 최근접)\n실패시 지번주소 중심점', '→ 방문지명으로 좌표 보정\n→ 지번 주소로 좌표 생성'],
-                    ['', '○', '', '지번주소 중심점', '→ 지번 주소로 좌표 생성'],
-                    ['', '', '○', '방문지명 POI 검색 (결과 1건일 때)\n방문지명 POI 검색 (결과 복수일 때)', '→ 방문지명으로 좌표 생성\n→ ⚠️ 방문지명으로 좌표 생성 (복수 검색됨, 확인 필요)'],
-                    ['', '', '', '좌표생성 불가', '→ ⚠️ 좌표 없음 (주소나 방문지명 확인 필요)'],
-                  ].map((row, i) => (
-                    <tr key={i} style={{ background: i % 2 === 0 ? 'rgba(255,255,255,0.03)' : 'transparent' }}>
-                      {row.map((cell, j) => (
-                        <td key={j} style={{
-                          padding: '6px 4px',
-                          color: j <= 2 ? '#a5d6a7' : j === 4 ? '#fff176' : 'rgba(255,255,255,0.85)',
-                          borderBottom: '1px solid rgba(255,255,255,0.07)',
-                          whiteSpace: 'pre-wrap',
-                          verticalAlign: 'top',
-                          textAlign: j <= 2 ? 'center' : 'left',
-                          fontSize: '10px',
-                          wordBreak: 'keep-all',
-                        }}>{cell}</td>
-                      ))}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-
-            {/* 설명 */}
-            <div className="px-4 py-3 space-y-2" style={{ borderTop: '1px solid rgba(255,255,255,0.1)' }}>
-              {[
-                '📌 도로명 주소는 건물 단위까지 식별되므로 별도 POI 검색 없이 주소로 직접 좌표를 생성합니다.',
-                '📌 지번 주소는 토지(필지) 중심점 좌표를 생성하므로 현장 찾기가 어려울 수 있습니다. 방문지명이 있는 경우 반경 100m 내 POI 검색으로 좌표를 보정합니다.',
-                '📌 방문지명만 있는 경우 복수의 검색 결과가 나오면 첫 번째 결과를 사용합니다. ⚠️ 경고가 표시되면 방문지 수정에서 확인해 주세요.',
-                '📌 좌표가 없는 지점은 최적 경로 생성에서 제외됩니다. 방문지 수정에서 주소나 방문지명을 입력해 주세요.',
-              ].map((text, i) => (
-                <p key={i} style={{ color: 'rgba(255,255,255,0.75)', fontSize: '11px', lineHeight: '1.6' }}>{text}</p>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
-      {/* ★ 추가지점 포함 여부 3버튼 다이얼로그 */}
-      {showAdditionalConfirm && (
-        <div style={{ position: 'fixed', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999, background: 'rgba(0,0,0,0.65)' }}>
-          <div style={{ background: '#1a3a6e', borderRadius: '12px', padding: '24px 20px', width: '88%', maxWidth: '360px', boxShadow: '0 8px 32px rgba(0,0,0,0.5)' }}>
-            <p style={{ color: 'white', fontWeight: 'bold', fontSize: '14px', marginBottom: '8px' }}>추가 방문지 처리</p>
-            <p style={{ color: 'rgba(200,220,255,0.85)', fontSize: '12px', marginBottom: '20px', lineHeight: '1.6' }}>
-              추가 방문지 {additionalPoints.filter(p => p.lat && p.lng).length}개가 있습니다.<br />
-              최적화 경로 생성에 포함하시겠습니까?
-            </p>
             <div style={{ display: 'flex', gap: '8px' }}>
-              <button
-                onClick={() => { setShowAdditionalConfirm(false); additionalConfirmResolveRef.current?.('exclude'); }}
-                style={{ flex: 1, padding: '10px', borderRadius: '8px', border: 'none', background: '#455a64', color: 'white', fontSize: '13px', fontWeight: 'bold', cursor: 'pointer' }}>
-                미포함
-              </button>
-              <button
-                onClick={() => { setShowAdditionalConfirm(false); additionalConfirmResolveRef.current?.('include'); }}
-                style={{ flex: 1, padding: '10px', borderRadius: '8px', border: 'none', background: '#0a3d8f', color: 'white', fontSize: '13px', fontWeight: 'bold', cursor: 'pointer' }}>
-                포함
-              </button>
-              <button
-                onClick={() => { setShowAdditionalConfirm(false); additionalConfirmResolveRef.current?.('cancel'); }}
-                style={{ flex: 1, padding: '10px', borderRadius: '8px', border: 'none', background: '#7a2800', color: 'white', fontSize: '13px', fontWeight: 'bold', cursor: 'pointer' }}>
+              <button onClick={() => { setShowAdminAuthModal(false); setAdminPwInput(''); }}
+                style={{ flex: 1, padding: '10px', borderRadius: '8px', border: 'none', background: 'rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.7)', fontSize: '13px', cursor: 'pointer' }}>
                 취소
               </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* 커스텀 confirm 다이얼로그 */}
-      {confirmDialog && (
-        <div style={{ position: 'fixed', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999, background: 'rgba(0,0,0,0.65)' }}>
-          <div style={{ background: '#1a3a6e', borderRadius: '12px', padding: '24px 20px', width: '88%', maxWidth: '320px', boxShadow: '0 8px 32px rgba(0,0,0,0.5)' }}>
-            <p style={{ color: 'white', fontSize: '13px', lineHeight: '1.7', marginBottom: '20px' }}>{confirmDialog.message}</p>
-            <div style={{ display: 'flex', gap: '8px' }}>
-              <button
-                onClick={() => setConfirmDialog(null)}
-                style={{ flex: 1, padding: '10px', borderRadius: '8px', border: 'none', background: '#455a64', color: 'white', fontSize: '13px', fontWeight: 'bold', cursor: 'pointer' }}>
-                취소
-              </button>
-              <button
-                onClick={confirmDialog.onConfirm}
-                style={{ flex: 1, padding: '10px', borderRadius: '8px', border: 'none', background: '#c62828', color: 'white', fontSize: '13px', fontWeight: 'bold', cursor: 'pointer' }}>
+              <button onClick={async () => {
+                const res = await fetch('/api/auth', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password: adminPwInput }) });
+                if (res.ok) {
+                  setIsAdmin(true); sessionStorage.setItem('patrol-admin-auth', 'true');
+                  
+                  setShowAdminAuthModal(false);
+                  setAdminPwInput('');
+                } else {
+                  alert('비밀번호가 틀렸습니다.');
+                  setAdminPwInput('');
+                }
+              }}
+                style={{ flex: 1, padding: '10px', borderRadius: '8px', border: 'none', background: '#f97316', color: 'white', fontSize: '13px', fontWeight: 'bold', cursor: 'pointer' }}>
                 확인
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showMapHelpModal && (
+        <div
+          style={{ position: 'fixed', inset: 0, zIndex: 9999, background: 'rgba(0,0,0,0.65)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+          onClick={() => setShowMapHelpModal(false)}>
+          <div
+            style={{ background: '#1a3a6e', border: '1px solid rgba(100,180,255,0.3)', borderRadius: '12px', margin: '0 12px', maxHeight: '85vh', width: '100%', maxWidth: '480px', overflowY: 'auto' }}
+            onClick={e => e.stopPropagation()}>
+            {/* 헤더 */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', borderBottom: '1px solid rgba(255,255,255,0.15)' }}>
+              <span style={{ color: 'white', fontWeight: 'bold', fontSize: '14px' }}>🗺️ 지도뷰 사용 도움말</span>
+              <button onClick={() => setShowMapHelpModal(false)} style={{ color: 'white', fontSize: '18px', background: 'none', border: 'none', cursor: 'pointer' }}>✕</button>
+            </div>
+
+            {/* 내용 */}
+            <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+
+              {/* ① 마커 색상 */}
+              <div>
+                <p style={{ color: '#90caf9', fontWeight: 'bold', fontSize: '12px', marginBottom: '6px' }}>① 지점 마커 색상</p>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  {[
+                    { dot: '#FF6B35', text: '주황색 원형 — 아직 작업하지 않은 지점 (미완료)' },
+                    { dot: '#1565c0', text: '파란색 원형 — 작업이 완료된 지점' },
+                    { dot: '#f57f17', text: '노란색 원형 — 출발지 및 복귀지점 (의정부시청)' },
+                    { dot: '#f97316', text: '주황색 마름모 — 추가 지점 (미완료)' },
+                    { dot: '#7b1fa2', text: '보라색 마름모 — 추가 지점 (완료)' },
+                  ].map(({ dot, text }) => (
+                    <div key={text} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: dot, flexShrink: 0, border: '1px solid white' }} />
+                      <span style={{ color: 'rgba(255,255,255,0.85)', fontSize: '11px' }}>{text}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* ② 마커 클릭 */}
+              <div>
+                <p style={{ color: '#90caf9', fontWeight: 'bold', fontSize: '12px', marginBottom: '6px' }}>② 지점 마커 클릭 — 상세 팝업</p>
+                <p style={{ color: 'rgba(255,255,255,0.8)', fontSize: '11px', lineHeight: '1.7' }}>
+                  마커를 탭하면 상세 정보 팝업이 열립니다. 팝업에서 <strong style={{ color: 'white' }}>작업상태</strong>(민원처리완료 / 기처리 / 확인불가)를 선택하고 <strong style={{ color: 'white' }}>작업메모</strong>를 입력할 수 있습니다. 작업상태를 입력하면 <strong style={{ color: 'white' }}>마커 색상이 즉시 파란색으로 변경</strong>됩니다. 팝업 하단의 <strong style={{ color: 'white' }}>티맵 / 네이버지도</strong> 버튼으로 해당 지점 내비게이션을 바로 실행할 수 있습니다.
+                </p>
+                <p style={{ color: '#ffb74d', fontSize: '11px', marginTop: '4px' }}>⚠️ 마커 클릭은 지도를 일정 수준 이상 확대한 상태에서만 활성화됩니다.</p>
+              </div>
+
+              {/* ③ 롱프레스 */}
+              <div>
+                <p style={{ color: '#90caf9', fontWeight: 'bold', fontSize: '12px', marginBottom: '6px' }}>③ 지점 마커 롱프레스 — 구간 경로 확인</p>
+                <p style={{ color: 'rgba(255,255,255,0.8)', fontSize: '11px', lineHeight: '1.7' }}>
+                  마커를 <strong style={{ color: 'white' }}>길게 누르면</strong> 해당 지점에서 다음 지점까지의 경로 구간이 <strong style={{ color: '#a5d6a7' }}>초록색으로 약 5초간 깜박입니다</strong>. 다음에 이동할 구간을 빠르게 확인할 때 유용합니다.
+                </p>
+              </div>
+
+              {/* ④ 위성 버튼 */}
+              <div>
+                <p style={{ color: '#90caf9', fontWeight: 'bold', fontSize: '12px', marginBottom: '6px' }}>④ 위성 버튼</p>
+                <p style={{ color: 'rgba(255,255,255,0.8)', fontSize: '11px', lineHeight: '1.7' }}>
+                  <strong style={{ color: 'white' }}>[위성]</strong> 버튼을 누르면 일반 지도에서 위성 사진 지도로 전환됩니다. 다시 누르면 <strong style={{ color: 'white' }}>[일반]</strong>으로 돌아오는 <strong style={{ color: 'white' }}>토글 버튼</strong>입니다. 위성 지도에서는 건물과 도로 실제 모습을 확인할 수 있어 현장 파악에 유용합니다.
+                </p>
+              </div>
+
+              {/* ⑤ 직선/도로 버튼 */}
+              <div>
+                <p style={{ color: '#90caf9', fontWeight: 'bold', fontSize: '12px', marginBottom: '6px' }}>⑤ 직선 / 도로 버튼</p>
+                <p style={{ color: 'rgba(255,255,255,0.8)', fontSize: '11px', lineHeight: '1.7' }}>
+                  경로 표시 방식을 선택합니다.<br />
+                  · <strong style={{ color: 'white' }}>직선</strong> — 지점 간 직선으로 경로를 표시합니다. 빠르게 로드됩니다.<br />
+                  · <strong style={{ color: 'white' }}>도로</strong> — <strong style={{ color: 'white' }}>ORS(OpenRouteService)</strong>로부터 실제 도로 정보를 수신하여 도로를 따라 경로를 표시합니다. 수신에 수 초가 소요될 수 있습니다.
+                </p>
+              </div>
+
+              {/* ⑥ 보고서 버튼 */}
+              <div>
+                <p style={{ color: '#90caf9', fontWeight: 'bold', fontSize: '12px', marginBottom: '6px' }}>⑥ 보고서 버튼</p>
+                <p style={{ color: 'rgba(255,255,255,0.8)', fontSize: '11px', lineHeight: '1.7' }}>
+                  <strong style={{ color: 'white' }}>[보고서]</strong> 버튼을 누르면 오늘의 순회 단속 결과를 <strong style={{ color: 'white' }}>PDF 파일로 자동 생성</strong>합니다. 민원번호, 주소, 민원내용, 담당자, 작업상태, 현장사진이 포함된 표 형식으로 저장됩니다.
+                </p>
+              </div>
+
+              {/* ⑦ 내 위치 */}
+              <div>
+                <p style={{ color: '#90caf9', fontWeight: 'bold', fontSize: '12px', marginBottom: '6px' }}>⑦ 내 위치 확인</p>
+                <p style={{ color: 'rgba(255,255,255,0.8)', fontSize: '11px', lineHeight: '1.7' }}>
+                  화면 우측 하단의 <strong style={{ color: 'white' }}>🔵 위치 버튼</strong>을 누르면 현재 내 GPS 위치가 <strong style={{ color: 'white' }}>🛻 트럭 아이콘</strong>으로 지도에 표시됩니다. 파란 원은 <strong style={{ color: 'white' }}>GPS 정확도 범위</strong>를 나타내며, 원이 클수록 오차가 큽니다. 위치는 <strong style={{ color: 'white' }}>실시간으로 자동 업데이트</strong>되며, 버튼을 다시 누르면 추적이 중지됩니다.
+                </p>
+              </div>
+
             </div>
           </div>
         </div>
@@ -2765,3 +2947,4 @@ export default function Home() {
     </div>
   );
 }
+
