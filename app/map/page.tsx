@@ -1086,7 +1086,7 @@ export default function MapPage() {
 
   const makeArrowIcon = (bearing: number) => {
     const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="-5 -5 10 10">
-      <polygon points="0,-4 3,2 0,0 -3,2" fill="white" opacity="0.9" transform="rotate(${bearing})"/>
+      <polygon points="0,-4 3,2 0,0 -3,2" fill="white" opacity="0.55" transform="rotate(${bearing})"/>
     </svg>`;
     return {
       content: svg,
@@ -1108,14 +1108,14 @@ export default function MapPage() {
     bearing: number | null,
     map: any,
     naver: any,
-    intervalM = 80
+    intervalM = 100
   ) => {
     if (coordPairs.length < 2) return;
     const totalDist = coordPairs.reduce((sum, _, i) => {
       if (i === 0) return sum;
       return sum + latLngDistanceM(coordPairs[i-1].lat, coordPairs[i-1].lng, coordPairs[i].lat, coordPairs[i].lng);
     }, 0);
-    const MARKER_CLEARANCE = 40; // 마커 위치 근처 40m 이내 화살표 제외
+    const MARKER_CLEARANCE = 50; // 마커 위치 근처 50m 이내 화살표 제외
     let accumulated = 0;
     let distFromStart = 0;
     for (let i = 0; i < coordPairs.length - 1; i++) {
