@@ -2046,9 +2046,11 @@ export default function Home() {
               <button
                 onClick={async () => {
                   localStorage.removeItem('draft-route');
-                  // 추가지점 Redis에서도 삭제
-                  if ((pendingDraft as any).additionalPoints?.length > 0) {
-                    const today = new Date().toLocaleDateString('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/\. /g, '-').replace('.', '');
+                  // ★ pendingDraft의 날짜가 오늘과 같을 때만 Redis 추가지점 삭제
+                  // (오늘 날짜로 이미 저장된 추가지점을 실수로 지우지 않도록)
+                  const today = new Date().toLocaleDateString('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/\. /g, '-').replace('.', '');
+                  const draftDate = (pendingDraft as any).date;
+                  if ((pendingDraft as any).additionalPoints?.length > 0 && draftDate === today) {
                     fetch('/api/save-additional', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ date: today, points: [] }) }).catch(() => {});
                   }
                   setAdditionalPoints([]);
