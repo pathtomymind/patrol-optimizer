@@ -2470,7 +2470,7 @@ export default function MapPage() {
         ];
         return (
           <AdditionalPointModal
-            key="map-add-new"
+            key={`map-add-new-${addIdx}`}
             label={label}
             point={emptyPoint}
             insertOptions={insertOptions}

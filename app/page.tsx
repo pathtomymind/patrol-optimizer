@@ -2116,7 +2116,7 @@ export default function Home() {
 
         return (
           <AdditionalPointModal
-            key={editingAdditionalPoint?.id ?? 'new'}
+            key={editingAdditionalPoint?.id ?? `new-${additionalPoints.length}`}
             label={label}
             point={pointForModal}
             apSt={apSt}
