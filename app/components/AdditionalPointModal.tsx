@@ -109,7 +109,10 @@ export default function AdditionalPointModal({
   };
 
   const handleClose = async () => {
+    if (saving) return; // 이미 저장 중이면 무시
+    setSaving(true);
     await onSave(buildData());
+    setSaving(false);
     onClose();
   };
 
@@ -138,7 +141,9 @@ export default function AdditionalPointModal({
   const bgColor = isDone ? '#4a148c' : '#7a2800';
 
   return (
-    <div style={{ position: 'fixed', inset: 0, zIndex: 400, display: 'flex', flexDirection: 'column', background: bgColor }}>
+    <div style={{ position: 'fixed', inset: 0, zIndex: 400, display: 'flex', flexDirection: 'column', background: bgColor }}
+      onClick={e => e.stopPropagation()}
+      onTouchStart={e => e.stopPropagation()}>
       {/* 타이틀 바 */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '12px 16px', background: 'rgba(0,0,0,0.25)', borderBottom: '1px solid rgba(255,255,255,0.15)', flexShrink: 0 }}>
         <div style={{ width: '32px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
@@ -148,9 +153,9 @@ export default function AdditionalPointModal({
           </svg>
         </div>
         <span style={{ color: 'white', fontWeight: 'bold', fontSize: '14px', flex: 1 }}>방문지 수정 (추가 방문지)</span>
-        <button onClick={handleClose}
-          style={{ background: '#c62828', border: 'none', borderRadius: '6px', width: '36px', height: '36px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}>
-          <span style={{ color: 'white', fontWeight: 'bold', fontSize: '16px' }}>✕</span>
+        <button onClick={e => { e.stopPropagation(); handleClose(); }}
+          style={{ background: saving ? '#888' : '#c62828', border: 'none', borderRadius: '6px', width: '36px', height: '36px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: saving ? 'not-allowed' : 'pointer', flexShrink: 0 }}>
+          <span style={{ color: 'white', fontWeight: 'bold', fontSize: '16px' }}>{saving ? '...' : '✕'}</span>
         </button>
       </div>
 
