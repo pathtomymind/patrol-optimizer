@@ -2462,12 +2462,12 @@ export default function MapPage() {
                 </div>
               </div>
 
-              {/* 방문결과/방문메모 - 관리자만 */}
-              {isAdmin && (
-                <>
-                  <div style={{ borderTop: '1px solid rgba(255,255,255,0.2)' }} />
-                  <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                    <span style={{ color: '#90caf9', fontSize: '11px', width: '5rem', flexShrink: 0 }}>방문결과</span>
+              {/* 방문결과/방문메모 - 항상 표시, 관리자만 수정 가능 */}
+              <>
+                <div style={{ borderTop: '1px solid rgba(255,255,255,0.2)' }} />
+                <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                  <span style={{ color: '#90caf9', fontSize: '11px', width: '5rem', flexShrink: 0 }}>방문결과</span>
+                  {isAdmin ? (
                     <select value={curStatus} onChange={e => handleSaveStatus(e.target.value, curMemo)} disabled={savingStatus}
                       style={{ flex: 1, background: isDone ? 'rgba(255,255,255,0.15)' : 'rgba(235,100,0,0.65)', color: 'white', border: '1px solid rgba(255,255,255,0.3)', borderRadius: '6px', padding: '6px 8px', fontSize: '12px', fontWeight: 'bold' }}>
                       <option value="" style={{ background: '#1a3a6e' }}>선택 (미완료)</option>
@@ -2475,15 +2475,25 @@ export default function MapPage() {
                       <option value="기처리" style={{ background: '#1a3a6e' }}>기처리</option>
                       <option value="확인불가" style={{ background: '#1a3a6e' }}>확인불가</option>
                     </select>
-                  </div>
-                  <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
-                    <span style={{ color: '#90caf9', fontSize: '11px', width: '5rem', flexShrink: 0, paddingTop: '6px' }}>방문메모</span>
+                  ) : (
+                    <span style={{ flex: 1, color: isDone ? '#a5d6a7' : 'rgba(255,255,255,0.5)', fontSize: '12px', fontWeight: 'bold' }}>
+                      {curStatus || '(미완료)'}
+                    </span>
+                  )}
+                </div>
+                <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
+                  <span style={{ color: '#90caf9', fontSize: '11px', width: '5rem', flexShrink: 0, paddingTop: '6px' }}>방문메모</span>
+                  {isAdmin ? (
                     <textarea rows={2} placeholder="메모 입력..." defaultValue={curMemo}
                       onBlur={(e) => { if (e.target.value !== curMemo) handleSaveStatus(curStatus, e.target.value); }}
                       style={{ flex: 1, background: 'rgba(255,255,255,0.1)', color: 'white', border: '1px solid rgba(255,255,255,0.3)', borderRadius: '6px', padding: '6px 8px', fontSize: '12px', resize: 'none' }} />
-                  </div>
-                </>
-              )}
+                  ) : (
+                    <span style={{ flex: 1, color: curMemo ? 'white' : 'rgba(255,255,255,0.35)', fontSize: '12px', paddingTop: '6px' }}>
+                      {curMemo || '(메모없음)'}
+                    </span>
+                  )}
+                </div>
+              </>
             </div>
 
             {/* 하단 버튼 */}

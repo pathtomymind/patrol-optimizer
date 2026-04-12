@@ -152,7 +152,7 @@ export default function AdditionalPointModal({
             <text x="13" y="17" textAnchor="middle" fontSize="8" fontWeight="bold" fill="white" fontFamily="Arial,sans-serif">{label}</text>
           </svg>
         </div>
-        <span style={{ color: 'white', fontWeight: 'bold', fontSize: '14px', flex: 1 }}>방문지 수정 (추가 방문지)</span>
+        <span style={{ color: 'white', fontWeight: 'bold', fontSize: '14px', flex: 1 }}>{isAdmin ? '방문지 수정 (추가 방문지)' : '방문지 조회 (추가 방문지)'}</span>
         <button onClick={e => { e.stopPropagation(); handleClose(); }}
           style={{ background: saving ? '#888' : '#c62828', border: 'none', borderRadius: '6px', width: '36px', height: '36px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: saving ? 'not-allowed' : 'pointer', flexShrink: 0 }}>
           <span style={{ color: 'white', fontWeight: 'bold', fontSize: '16px' }}>{saving ? '...' : '✕'}</span>
@@ -165,27 +165,37 @@ export default function AdditionalPointModal({
         {/* 주소 */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <label style={{ color: '#90caf9', fontSize: '11px', flexShrink: 0, width: '5rem' }}>주소</label>
-          <input type="text" value={address} placeholder=""
-            onChange={e => { setAddress(e.target.value); setCoordStatus('idle'); setLat(null); setLng(null); setPlaceName(null); setSource(null); setCoordMessage(null); }}
-            style={{ flex: 1, padding: '6px 8px', borderRadius: '6px', background: 'rgba(255,255,255,0.15)', color: 'white', border: 'none', outline: 'none', fontSize: '12px', boxSizing: 'border-box' }} />
+          {isAdmin ? (
+            <input type="text" value={address} placeholder=""
+              onChange={e => { setAddress(e.target.value); setCoordStatus('idle'); setLat(null); setLng(null); setPlaceName(null); setSource(null); setCoordMessage(null); }}
+              style={{ flex: 1, padding: '6px 8px', borderRadius: '6px', background: 'rgba(255,255,255,0.15)', color: 'white', border: 'none', outline: 'none', fontSize: '12px', boxSizing: 'border-box' }} />
+          ) : (
+            <span style={{ flex: 1, color: address ? 'white' : 'rgba(255,255,255,0.35)', fontSize: '12px' }}>{address || '(없음)'}</span>
+          )}
         </div>
 
         {/* 방문지 */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <label style={{ color: '#90caf9', fontSize: '11px', flexShrink: 0, width: '5rem' }}>방문지</label>
-          <input type="text" value={destination} placeholder=""
-            onChange={e => { setDestination(e.target.value); setCoordStatus('idle'); setLat(null); setLng(null); setPlaceName(null); setSource(null); setCoordMessage(null); }}
-            style={{ flex: 1, padding: '6px 8px', borderRadius: '6px', background: 'rgba(255,255,255,0.15)', color: 'white', border: 'none', outline: 'none', fontSize: '12px', boxSizing: 'border-box' }} />
+          {isAdmin ? (
+            <input type="text" value={destination} placeholder=""
+              onChange={e => { setDestination(e.target.value); setCoordStatus('idle'); setLat(null); setLng(null); setPlaceName(null); setSource(null); setCoordMessage(null); }}
+              style={{ flex: 1, padding: '6px 8px', borderRadius: '6px', background: 'rgba(255,255,255,0.15)', color: 'white', border: 'none', outline: 'none', fontSize: '12px', boxSizing: 'border-box' }} />
+          ) : (
+            <span style={{ flex: 1, color: destination ? 'white' : 'rgba(255,255,255,0.35)', fontSize: '12px' }}>{destination || '(없음)'}</span>
+          )}
         </div>
 
-        {/* 좌표 확인하기 */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <div style={{ width: '5rem', flexShrink: 0 }} />
-          <button onClick={handleCheckCoord} disabled={coordStatus === 'loading'}
-            style={{ flex: 1, padding: '8px', borderRadius: '6px', background: coordStatus === 'loading' ? '#555' : '#1565c0', color: 'white', border: '1px solid rgba(255,255,255,0.2)', fontWeight: 'bold', fontSize: '12px', cursor: 'pointer', boxShadow: '0 2px 6px rgba(0,0,0,0.4)' }}>
-            {coordStatus === 'loading' ? '확인 중...' : '좌표 확인하기'}
-          </button>
-        </div>
+        {/* 좌표 확인하기 - 관리자만 */}
+        {isAdmin && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <div style={{ width: '5rem', flexShrink: 0 }} />
+            <button onClick={handleCheckCoord} disabled={coordStatus === 'loading'}
+              style={{ flex: 1, padding: '8px', borderRadius: '6px', background: coordStatus === 'loading' ? '#555' : '#1565c0', color: 'white', border: '1px solid rgba(255,255,255,0.2)', fontWeight: 'bold', fontSize: '12px', cursor: 'pointer', boxShadow: '0 2px 6px rgba(0,0,0,0.4)' }}>
+              {coordStatus === 'loading' ? '확인 중...' : '좌표 확인하기'}
+            </button>
+          </div>
+        )}
 
         {/* 좌표 메시지 */}
         {coordStatus !== 'idle' && (
@@ -201,22 +211,30 @@ export default function AdditionalPointModal({
         {/* 사진번호 */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <label style={{ color: '#90caf9', fontSize: '11px', flexShrink: 0, width: '5rem' }}>사진번호</label>
-          <input type="number" placeholder="" defaultValue=""
-            style={{ flex: 1, padding: '6px 8px', borderRadius: '6px', background: 'rgba(255,255,255,0.15)', color: '#a5d6a7', border: 'none', outline: 'none', fontSize: '12px', boxSizing: 'border-box' as const }} />
+          <input type="number" placeholder="" defaultValue="" readOnly={!isAdmin}
+            style={{ flex: 1, padding: '6px 8px', borderRadius: '6px', background: isAdmin ? 'rgba(255,255,255,0.15)' : 'transparent', color: '#a5d6a7', border: isAdmin ? 'none' : 'none', outline: 'none', fontSize: '12px', boxSizing: 'border-box' as const }} />
         </div>
 
         {/* 방문내용 */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <label style={{ color: '#90caf9', fontSize: '11px', flexShrink: 0, width: '5rem' }}>방문내용</label>
-          <input type="text" value={complaint} placeholder="" onChange={e => setComplaint(e.target.value)}
-            style={{ flex: 1, padding: '6px 8px', borderRadius: '6px', background: 'rgba(255,255,255,0.15)', color: '#a5d6a7', border: 'none', outline: 'none', fontSize: '12px', boxSizing: 'border-box' as const }} />
+          {isAdmin ? (
+            <input type="text" value={complaint} placeholder="" onChange={e => setComplaint(e.target.value)}
+              style={{ flex: 1, padding: '6px 8px', borderRadius: '6px', background: 'rgba(255,255,255,0.15)', color: '#a5d6a7', border: 'none', outline: 'none', fontSize: '12px', boxSizing: 'border-box' as const }} />
+          ) : (
+            <span style={{ flex: 1, color: complaint ? '#a5d6a7' : 'rgba(255,255,255,0.35)', fontSize: '12px' }}>{complaint || '(없음)'}</span>
+          )}
         </div>
 
         {/* 담당자 */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <label style={{ color: '#90caf9', fontSize: '11px', flexShrink: 0, width: '5rem' }}>담당자</label>
-          <input type="text" value={manager} placeholder="" onChange={e => setManager(e.target.value)}
-            style={{ flex: 1, padding: '6px 8px', borderRadius: '6px', background: 'rgba(255,255,255,0.15)', color: '#a5d6a7', border: 'none', outline: 'none', fontSize: '12px', boxSizing: 'border-box' as const }} />
+          {isAdmin ? (
+            <input type="text" value={manager} placeholder="" onChange={e => setManager(e.target.value)}
+              style={{ flex: 1, padding: '6px 8px', borderRadius: '6px', background: 'rgba(255,255,255,0.15)', color: '#a5d6a7', border: 'none', outline: 'none', fontSize: '12px', boxSizing: 'border-box' as const }} />
+          ) : (
+            <span style={{ flex: 1, color: manager ? '#a5d6a7' : 'rgba(255,255,255,0.35)', fontSize: '12px' }}>{manager || '(없음)'}</span>
+          )}
         </div>
 
         {/* 방문지사진 */}
@@ -229,24 +247,62 @@ export default function AdditionalPointModal({
                   crossOrigin="anonymous" onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }} />
               </div>
             )}
-            <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#1565c0', borderRadius: '6px', padding: '8px', cursor: 'pointer', color: 'white', fontSize: '12px', fontWeight: 'bold', boxShadow: '0 2px 6px rgba(0,0,0,0.4)', border: '1px solid rgba(255,255,255,0.2)' }}>
-              사진 선택
-              <input type="file" accept="image/*" style={{ display: 'none' }}
-                onChange={async e => {
-                  const file = e.target.files?.[0];
-                  if (!file) return;
-                  const reader = new FileReader();
-                  reader.onload = async (ev) => {
-                    const dataUrl = ev.target?.result as string;
-                    setPhotoUrl(dataUrl);
-                    if (onPhotoUpload) { const url = await onPhotoUpload(file); if (url) setPhotoUrl(url); }
-                  };
-                  reader.readAsDataURL(file);
-                  e.target.value = '';
-                }} />
-            </label>
+            {!photoUrl && !isAdmin && (
+              <span style={{ color: 'rgba(255,255,255,0.35)', fontSize: '12px' }}>(사진없음)</span>
+            )}
+            {isAdmin && (
+              <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#1565c0', borderRadius: '6px', padding: '8px', cursor: 'pointer', color: 'white', fontSize: '12px', fontWeight: 'bold', boxShadow: '0 2px 6px rgba(0,0,0,0.4)', border: '1px solid rgba(255,255,255,0.2)' }}>
+                사진 선택
+                <input type="file" accept="image/*" style={{ display: 'none' }}
+                  onChange={async e => {
+                    const file = e.target.files?.[0];
+                    if (!file) return;
+                    const reader = new FileReader();
+                    reader.onload = async (ev) => {
+                      const dataUrl = ev.target?.result as string;
+                      setPhotoUrl(dataUrl);
+                      if (onPhotoUpload) { const url = await onPhotoUpload(file); if (url) setPhotoUrl(url); }
+                    };
+                    reader.readAsDataURL(file);
+                    e.target.value = '';
+                  }} />
+              </label>
+            )}
           </div>
         </div>
+
+        {/* 방문결과/방문메모 - 항상 표시, 관리자만 수정 가능 */}
+        <>
+          <div style={{ borderTop: '1px solid rgba(255,255,255,0.2)' }} />
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <label style={{ color: '#90caf9', fontSize: '11px', flexShrink: 0, width: '5rem' }}>방문결과</label>
+            {isAdmin ? (
+              <select value={localStatus} onChange={e => setLocalStatus(e.target.value)}
+                style={{ flex: 1, borderRadius: '6px', padding: '6px 8px', fontSize: '12px', color: 'white', fontWeight: 'bold', background: isDone ? 'rgba(255,255,255,0.15)' : 'rgba(235,100,0,0.65)', border: '1px solid rgba(255,255,255,0.3)' }}>
+                <option value="" style={{ background: '#1a3a6e' }}></option>
+                <option value="민원처리완료" style={{ background: '#1a3a6e' }}>민원처리완료</option>
+                <option value="기처리" style={{ background: '#1a3a6e' }}>기처리</option>
+                <option value="확인불가" style={{ background: '#1a3a6e' }}>확인불가</option>
+              </select>
+            ) : (
+              <span style={{ flex: 1, color: isDone ? '#a5d6a7' : 'rgba(255,255,255,0.5)', fontSize: '12px', fontWeight: 'bold' }}>
+                {localStatus || '(미완료)'}
+              </span>
+            )}
+          </div>
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
+            <label style={{ color: '#90caf9', fontSize: '11px', flexShrink: 0, width: '5rem', paddingTop: '5px' }}>방문메모</label>
+            {isAdmin ? (
+              <textarea value={localMemo} onChange={e => setLocalMemo(e.target.value)}
+                rows={2} placeholder="메모 입력..."
+                style={{ flex: 1, borderRadius: '6px', padding: '6px 8px', fontSize: '12px', color: 'white', background: 'rgba(255,255,255,0.12)', border: '1px solid rgba(255,255,255,0.25)', resize: 'none', boxSizing: 'border-box' as const }} />
+            ) : (
+              <span style={{ flex: 1, color: localMemo ? 'white' : 'rgba(255,255,255,0.35)', fontSize: '12px', paddingTop: '5px' }}>
+                {localMemo || '(메모없음)'}
+              </span>
+            )}
+          </div>
+        </>
 
         {/* 관리자 - 경로 삽입 위치 + 삭제 */}
         {isAdmin && (
@@ -270,25 +326,6 @@ export default function AdditionalPointModal({
                   삭제
                 </button>
               )}
-            </div>
-
-            {/* 방문결과/방문메모 */}
-            <div style={{ borderTop: '1px solid rgba(255,255,255,0.2)' }} />
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <label style={{ color: '#90caf9', fontSize: '11px', flexShrink: 0, width: '5rem' }}>방문결과</label>
-              <select value={localStatus} onChange={e => setLocalStatus(e.target.value)}
-                style={{ flex: 1, borderRadius: '6px', padding: '6px 8px', fontSize: '12px', color: 'white', fontWeight: 'bold', background: isDone ? 'rgba(255,255,255,0.15)' : 'rgba(235,100,0,0.65)', border: '1px solid rgba(255,255,255,0.3)' }}>
-                <option value="" style={{ background: '#1a3a6e' }}></option>
-                <option value="민원처리완료" style={{ background: '#1a3a6e' }}>민원처리완료</option>
-                <option value="기처리" style={{ background: '#1a3a6e' }}>기처리</option>
-                <option value="확인불가" style={{ background: '#1a3a6e' }}>확인불가</option>
-              </select>
-            </div>
-            <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
-              <label style={{ color: '#90caf9', fontSize: '11px', flexShrink: 0, width: '5rem', paddingTop: '5px' }}>방문메모</label>
-              <textarea value={localMemo} onChange={e => setLocalMemo(e.target.value)}
-                rows={2} placeholder="메모 입력..."
-                style={{ flex: 1, borderRadius: '6px', padding: '6px 8px', fontSize: '12px', color: 'white', background: 'rgba(255,255,255,0.12)', border: '1px solid rgba(255,255,255,0.25)', resize: 'none', boxSizing: 'border-box' as const }} />
             </div>
           </>
         )}
