@@ -1316,17 +1316,17 @@ export default function Home() {
                                   )}
                                 </p>
                                 {point.source !== 'fixed' && (
-                                  <div style={{ display: 'flex', gap: '6px', marginTop: '2px', color: '#a5d6a7', fontSize: '12px' }}>
-                                    <span style={{ flexShrink: 0 }}>🔍</span>
-                                    <span>{(point.source === 'place_nearest' || point.source === 'place_single') ? (point.placeName || '') : ''}</span>
-                                  </div>
-                                )}
-                                {point.source !== 'fixed' && (
                                   <div style={{ display: 'flex', gap: '6px', marginTop: '2px', fontSize: '12px' }}>
-                                    <span style={{ flexShrink: 0 }}>📍</span>
-                                    <span style={{ color: point.coordMessage?.includes('⚠️') ? '#ffb74d' : point.source ? '#fff176' : 'rgba(255,255,255,0.5)' }}>
+                                    <span style={{ flexShrink: 0 }}>{point.coordMessage?.includes('⚠️') ? '⚠️' : '✅'}</span>
+                                    <span style={{ color: point.coordMessage?.includes('⚠️') ? '#ffb74d' : '#fff176' }}>
                                       {point.coordMessage || (point.source ? '' : '좌표 없음. (⚠️주소나 목적지명 확인 필요)')}
                                     </span>
+                                  </div>
+                                )}
+                                {point.source !== 'fixed' && (point.source === 'place_nearest' || point.source === 'place_single') && point.placeName && (
+                                  <div style={{ display: 'flex', gap: '6px', marginTop: '2px', color: '#a5d6a7', fontSize: '12px' }}>
+                                    <span style={{ flexShrink: 0 }}>📍</span>
+                                    <span>플레이스명: {point.placeName}</span>
                                   </div>
                                 )}
                                 {point.source !== 'fixed' && (
@@ -1334,13 +1334,13 @@ export default function Home() {
                                 )}
                                 {point.source !== 'fixed' && (
                                   <div style={{ display: 'flex', gap: '6px', marginTop: '2px' }}>
-                                    <span style={{ color: 'rgba(255,255,255,0.6)', fontSize: '12px', width: '4rem', flexShrink: 0 }}>민원번호:</span>
+                                    <span style={{ color: 'rgba(255,255,255,0.6)', fontSize: '12px', width: '4rem', flexShrink: 0 }}>사진번호:</span>
                                     <span style={{ color: '#a5d6a7', fontSize: '12px' }}>{point.originalId ? `${point.originalId} 번` : ''}</span>
                                   </div>
                                 )}
                                 {point.source !== 'fixed' && (
                                   <div style={{ display: 'flex', gap: '6px', marginTop: '2px' }}>
-                                    <span style={{ color: 'rgba(255,255,255,0.6)', fontSize: '12px', width: '4rem', flexShrink: 0 }}>민원내용:</span>
+                                    <span style={{ color: 'rgba(255,255,255,0.6)', fontSize: '12px', width: '4rem', flexShrink: 0 }}>방문내용:</span>
                                     <span style={{ color: '#a5d6a7', fontSize: '12px' }}>{point.complaint || ''}</span>
                                   </div>
                                 )}
@@ -1354,11 +1354,11 @@ export default function Home() {
                                   <>
                                     <div style={{ borderTop: '1px solid rgba(255,255,255,0.2)', marginTop: 6, marginBottom: 4 }} />
                                     <div style={{ display: 'flex', gap: '6px', marginTop: '2px' }}>
-                                      <span style={{ color: 'rgba(255,255,255,0.6)', fontSize: '12px', width: '4rem', flexShrink: 0 }}>작업상태:</span>
+                                      <span style={{ color: 'rgba(255,255,255,0.6)', fontSize: '12px', width: '4rem', flexShrink: 0 }}>방문상태:</span>
                                       <span style={{ color: '#80cbc4', fontWeight: 'bold', fontSize: '12px' }}>{st?.status || ''}</span>
                                     </div>
                                     <div style={{ display: 'flex', gap: '6px', marginTop: '2px' }}>
-                                      <span style={{ color: 'rgba(255,255,255,0.6)', fontSize: '12px', width: '4rem', flexShrink: 0 }}>작업메모:</span>
+                                      <span style={{ color: 'rgba(255,255,255,0.6)', fontSize: '12px', width: '4rem', flexShrink: 0 }}>방문메모:</span>
                                       <span style={{ color: '#a5d6a7', fontSize: '12px' }}>{st?.memo || ''}</span>
                                     </div>
                                   </>
@@ -1367,6 +1367,11 @@ export default function Home() {
                               {/* 버튼 영역 - 우측 하단 정렬 */}
                               {point.source !== 'fixed' && (
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', flexShrink: 0, justifyContent: 'flex-end', alignSelf: 'flex-end' }}>
+                                  <button
+                                    onClick={(e) => { e.stopPropagation(); window.open(`timemarkcamera://`); }}
+                                    className="text-xs text-white px-3 py-1.5 rounded font-bold" style={{ background: '#5d4037', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '3px' }}>
+                                    <span style={{ fontSize: '13px' }}>📷</span><span>타임마크</span>
+                                  </button>
                                   <button
                                     onClick={(e) => { e.stopPropagation(); window.open(`tmap://route?goalname=${encodeURIComponent(point.destination || point.address)}&goaly=${point.lat}&goalx=${point.lng}`); }}
                                     className="text-xs text-white px-3 py-1.5 rounded font-bold" style={{ background: '#0a3d8f' }}>티맵</button>
@@ -1416,21 +1421,21 @@ export default function Home() {
                                       <p className="text-sm leading-snug font-medium">
                                         <span style={{ color: '#a5d6a7' }}>{ap.address}{ap.destination ? ` (${ap.destination})` : ''}</span>
                                       </p>
-                                      {ap.placeName && (
-                                        <div style={{ display: 'flex', gap: '6px', marginTop: '2px', color: '#a5d6a7', fontSize: '12px' }}>
-                                          <span style={{ flexShrink: 0 }}>🔍</span>
-                                          <span>{ap.placeName}</span>
-                                        </div>
-                                      )}
                                       {ap.coordMessage && (
                                         <div style={{ display: 'flex', gap: '6px', marginTop: '2px', fontSize: '12px' }}>
-                                          <span style={{ flexShrink: 0 }}>📍</span>
+                                          <span style={{ flexShrink: 0 }}>{ap.coordMessage?.includes('⚠️') ? '⚠️' : '✅'}</span>
                                           <span style={{ color: ap.coordMessage?.includes('⚠️') ? '#ffb74d' : '#fff176' }}>{ap.coordMessage}</span>
+                                        </div>
+                                      )}
+                                      {(ap.source === 'place_nearest' || ap.source === 'place_single') && ap.placeName && (
+                                        <div style={{ display: 'flex', gap: '6px', marginTop: '2px', color: '#a5d6a7', fontSize: '12px' }}>
+                                          <span style={{ flexShrink: 0 }}>📍</span>
+                                          <span>플레이스명: {ap.placeName}</span>
                                         </div>
                                       )}
                                       <div style={{ borderTop: '1px solid rgba(255,255,255,0.15)', marginTop: 5, marginBottom: 4 }} />
                                       <div style={{ display: 'flex', gap: '6px', marginTop: '2px' }}>
-                                        <span style={{ color: 'rgba(255,255,255,0.6)', fontSize: '12px', width: '4rem', flexShrink: 0 }}>민원내용:</span>
+                                        <span style={{ color: 'rgba(255,255,255,0.6)', fontSize: '12px', width: '4rem', flexShrink: 0 }}>방문내용:</span>
                                         <span style={{ color: '#a5d6a7', fontSize: '12px' }}>{ap.complaint || ''}</span>
                                       </div>
                                       <div style={{ display: 'flex', gap: '6px', marginTop: '2px' }}>
@@ -1439,15 +1444,20 @@ export default function Home() {
                                       </div>
                                       <div style={{ borderTop: '1px solid rgba(255,255,255,0.2)', marginTop: 6, marginBottom: 4 }} />
                                       <div style={{ display: 'flex', gap: '6px', marginTop: '2px' }}>
-                                        <span style={{ color: 'rgba(255,255,255,0.6)', fontSize: '12px', width: '4rem', flexShrink: 0 }}>작업상태:</span>
+                                        <span style={{ color: 'rgba(255,255,255,0.6)', fontSize: '12px', width: '4rem', flexShrink: 0 }}>방문상태:</span>
                                         <span style={{ color: '#80cbc4', fontWeight: 'bold', fontSize: '12px' }}>{apSt?.status || ''}</span>
                                       </div>
                                       <div style={{ display: 'flex', gap: '6px', marginTop: '2px' }}>
-                                        <span style={{ color: 'rgba(255,255,255,0.6)', fontSize: '12px', width: '4rem', flexShrink: 0 }}>작업메모:</span>
+                                        <span style={{ color: 'rgba(255,255,255,0.6)', fontSize: '12px', width: '4rem', flexShrink: 0 }}>방문메모:</span>
                                         <span style={{ color: '#a5d6a7', fontSize: '12px' }}>{apSt?.memo || ''}</span>
                                       </div>
                                     </div>
                                     <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', flexShrink: 0, justifyContent: 'flex-end', alignSelf: 'flex-end' }}>
+                                      <button
+                                        onClick={(e) => { e.stopPropagation(); window.open(`timemarkcamera://`); }}
+                                        className="text-xs text-white px-3 py-1.5 rounded font-bold" style={{ background: '#5d4037', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '3px' }}>
+                                        <span style={{ fontSize: '13px' }}>📷</span><span>타임마크</span>
+                                      </button>
                                       <button
                                         onClick={(e) => { e.stopPropagation(); window.open(`tmap://route?goalname=${encodeURIComponent(ap.destination || ap.address)}&goaly=${ap.lat}&goalx=${ap.lng}`); }}
                                         className="text-xs text-white px-3 py-1.5 rounded font-bold" style={{ background: '#0a3d8f' }}>티맵</button>
