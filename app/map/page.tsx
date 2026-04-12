@@ -150,7 +150,7 @@ export default function MapPage() {
   useEffect(() => {
     const mapEntryFlag = sessionStorage.getItem('map-entry');
     if (!mapEntryFlag) {
-      router.replace('/');
+      window.location.replace('/');
       return;
     }
     // 플래그 소비 (1회용)
