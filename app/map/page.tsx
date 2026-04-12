@@ -123,6 +123,8 @@ export default function MapPage() {
   const myLocationMarkerRef = useRef<naver.maps.Marker | null>(null);
   const myLocationCircleRef = useRef<any>(null);
   const watchIdRef = useRef<number | null>(null);
+  const prevPositionRef = useRef<{ lat: number; lng: number } | null>(null); // ★ 이전 위치 (방향 계산용)
+  const headingMarkerRef = useRef<any>(null); // ★ 방향 삼각형 마커
 
   // ★ 팝업 상태
   const [selectedPoint, setSelectedPoint] = useState<RoutePoint | null>(null);
@@ -1844,6 +1846,11 @@ export default function MapPage() {
         myLocationCircleRef.current.setMap(null);
         myLocationCircleRef.current = null;
       }
+      if (headingMarkerRef.current) {
+        headingMarkerRef.current.setMap(null);
+        headingMarkerRef.current = null;
+      }
+      prevPositionRef.current = null;
       setIsTracking(false);
     } else {
       // 추적 시작
@@ -1893,6 +1900,36 @@ export default function MapPage() {
 
           setIsTracking(true);
 
+          // 방향각 계산 함수 (도 단위)
+          const calcBearing = (from: {lat:number;lng:number}, to: {lat:number;lng:number}): number => {
+            const toRad = (d: number) => d * Math.PI / 180;
+            const dLng = toRad(to.lng - from.lng);
+            const fromLat = toRad(from.lat);
+            const toLat = toRad(to.lat);
+            const x = Math.sin(dLng) * Math.cos(toLat);
+            const y = Math.cos(fromLat) * Math.sin(toLat) - Math.sin(fromLat) * Math.cos(toLat) * Math.cos(dLng);
+            return (Math.atan2(x, y) * 180 / Math.PI + 360) % 360;
+          };
+
+          // 방향 삼각형 마커 생성
+          const makeHeadingContent = (deg: number) => `
+            <div style="width:20px;height:20px;display:flex;align-items:center;justify-content:center;transform:rotate(${deg}deg);">
+              <svg width="20" height="20" viewBox="0 0 20 20">
+                <polygon points="10,1 18,18 10,13 2,18" fill="#1976d2" stroke="white" stroke-width="1.5" stroke-linejoin="round"/>
+              </svg>
+            </div>`;
+
+          headingMarkerRef.current = new naver.maps.Marker({
+            map,
+            position: latlng,
+            icon: {
+              content: makeHeadingContent(0),
+              anchor: new naver.maps.Point(10, 10),
+            },
+            zIndex: 199,
+          });
+          prevPositionRef.current = { lat: latitude, lng: longitude };
+
           // 이후 위치 변경 감시
           watchIdRef.current = navigator.geolocation.watchPosition(
             (pos) => {
@@ -1901,6 +1938,26 @@ export default function MapPage() {
               myLocationMarkerRef.current?.setPosition(latlng);
               myLocationCircleRef.current?.setCenter(latlng);
               myLocationCircleRef.current?.setRadius(accuracy);
+
+              // 방향 계산 및 삼각형 마커 업데이트
+              const prev = prevPositionRef.current;
+              const curr = { lat: latitude, lng: longitude };
+              if (prev) {
+                const dist = Math.sqrt((curr.lat-prev.lat)**2 + (curr.lng-prev.lng)**2);
+                if (dist > 0.00003) { // 약 3m 이상 이동했을 때만 방향 갱신
+                  const bearing = calcBearing(prev, curr);
+                  if (headingMarkerRef.current) {
+                    headingMarkerRef.current.setPosition(latlng);
+                    headingMarkerRef.current.setIcon({
+                      content: makeHeadingContent(bearing),
+                      anchor: new naver.maps.Point(10, 10),
+                    });
+                  }
+                  prevPositionRef.current = curr;
+                } else {
+                  headingMarkerRef.current?.setPosition(latlng);
+                }
+              }
             },
             (err) => console.warn('위치 감시 오류:', err),
             { enableHighAccuracy: true, maximumAge: 3000 }
