@@ -1531,7 +1531,22 @@ export default function MapPage() {
       : undefined;
 
     if (additionalInSegment && hiddenPolylinesRef.current.includes(segIdx)) {
-      // 이 구간에 A1이 삽입됨 → 14번→A1 방향을 blink
+      // ★ 기존 깜박임 먼저 정리 (이전 폴리라인 복원 포함)
+      if (blinkIntervalRef.current) { clearInterval(blinkIntervalRef.current); blinkIntervalRef.current = null; }
+      if (blinkRestoreRef.current) { clearTimeout(blinkRestoreRef.current); blinkRestoreRef.current = null; }
+      if (blinkPolylineRef.current) { blinkPolylineRef.current.setMap(null); blinkPolylineRef.current = null; }
+      blinkArrowsRef.current.forEach(a => {
+        a.setMap(null);
+        const idx = arrowMarkersRef.current.indexOf(a);
+        if (idx !== -1) arrowMarkersRef.current.splice(idx, 1);
+      });
+      blinkArrowsRef.current = [];
+      if (blinkOriginalPolylineRef.current) {
+        const { polyline: prevPl, color: prevColor } = blinkOriginalPolylineRef.current;
+        prevPl.setOptions({ strokeColor: prevColor, strokeWeight: 6, strokeOpacity: 1, zIndex: 0 });
+        blinkOriginalPolylineRef.current = null;
+      }
+      // 이 구간에 추가지점이 삽입됨 → fromPoint→A1 방향을 blink
       blinkFromPointToAdditional(routeRef.current!.points[segIdx], additionalInSegment);
       return;
     }
