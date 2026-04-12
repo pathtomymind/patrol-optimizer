@@ -1115,7 +1115,7 @@ export default function MapPage() {
       if (i === 0) return sum;
       return sum + latLngDistanceM(coordPairs[i-1].lat, coordPairs[i-1].lng, coordPairs[i].lat, coordPairs[i].lng);
     }, 0);
-    const MARKER_CLEARANCE = 20; // 마커 위치 근처 20m 이내 화살표 제외
+    const MARKER_CLEARANCE = 40; // 마커 위치 근처 40m 이내 화살표 제외
     let accumulated = 0;
     let distFromStart = 0;
     for (let i = 0; i < coordPairs.length - 1; i++) {
@@ -1135,7 +1135,7 @@ export default function MapPage() {
             map,
             position: new naver.maps.LatLng(lat, lng),
             icon: makeArrowIcon(segBearing),
-            zIndex: 5,
+            zIndex: 3,
             clickable: false,
           });
           arrowMarkersRef.current.push(arrow);
