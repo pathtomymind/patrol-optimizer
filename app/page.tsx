@@ -31,6 +31,7 @@ export default function Home() {
     lat?: number | null; lng?: number | null; placeName?: string | null; source?: string | null; coordMessage?: string | null;
     isAdditional: true; insertAfterOrder?: number | string | null;
   }[]>([]);
+  const additionalPointsRef = useRef<typeof additionalPoints>([]);
   const [additionalOpen, setAdditionalOpen] = useState(false);
   const [showAdditionalModal, setShowAdditionalModal] = useState(false);
   // 추가지점 포함 여부 다이얼로그 (포함/미포함/취소 3버튼)
@@ -143,12 +144,12 @@ export default function Home() {
     const ok = await showConfirm('이 방문지를 삭제합니다. 정말로 삭제하시겠습니까?');
     if (!ok) return;
     setDeletingId(id);
-    const point = additionalPoints.find((p) => p.id === id);
+    const point = additionalPointsRef.current.find((p) => p.id === id);
     if (point?.photoUrl && point.photoUrl.startsWith('https://')) {
       try { await fetch('/api/delete-blob', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url: point.photoUrl }) }); } catch (e) { console.error('Blob 삭제 오류:', e); }
     }
-    const updated = additionalPoints.filter((p) => p.id !== id);
-    setAdditionalPoints(updated);
+    const updated = additionalPointsRef.current.filter((p) => p.id !== id);
+    setAdditionalPoints(updated); additionalPointsRef.current = updated;
     const draft = JSON.parse(localStorage.getItem('draft-route') || '{}');
     draft.additionalPoints = updated;
     draft.lastModified = Date.now();
@@ -190,18 +191,18 @@ export default function Home() {
 
     let updatedPoints;
     if (editingAdditionalPoint) {
-      updatedPoints = additionalPoints.map((p) =>
+      updatedPoints = additionalPointsRef.current.map((p) =>
         p.id === editingAdditionalPoint.id
           ? { ...p, ...additionalForm, photoUrl, ...coordData, isAdditional: true as const, insertAfterOrder: additionalInsertAfter }
           : p
       );
     } else {
-      updatedPoints = [...additionalPoints, {
+      updatedPoints = [...additionalPointsRef.current, {
         id: Date.now(), ...additionalForm, photoUrl, ...coordData,
         isAdditional: true as const, insertAfterOrder: additionalInsertAfter,
       }];
     }
-    setAdditionalPoints(updatedPoints);
+    setAdditionalPoints(updatedPoints); additionalPointsRef.current = updatedPoints;
     const draft = JSON.parse(localStorage.getItem('draft-route') || '{}');
     draft.additionalPoints = updatedPoints;
     draft.lastModified = Date.now();
@@ -221,7 +222,7 @@ export default function Home() {
         .filter(p => p.photoUrl && p.photoUrl.startsWith('https://'))
         .map(p => fetch('/api/delete-blob', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url: p.photoUrl }) }).catch(() => {}))
     );
-    setAdditionalPoints([]);
+    setAdditionalPoints([]); additionalPointsRef.current = [];
     const draft = JSON.parse(localStorage.getItem('draft-route') || '{}');
     delete draft.additionalPoints;
     draft.lastModified = Date.now();
@@ -900,7 +901,7 @@ export default function Home() {
         if (addRes.ok) {
           const addData = await addRes.json();
           if (addData.points?.length > 0) {
-            setAdditionalPoints(addData.points);
+            setAdditionalPoints(addData.points); additionalPointsRef.current = addData.points;
             // localStorage에도 동기화
             const draft = JSON.parse(localStorage.getItem('draft-route') || '{}');
             draft.additionalPoints = addData.points;
@@ -1097,7 +1098,7 @@ export default function Home() {
 
       // 추가지점 포함하여 재최적화한 경우 additionalPoints 초기화
       if (includeAdditional) {
-        setAdditionalPoints([]);
+        setAdditionalPoints([]); additionalPointsRef.current = [];
         const draft = JSON.parse(localStorage.getItem('draft-route') || '{}');
         delete draft.additionalPoints;
         localStorage.setItem('draft-route', JSON.stringify(draft));
@@ -2053,7 +2054,7 @@ export default function Home() {
                   if ((pendingDraft as any).additionalPoints?.length > 0 && draftDate === today) {
                     fetch('/api/save-additional', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ date: today, points: [] }) }).catch(() => {});
                   }
-                  setAdditionalPoints([]);
+                  setAdditionalPoints([]); additionalPointsRef.current = [];
                   setPendingDraft(null);
                   setShowDraftRestoreModal(false);
                   setActiveTab('input');
@@ -2064,7 +2065,7 @@ export default function Home() {
                 onClick={() => {
                   if (pendingDraft.extractedPoints?.length > 0) setExtractedPoints(pendingDraft.extractedPoints);
                   if (pendingDraft.directPoints?.length > 0) setDirectPoints(pendingDraft.directPoints);
-                  if ((pendingDraft as any).additionalPoints?.length > 0) setAdditionalPoints((pendingDraft as any).additionalPoints);
+                  if ((pendingDraft as any).additionalPoints?.length > 0) setAdditionalPoints((pendingDraft as any).additionalPoints); additionalPointsRef.current = (pendingDraft as any).additionalPoints;
                   setPendingDraft(null);
                   setShowDraftRestoreModal(false);
                   setActiveTab('input');
@@ -2162,7 +2163,7 @@ export default function Home() {
               }
               let updatedPoints: typeof additionalPoints;
               if (editingAdditionalPoint) {
-                updatedPoints = additionalPoints.map(p =>
+                updatedPoints = additionalPointsRef.current.map(p =>
                   p.id === editingAdditionalPoint.id
                     ? { ...p, address: data.address, destination: data.destination, complaint: data.complaint, manager: data.manager, photoUrl, ...coordData, isAdditional: true as const, insertAfterOrder: data.insertAfterOrder }
                     : p
@@ -2175,9 +2176,9 @@ export default function Home() {
                   setPointStatuses(prev => ({ ...prev, [apKey]: { status: data.status, memo: data.memo, updatedAt: Date.now() } }));
                 }
               } else {
-                updatedPoints = [...additionalPoints, { id: Date.now(), address: data.address, destination: data.destination, complaint: data.complaint, manager: data.manager, photoUrl, ...coordData, isAdditional: true as const, insertAfterOrder: data.insertAfterOrder }];
+                updatedPoints = [...additionalPointsRef.current, { id: Date.now(), address: data.address, destination: data.destination, complaint: data.complaint, manager: data.manager, photoUrl, ...coordData, isAdditional: true as const, insertAfterOrder: data.insertAfterOrder }];
               }
-              setAdditionalPoints(updatedPoints);
+              setAdditionalPoints(updatedPoints); additionalPointsRef.current = updatedPoints;
               const draft = JSON.parse(localStorage.getItem('draft-route') || '{}');
               draft.additionalPoints = updatedPoints;
               draft.lastModified = Date.now();
