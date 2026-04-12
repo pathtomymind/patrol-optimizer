@@ -88,7 +88,7 @@ export default function MapPage() {
   const [roadLoading, setRoadLoading] = useState(false);
   const [newRouteAvailable, setNewRouteAvailable] = useState(false);
   const [newAdditionalAvailable, setNewAdditionalAvailable] = useState(false);
-  const lastAdditionalCountRef = useRef<number>(-1);
+  const lastAdditionalTimestampRef = useRef<number>(-1);
   const [is3D, setIs3D] = useState(false);
   const [showMapHelpModal, setShowMapHelpModal] = useState(false);
   const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -201,7 +201,7 @@ export default function MapPage() {
     return () => clearInterval(timer);
   }, []);
 
-  // 1-2. 추가 방문지 폴링 (30초마다 변경 감지)
+  // 1-2. 추가 방문지 폴링 (15초마다 변경 감지 - updatedAt 타임스탬프 비교)
   useEffect(() => {
     const checkNewAdditional = async () => {
       try {
@@ -209,10 +209,10 @@ export default function MapPage() {
         const res = await fetch(`/api/get-additional?date=${today}`);
         if (!res.ok) return;
         const data = await res.json();
-        const serverCount = (data.points || []).filter((p: { lat?: number; lng?: number }) => p.lat && p.lng).length;
-        const localCount = lastAdditionalCountRef.current;
-        // 초기 로드 후부터 비교 (localCount가 -1이면 아직 초기화 전)
-        if (localCount >= 0 && serverCount !== localCount) {
+        const serverTs = data.updatedAt ?? 0;
+        const localTs = lastAdditionalTimestampRef.current;
+        // 초기 로드 후부터 비교 (-1이면 아직 초기화 전)
+        if (localTs >= 0 && serverTs > localTs) {
           setNewAdditionalAvailable(true);
         }
       } catch {}
@@ -232,7 +232,7 @@ export default function MapPage() {
           const data = await res.json();
           const validPoints = (data.points || []).filter((p: { lat?: number; lng?: number }) => p.lat && p.lng);
           // 초기 카운트 기록 (폴링 비교용)
-          lastAdditionalCountRef.current = validPoints.length;
+          lastAdditionalTimestampRef.current = Date.now();
           if (data.points?.length > 0) {
             setAdditionalPoints(data.points);
             additionalPointsRef.current = data.points;
@@ -1939,7 +1939,7 @@ export default function MapPage() {
     } catch {}
     const today = routeRef.current?.date ?? new Date().toLocaleDateString('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/\. /g, '-').replace('.', '');
     fetch('/api/save-additional', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ date: today, points: updated }) }).catch(() => {});
-    lastAdditionalCountRef.current = updated.filter(function(p) { return p.lat && p.lng; }).length;
+    lastAdditionalTimestampRef.current = Date.now();
     setShowInsertModal(false);
     drawAdditionalMarkers(updated);
   };
@@ -2289,7 +2289,7 @@ export default function MapPage() {
                 const validPoints = (data.points || []).filter((p: { lat?: number; lng?: number }) => p.lat && p.lng);
                 setAdditionalPoints(data.points || []);
                 additionalPointsRef.current = data.points || [];
-                lastAdditionalCountRef.current = validPoints.length;
+                lastAdditionalTimestampRef.current = data.updatedAt ?? Date.now();
                 // localStorage도 업데이트
                 try {
                   const draft = JSON.parse(localStorage.getItem('draft-route') || '{}');
@@ -2641,7 +2641,7 @@ export default function MapPage() {
               const today = routeRef.current?.date ?? new Date().toLocaleDateString('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/\. /g, '-').replace('.', '');
               await fetch('/api/save-additional', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ date: today, points: updated }) }).catch(() => {});
               // ★ 저장 후 카운트 갱신 (자신에게 배너 뜨지 않도록)
-              lastAdditionalCountRef.current = updated.filter(p => p.lat && p.lng).length;
+              lastAdditionalTimestampRef.current = Date.now();
               // 모달 닫기와 마커 재그리기는 onClose에서 처리
             }}
             onPhotoUpload={async (file) => {
@@ -2719,7 +2719,7 @@ export default function MapPage() {
               const today = routeRef.current?.date ?? new Date().toLocaleDateString('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/\. /g, '-').replace('.', '');
               await fetch('/api/save-additional', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ date: today, points: updated }) }).catch(() => {});
               // ★ 저장 후 카운트 갱신 (자신에게 배너 뜨지 않도록)
-              lastAdditionalCountRef.current = updated.filter(p => p.lat && p.lng).length;
+              lastAdditionalTimestampRef.current = Date.now();
               if (data.status !== undefined) {
                 await fetch('/api/save-status', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ date: route?.date ?? today, address: data.address, destination: data.destination, complaint: data.complaint?.trim() ?? '', originalId: null, status: data.status, memo: data.memo }) });
                 statusesRef.current = { ...statusesRef.current, [apKey]: { status: data.status, memo: data.memo, updatedAt: Date.now() } };
