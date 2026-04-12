@@ -1685,15 +1685,23 @@ export default function MapPage() {
 
       const donePoints = route.points.filter(p => p.source !== 'fixed');
 
-      // 추가 방문지를 경로 순서에 맞게 삽입
+      // 추가 방문지를 경로 순서에 맞게 삽입 (A→A 체인도 재귀적으로 처리)
       type ReportPoint = (typeof donePoints[0] & { isAdditional?: boolean; addLabel?: string }) | (AdditionalPoint & { isAdditional: true; addLabel: string });
       const allReportPoints: ReportPoint[] = [];
+
+      // 특정 지점 다음에 연결된 추가지점들을 체인으로 수집하는 함수
+      const collectAddChain = (afterKey: number | string | null) => {
+        const direct = additionalPointsRef.current.filter(ap => ap.insertAfterOrder === afterKey);
+        direct.forEach(ap => {
+          allReportPoints.push({ ...ap, isAdditional: true, addLabel: '추가' });
+          // 이 추가지점 뒤에 연결된 추가지점도 재귀 수집
+          collectAddChain(`add_${ap.id}`);
+        });
+      };
+
       donePoints.forEach((point) => {
         allReportPoints.push(point);
-        const addAfter = additionalPointsRef.current.filter(ap => ap.insertAfterOrder === point.order);
-        addAfter.forEach((ap, i) => {
-          allReportPoints.push({ ...ap, isAdditional: true, addLabel: '추가' });
-        });
+        collectAddChain(point.order);
       });
 
       const totalCount = allReportPoints.length;

@@ -905,17 +905,23 @@ export default function Home() {
       } else {
         setCurrentRoute(null);
       }
-      // ★ 추가지점 Redis에서 로드 (기기간 공유)
+      // ★ 추가지점 로드: localStorage 우선, Redis는 localStorage가 없을 때만 사용
       try {
-        const addRes = await fetch(`/api/get-additional?date=${today}`);
-        if (addRes.ok) {
-          const addData = await addRes.json();
-          if (addData.points?.length > 0) {
-            setAdditionalPoints(addData.points); additionalPointsRef.current = addData.points;
-            // localStorage에도 동기화
-            const draft = JSON.parse(localStorage.getItem('draft-route') || '{}');
-            draft.additionalPoints = addData.points;
-            localStorage.setItem('draft-route', JSON.stringify(draft));
+        const draft = JSON.parse(localStorage.getItem('draft-route') || '{}');
+        const localPoints = draft.additionalPoints;
+        if (localPoints?.length > 0) {
+          // localStorage에 데이터 있으면 우선 사용 (지도뷰에서 저장한 최신 데이터)
+          setAdditionalPoints(localPoints);
+          additionalPointsRef.current = localPoints;
+        } else {
+          // localStorage에 없을 때만 Redis에서 로드
+          const addRes = await fetch(`/api/get-additional?date=${today}`);
+          if (addRes.ok) {
+            const addData = await addRes.json();
+            if (addData.points?.length > 0) {
+              setAdditionalPoints(addData.points);
+              additionalPointsRef.current = addData.points;
+            }
           }
         }
       } catch {}
@@ -2136,7 +2142,8 @@ export default function Home() {
             isAdmin={isAuthenticated}
             onClose={() => { setShowInsertModal(false); setSelectedAdditional(null); document.body.style.overflow = ''; }}
             onSave={async (data) => {
-              const updated = additionalPoints.map(p =>
+              // ★ 클로저 문제 방지: state 대신 ref 사용
+              const updated = additionalPointsRef.current.map(p =>
                 p.id === selectedAdditional.id
                   ? { ...p,
                       address: data.address, destination: data.destination,
@@ -2151,6 +2158,7 @@ export default function Home() {
                   : p
               );
               setAdditionalPoints(updated);
+              additionalPointsRef.current = updated;
               try {
                 const draft = JSON.parse(localStorage.getItem('draft-route') || '{}');
                 draft.additionalPoints = updated;
@@ -2165,8 +2173,9 @@ export default function Home() {
               }
             }}
             onDelete={async () => {
-              const updated = additionalPoints.filter(p => p.id !== selectedAdditional.id);
+              const updated = additionalPointsRef.current.filter(p => p.id !== selectedAdditional.id);
               setAdditionalPoints(updated);
+              additionalPointsRef.current = updated;
               const today = currentRoute?.date ?? new Date().toLocaleDateString('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/\. /g, '-').replace('.', '');
               await fetch('/api/save-additional', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ date: today, points: updated }) }).catch(() => {});
               setShowInsertModal(false); setSelectedAdditional(null); document.body.style.overflow = '';
