@@ -1369,8 +1369,12 @@ export default function Home() {
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', flexShrink: 0, justifyContent: 'flex-end', alignSelf: 'flex-end' }}>
                                   <button
                                     onClick={(e) => { e.stopPropagation(); window.open(`timemarkcamera://`); }}
-                                    className="text-xs text-white px-3 py-1.5 rounded font-bold" style={{ background: '#5d4037', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '3px' }}>
-                                    <span style={{ fontSize: '13px' }}>📷</span><span>타임마크</span>
+                                    className="text-xs px-3 py-1.5 rounded font-bold" style={{ background: '#FFD600', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                      <path d="M12 15.5C13.933 15.5 15.5 13.933 15.5 12C15.5 10.067 13.933 8.5 12 8.5C10.067 8.5 8.5 10.067 8.5 12C8.5 13.933 10.067 15.5 12 15.5Z" fill="#111"/>
+                                      <path d="M20 6h-2.18l-1.64-2H7.82L6.18 6H4C2.9 6 2 6.9 2 8v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2Z" fill="#111"/>
+                                      <circle cx="12" cy="12" r="3" fill="#FFD600"/>
+                                    </svg>
                                   </button>
                                   <button
                                     onClick={(e) => { e.stopPropagation(); window.open(`tmap://route?goalname=${encodeURIComponent(point.destination || point.address)}&goaly=${point.lat}&goalx=${point.lng}`); }}
@@ -1455,8 +1459,12 @@ export default function Home() {
                                     <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', flexShrink: 0, justifyContent: 'flex-end', alignSelf: 'flex-end' }}>
                                       <button
                                         onClick={(e) => { e.stopPropagation(); window.open(`timemarkcamera://`); }}
-                                        className="text-xs text-white px-3 py-1.5 rounded font-bold" style={{ background: '#5d4037', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '3px' }}>
-                                        <span style={{ fontSize: '13px' }}>📷</span><span>타임마크</span>
+                                        className="text-xs px-3 py-1.5 rounded font-bold" style={{ background: '#FFD600', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                          <path d="M12 15.5C13.933 15.5 15.5 13.933 15.5 12C15.5 10.067 13.933 8.5 12 8.5C10.067 8.5 8.5 10.067 8.5 12C8.5 13.933 10.067 15.5 12 15.5Z" fill="#111"/>
+                                          <path d="M20 6h-2.18l-1.64-2H7.82L6.18 6H4C2.9 6 2 6.9 2 8v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2Z" fill="#111"/>
+                                          <circle cx="12" cy="12" r="3" fill="#FFD600"/>
+                                        </svg>
                                       </button>
                                       <button
                                         onClick={(e) => { e.stopPropagation(); window.open(`tmap://route?goalname=${encodeURIComponent(ap.destination || ap.address)}&goaly=${ap.lat}&goalx=${ap.lng}`); }}
