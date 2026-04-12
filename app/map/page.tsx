@@ -1861,7 +1861,7 @@ export default function MapPage() {
   // ★ 추가지점 삽입 위치 저장
   const handleInsertAfterSave = (insertAfterOrder: number | string | null) => {
     if (!selectedAdditional) return;
-    const updated = additionalPoints.map(p =>
+    const updated = additionalPointsRef.current.map(p =>
       p.id === selectedAdditional.id ? { ...p, insertAfterOrder } : p
     );
     setAdditionalPoints(updated);
@@ -1876,18 +1876,17 @@ export default function MapPage() {
     const today = routeRef.current?.date ?? new Date().toLocaleDateString('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/\. /g, '-').replace('.', '');
     fetch('/api/save-additional', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ date: today, points: updated }) }).catch(() => {});
     setShowInsertModal(false);
-    // 경로선 즉시 재적용
     drawAdditionalMarkers(updated);
   };
 
   // ★ 추가지점 삭제
   const handleAdditionalDelete = async (id: number) => {
     if (!window.confirm('이 추가 지점을 삭제하시겠습니까?')) return;
-    const point = additionalPoints.find(p => p.id === id);
+    const point = additionalPointsRef.current.find(p => p.id === id);
     if (point?.photoUrl && point.photoUrl.startsWith('https://')) {
       try { await fetch('/api/delete-blob', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url: point.photoUrl }) }); } catch {}
     }
-    const updated = additionalPoints.filter(p => p.id !== id);
+    const updated = additionalPointsRef.current.filter(p => p.id !== id);
     setAdditionalPoints(updated);
     additionalPointsRef.current = updated;
     // localStorage + Redis 동기화
@@ -2558,7 +2557,8 @@ export default function MapPage() {
               drawAdditionalMarkers(additionalPointsRef.current);
             }}
             onSave={async (data) => {
-              const updated = additionalPoints.map(p =>
+              // ★ additionalPoints(state) 대신 additionalPointsRef.current 사용 - 클로저 문제 방지
+              const updated = additionalPointsRef.current.map(p =>
                 p.id === selectedAdditional.id
                   ? { ...p,
                       address: data.address, destination: data.destination,
