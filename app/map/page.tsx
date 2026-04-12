@@ -87,6 +87,8 @@ export default function MapPage() {
   const [osrmError, setOsrmError] = useState(false);
   const [roadLoading, setRoadLoading] = useState(false);
   const [newRouteAvailable, setNewRouteAvailable] = useState(false);
+  const [newAdditionalAvailable, setNewAdditionalAvailable] = useState(false);
+  const lastAdditionalCountRef = useRef<number>(-1);
   const [is3D, setIs3D] = useState(false);
   const [showMapHelpModal, setShowMapHelpModal] = useState(false);
   const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -199,6 +201,26 @@ export default function MapPage() {
     return () => clearInterval(timer);
   }, []);
 
+  // 1-2. 추가 방문지 폴링 (30초마다 변경 감지)
+  useEffect(() => {
+    const checkNewAdditional = async () => {
+      try {
+        const today = new Date().toLocaleDateString('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/\. /g, '-').replace('.', '');
+        const res = await fetch(`/api/get-additional?date=${today}`);
+        if (!res.ok) return;
+        const data = await res.json();
+        const serverCount = (data.points || []).filter((p: { lat?: number; lng?: number }) => p.lat && p.lng).length;
+        const localCount = lastAdditionalCountRef.current;
+        // 초기 로드 후부터 비교 (localCount가 -1이면 아직 초기화 전)
+        if (localCount >= 0 && serverCount !== localCount) {
+          setNewAdditionalAvailable(true);
+        }
+      } catch {}
+    };
+    const timer = setInterval(checkNewAdditional, 30000);
+    return () => clearInterval(timer);
+  }, []);
+
   // 2. 네이버 지도 SDK 로드
   useEffect(() => {
     // additionalPoints Redis API로 로드 (localStorage는 기기간 공유 안 됨)
@@ -208,6 +230,9 @@ export default function MapPage() {
         const res = await fetch(`/api/get-additional?date=${today}`);
         if (res.ok) {
           const data = await res.json();
+          const validPoints = (data.points || []).filter((p: { lat?: number; lng?: number }) => p.lat && p.lng);
+          // 초기 카운트 기록 (폴링 비교용)
+          lastAdditionalCountRef.current = validPoints.length;
           if (data.points?.length > 0) {
             setAdditionalPoints(data.points);
             additionalPointsRef.current = data.points;
@@ -2247,6 +2272,44 @@ export default function MapPage() {
           }}>
           <span>🔄</span>
           <span>새 경로가 생성되었습니다 — 탭하여 갱신</span>
+        </div>
+      )}
+
+      {/* ★ 추가 방문지 업데이트 알림 배너 */}
+      {newAdditionalAvailable && (
+        <div
+          onClick={async () => {
+            // 최신 추가 방문지 다시 로드
+            try {
+              const today = new Date().toLocaleDateString('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/\. /g, '-').replace('.', '');
+              const res = await fetch(`/api/get-additional?date=${today}`);
+              if (res.ok) {
+                const data = await res.json();
+                const validPoints = (data.points || []).filter((p: { lat?: number; lng?: number }) => p.lat && p.lng);
+                setAdditionalPoints(data.points || []);
+                additionalPointsRef.current = data.points || [];
+                lastAdditionalCountRef.current = validPoints.length;
+                // localStorage도 업데이트
+                try {
+                  const draft = JSON.parse(localStorage.getItem('draft-route') || '{}');
+                  draft.additionalPoints = data.points || [];
+                  localStorage.setItem('draft-route', JSON.stringify(draft));
+                } catch {}
+                setNewAdditionalAvailable(false);
+              }
+            } catch {}
+          }}
+          style={{
+            position: 'absolute', top: newRouteAvailable ? 100 : 56, left: '50%', transform: 'translateX(-50%)',
+            background: 'rgba(249,115,22,0.95)', color: 'white',
+            fontSize: '12px', fontWeight: 'bold',
+            padding: '8px 18px', borderRadius: '20px',
+            display: 'flex', alignItems: 'center', gap: '8px',
+            boxShadow: '0 2px 8px rgba(0,0,0,0.4)',
+            whiteSpace: 'nowrap', zIndex: 300, cursor: 'pointer',
+          }}>
+          <span>📍</span>
+          <span>추가 방문지가 업데이트되었습니다 — 탭하여 갱신</span>
         </div>
       )}
 
