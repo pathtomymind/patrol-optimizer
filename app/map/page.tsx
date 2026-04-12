@@ -1684,9 +1684,21 @@ export default function MapPage() {
       `;
 
       const donePoints = route.points.filter(p => p.source !== 'fixed');
-      const totalCount = donePoints.length;
-      const doneCount = donePoints.filter(p => {
-        const st = statusesRef.current[statusKey(p)];
+
+      // 추가 방문지를 경로 순서에 맞게 삽입
+      type ReportPoint = (typeof donePoints[0] & { isAdditional?: boolean; addLabel?: string }) | (AdditionalPoint & { isAdditional: true; addLabel: string });
+      const allReportPoints: ReportPoint[] = [];
+      donePoints.forEach((point) => {
+        allReportPoints.push(point);
+        const addAfter = additionalPointsRef.current.filter(ap => ap.insertAfterOrder === point.order);
+        addAfter.forEach((ap, i) => {
+          allReportPoints.push({ ...ap, isAdditional: true, addLabel: '추가' });
+        });
+      });
+
+      const totalCount = allReportPoints.length;
+      const doneCount = allReportPoints.filter(p => {
+        const st = statusesRef.current[statusKey(p as any)];
         return st && ['민원처리완료','기처리','확인불가'].includes(st.status);
       }).length;
 
@@ -1695,13 +1707,13 @@ export default function MapPage() {
       // ── 헤더 ──────────────────────────────────────────────
       container.innerHTML = `
         <div style="background: linear-gradient(135deg, #1a3a6e 0%, #1565c0 100%); padding: 20px 28px; margin-bottom: 6px;">
-          <div style="color: white; font-size: 20px; font-weight: bold; margin-bottom: 4px;">불법 옥외광고물 순회 단속 결과</div>
+          <div style="color: white; font-size: 20px; font-weight: bold; margin-bottom: 4px;">불법 옥외광고물 정비 순회 작업 결과</div>
           <div style="color: rgba(200,230,255,0.9); font-size: 12px;">
-            단속일자: ${route.date} &nbsp;|&nbsp; 버전: ${route.version} &nbsp;|&nbsp; 총 지점: ${totalCount}개 &nbsp;|&nbsp; 처리완료: ${doneCount}개
+            일자: ${route.date} &nbsp;|&nbsp; 버전: ${route.version} &nbsp;|&nbsp; 총 지점: ${totalCount}개 &nbsp;|&nbsp; 처리완료: ${doneCount}개
           </div>
         </div>
         <div style="background:#e8edf2; padding:6px 28px 12px; margin-bottom:20px; font-size:11px; color:#555;">
-          ※ 본 문서는 패트롤 옵티마이저 앱으로 자동 생성된 순회 단속 결과 보고서입니다.
+          ※ 본 문서는 길도사 2.0 앱으로 자동 생성된 순회 작업 결과입니다.
         </div>
 
       `;
@@ -1724,35 +1736,36 @@ export default function MapPage() {
           </colgroup>
           <thead>
             <tr style="background:#1a3a6e; color:white;">
-              <th style="padding:8px 4px; border:1px solid #1565c0; font-size:11px; text-align:center; font-weight:bold;">순회<br/>순번</th>
-              <th style="padding:8px 4px; border:1px solid #1565c0; font-size:11px; text-align:center; font-weight:bold;">민원<br/>번호</th>
+              <th style="padding:8px 4px; border:1px solid #1565c0; font-size:11px; text-align:center; font-weight:bold;">경로<br/>번호</th>
+              <th style="padding:8px 4px; border:1px solid #1565c0; font-size:11px; text-align:center; font-weight:bold;">사진<br/>번호</th>
               <th style="padding:8px 6px; border:1px solid #1565c0; font-size:11px; text-align:center; font-weight:bold;">주소 (목적지)</th>
               <th style="padding:8px 6px; border:1px solid #1565c0; font-size:11px; text-align:center; font-weight:bold;">민원내용</th>
               <th style="padding:8px 4px; border:1px solid #1565c0; font-size:11px; text-align:center; font-weight:bold;">담당자</th>
-              <th style="padding:8px 4px; border:1px solid #1565c0; font-size:11px; text-align:center; font-weight:bold;">작업상태</th>
-              <th style="padding:8px 6px; border:1px solid #1565c0; font-size:11px; text-align:center; font-weight:bold;">작업메모</th>
-              <th style="padding:8px 6px; border:1px solid #1565c0; font-size:11px; text-align:center; font-weight:bold;">현장사진</th>
+              <th style="padding:8px 4px; border:1px solid #1565c0; font-size:11px; text-align:center; font-weight:bold;">방문결과</th>
+              <th style="padding:8px 6px; border:1px solid #1565c0; font-size:11px; text-align:center; font-weight:bold;">방문메모</th>
+              <th style="padding:8px 6px; border:1px solid #1565c0; font-size:11px; text-align:center; font-weight:bold;">방문지사진</th>
             </tr>
           </thead>
           <tbody>
-            ${donePoints.map((point, idx) => {
-              const st = statusesRef.current[statusKey(point)];
+            ${allReportPoints.map((point, idx) => {
+              const isAdd = (point as any).isAdditional === true;
+              const st = statusesRef.current[statusKey(point as any)];
               const isDone = st && ['민원처리완료','기처리','확인불가'].includes(st.status);
-              const rowBg = idx % 2 === 0 ? '#ffffff' : '#f5f8fb';
+              const rowBg = isAdd ? '#fff8e1' : (idx % 2 === 0 ? '#ffffff' : '#f5f8fb');
               const statusColor = isDone ? '#2e7d32' : '#e65100';
               const statusText = st?.status || '미완료';
-              const addrText = point.address + (point.destination ? `\n(${point.destination})` : '');
-              const photoHtml = point.photoUrl
-                ? `<img src="${point.photoUrl}" style="max-width:100%; max-height:120px; object-fit:contain; display:block; margin:0 auto;" crossorigin="anonymous" />${point.photoDescription ? `<div style="font-size:9px; color:#666; margin-top:3px; text-align:center;">${point.photoDescription}</div>` : ''}`
+              const photoHtml = (point as any).photoUrl
+                ? `<img src="${(point as any).photoUrl}" style="max-width:100%; max-height:120px; object-fit:contain; display:block; margin:0 auto;" crossorigin="anonymous" />${(point as any).photoDescription ? `<div style="font-size:9px; color:#666; margin-top:3px; text-align:center;">${(point as any).photoDescription}</div>` : ''}`
                 : '<div style="color:#aaa; font-size:10px; text-align:center;">사진 없음</div>';
+              const orderLabel = isAdd ? '<span style="color:#e65100; font-weight:bold;">추가</span>' : String((point as any).order);
 
               return `
                 <tr style="background:${rowBg};">
-                  <td style="padding:8px 4px; border:1px solid #cfd8dc; font-size:13px; font-weight:bold; text-align:center; color:#1a3a6e;">${point.order}</td>
-                  <td style="padding:8px 4px; border:1px solid #cfd8dc; font-size:12px; font-weight:bold; text-align:center;">${point.originalId ? point.originalId + '번' : '-'}</td>
-                  <td style="padding:8px 6px; border:1px solid #cfd8dc; font-size:11px; word-break:break-all;">${point.address}${point.destination ? '<br/><span style="color:#1565c0;">(' + point.destination + ')</span>' : ''}</td>
-                  <td style="padding:8px 6px; border:1px solid #cfd8dc; font-size:11px;">${point.complaint || '-'}</td>
-                  <td style="padding:8px 4px; border:1px solid #cfd8dc; font-size:11px; text-align:center;">${point.manager || '-'}</td>
+                  <td style="padding:8px 4px; border:1px solid #cfd8dc; font-size:13px; font-weight:bold; text-align:center; color:#1a3a6e;">${orderLabel}</td>
+                  <td style="padding:8px 4px; border:1px solid #cfd8dc; font-size:12px; font-weight:bold; text-align:center;">${(point as any).originalId ? (point as any).originalId + '번' : '-'}</td>
+                  <td style="padding:8px 6px; border:1px solid #cfd8dc; font-size:11px; word-break:break-all;">${(point as any).address || '-'}${(point as any).destination ? '<br/><span style="color:#1565c0;">(' + (point as any).destination + ')</span>' : ''}</td>
+                  <td style="padding:8px 6px; border:1px solid #cfd8dc; font-size:11px;">${(point as any).complaint || '-'}</td>
+                  <td style="padding:8px 4px; border:1px solid #cfd8dc; font-size:11px; text-align:center;">${(point as any).manager || '-'}</td>
                   <td style="padding:8px 4px; border:1px solid #cfd8dc; font-size:12px; font-weight:bold; text-align:center; color:${statusColor};">${statusText}</td>
                   <td style="padding:8px 6px; border:1px solid #cfd8dc; font-size:11px;">${st?.memo || '-'}</td>
                   <td style="padding:6px; border:1px solid #cfd8dc; text-align:center; vertical-align:middle;">${photoHtml}</td>
