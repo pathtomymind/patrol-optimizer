@@ -146,12 +146,12 @@ export default function MapPage() {
     document.head.appendChild(style);
   }, []);
 
-  // 0. /map 직접 접근 방지 - sessionStorage 플래그 없으면 메인으로 리다이렉트
+  // 0. /map 직접 접근 방지 - URL 파라미터 또는 sessionStorage 플래그 확인
   useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const fromMain = urlParams.get('from') === 'main';
     const mapEntryFlag = sessionStorage.getItem('map-entry');
-    console.log('[map-entry] flag:', mapEntryFlag, 'href:', window.location.href);
-    if (!mapEntryFlag) {
-      console.log('[map-entry] 플래그 없음 → 메인으로 이동');
+    if (!fromMain && !mapEntryFlag) {
       window.location.replace('/');
       return;
     }
