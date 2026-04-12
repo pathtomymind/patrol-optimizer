@@ -275,11 +275,8 @@ export default function MapPage() {
     updateMarkerColors();
   }, [statuses, routeDrawn]);
 
-  // 5-2. 마운트 시 admin 인증 상태 확인
-  useEffect(() => {
-    const adminAuth = localStorage.getItem('patrol-admin-auth');
-    if (adminAuth === 'true') setIsAdmin(true);
-  }, []);
+  // 5-2. 마운트 시 admin 인증 상태 확인 - 앱 재기동 시 항상 미인증으로 시작
+  // (localStorage에 저장하지 않으므로 세션 내에서만 유지됨)
 
   // 5-3. additionalPoints 변경 시 마커 재렌더링
   useEffect(() => {
@@ -2056,7 +2053,7 @@ export default function MapPage() {
               if (isAdmin) {
                 // 인증 해제
                 setIsAdmin(false);
-                localStorage.removeItem('patrol-admin-auth');
+                
               } else {
                 setShowAdminAuthModal(true);
               }
@@ -2682,7 +2679,7 @@ export default function MapPage() {
                   const res = await fetch('/api/auth', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password: adminPwInput }) });
                   if (res.ok) {
                     setIsAdmin(true);
-                    localStorage.setItem('patrol-admin-auth', 'true');
+                    
                     setShowAdminAuthModal(false);
                     setAdminPwInput('');
                   } else {
@@ -2704,7 +2701,7 @@ export default function MapPage() {
                 const res = await fetch('/api/auth', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password: adminPwInput }) });
                 if (res.ok) {
                   setIsAdmin(true);
-                  localStorage.setItem('patrol-admin-auth', 'true');
+                  
                   setShowAdminAuthModal(false);
                   setAdminPwInput('');
                 } else {
