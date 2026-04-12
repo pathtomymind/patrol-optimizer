@@ -18,7 +18,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (!points || points.length === 0) {
       await redis.del(key);
     } else {
-      await redis.set(key, { date, points, updatedAt: Date.now() });
+      // base64 photoUrl은 Redis 용량 초과 원인 → R2 URL만 저장, base64는 제거
+      const sanitizedPoints = points.map((p: any) => ({
+        ...p,
+        photoUrl: p.photoUrl?.startsWith('http') ? p.photoUrl : '',
+      }));
+      await redis.set(key, { date, points: sanitizedPoints, updatedAt: Date.now() });
     }
     res.status(200).json({ ok: true, count: points?.length ?? 0 });
   } catch (err) {

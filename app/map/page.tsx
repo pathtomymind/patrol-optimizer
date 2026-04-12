@@ -2673,8 +2673,19 @@ export default function MapPage() {
               // 모달 닫기와 마커 재그리기는 onClose에서 처리
             }}
             onPhotoUpload={async (file) => {
-              const reader = new FileReader();
-              const base64 = await new Promise<string>(res => { reader.onload = () => res(reader.result as string); reader.readAsDataURL(file); });
+              const compressImageForUpload = (f: File): Promise<string> => new Promise((resolve) => {
+                const img = new Image(); const url = URL.createObjectURL(f);
+                img.onload = () => {
+                  const canvas = document.createElement('canvas');
+                  const maxSize = 1024; let w = img.width; let h = img.height;
+                  if (w > maxSize || h > maxSize) { if (w > h) { h = Math.round(h * maxSize / w); w = maxSize; } else { w = Math.round(w * maxSize / h); h = maxSize; } }
+                  canvas.width = w; canvas.height = h;
+                  canvas.getContext('2d')!.drawImage(img, 0, 0, w, h);
+                  URL.revokeObjectURL(url);
+                  resolve(canvas.toDataURL('image/jpeg', 0.7));
+                }; img.src = url;
+              });
+              const base64 = await compressImageForUpload(file);
               const uploadRes = await fetch('/api/upload-photo', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ imageData: base64, filename: `additional-map-${Date.now()}.jpg` }) });
               if (uploadRes.ok) { const { url } = await uploadRes.json(); return url as string; }
               return null;
@@ -2757,8 +2768,19 @@ export default function MapPage() {
             }}
             onDelete={() => handleAdditionalDelete(selectedAdditional.id)}
             onPhotoUpload={async (file) => {
-              const reader = new FileReader();
-              const base64 = await new Promise<string>(res => { reader.onload = () => res(reader.result as string); reader.readAsDataURL(file); });
+              const compressImageForUpload = (f: File): Promise<string> => new Promise((resolve) => {
+                const img = new Image(); const url = URL.createObjectURL(f);
+                img.onload = () => {
+                  const canvas = document.createElement('canvas');
+                  const maxSize = 1024; let w = img.width; let h = img.height;
+                  if (w > maxSize || h > maxSize) { if (w > h) { h = Math.round(h * maxSize / w); w = maxSize; } else { w = Math.round(w * maxSize / h); h = maxSize; } }
+                  canvas.width = w; canvas.height = h;
+                  canvas.getContext('2d')!.drawImage(img, 0, 0, w, h);
+                  URL.revokeObjectURL(url);
+                  resolve(canvas.toDataURL('image/jpeg', 0.7));
+                }; img.src = url;
+              });
+              const base64 = await compressImageForUpload(file);
               const uploadRes = await fetch('/api/upload-photo', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ imageData: base64, filename: `additional-map-${Date.now()}.jpg` }) });
               if (uploadRes.ok) { const { url } = await uploadRes.json(); return url as string; }
               return null;
