@@ -1287,10 +1287,14 @@ export default function Home() {
                   {cardListOpen && (
                     <div className="pt-0 pb-2">
                       {currentRoute.points.map((point, idx) => {
-                        // 이 지점 다음에 삽입된 추가지점 찾기
-                        const insertedAfter = additionalPoints.filter(
-                          ap => ap.insertAfterOrder === point.order && ap.lat && ap.lng
-                        );
+                        // 이 지점 다음에 삽입된 추가지점 찾기 (체인 재귀 수집)
+                        const collectChain = (afterKey: number | string): typeof additionalPoints => {
+                          const direct = additionalPoints.filter(
+                            ap => ap.insertAfterOrder === afterKey && ap.lat && ap.lng
+                          );
+                          return direct.flatMap(ap => [ap, ...collectChain(`add_${ap.id}`)]);
+                        };
+                        const insertedAfter = collectChain(point.order);
                         return (
                         <div key={point.order} style={idx === 0 ? { marginTop: '28px' } : {}}>
                         {(() => {
