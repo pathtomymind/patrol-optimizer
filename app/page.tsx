@@ -34,6 +34,9 @@ export default function Home() {
   const additionalPointsRef = useRef<typeof additionalPoints>([]);
   const [additionalOpen, setAdditionalOpen] = useState(false);
   const [showAdditionalModal, setShowAdditionalModal] = useState(false);
+  // 추가지점 상세 팝업 (지도뷰와 공유)
+  const [showInsertModal, setShowInsertModal] = useState(false);
+  const [selectedAdditional, setSelectedAdditional] = useState<typeof additionalPoints[0] | null>(null);
   // 추가지점 포함 여부 다이얼로그 (포함/미포함/취소 3버튼)
   const [showAdditionalConfirm, setShowAdditionalConfirm] = useState(false);
   const additionalConfirmResolveRef = useRef<((v: 'include' | 'exclude' | 'cancel') => void) | null>(null);
@@ -1411,7 +1414,7 @@ export default function Home() {
                               </div>
                               <div className="mx-2 rounded px-3 py-3"
                                 style={{ background: apCardBg, cursor: 'pointer' }}
-                                onClick={() => { setEditingAdditionalPoint(ap); setAdditionalForm({ address: ap.address, destination: ap.destination, complaint: ap.complaint, manager: ap.manager, photoUrl: ap.photoUrl }); setAdditionalCoordStatus(ap.lat && ap.lng ? 'success' : 'idle'); setAdditionalCoord({ lat: ap.lat || null, lng: ap.lng || null, placeName: ap.placeName || null, source: ap.source || null, coordMessage: ap.coordMessage || null }); setAdditionalInsertAfter(ap.insertAfterOrder ?? null); setShowAdditionalModal(true); document.body.style.overflow = 'hidden'; }}>
+                                onClick={() => { setSelectedAdditional(ap); setShowInsertModal(true); document.body.style.overflow = 'hidden'; }}>
                                 <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
                                   {/* 마름모 배지 */}
                                   <div style={{ flexShrink: 0, width: '32px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -2107,6 +2110,78 @@ export default function Home() {
         <div className="fixed inset-0 z-40" style={{ background: 'rgba(0,0,0,0.3)', cursor: 'not-allowed' }} />
       )}
 
+      {/* ★ 추가지점 상세 팝업 (지도뷰와 동일한 AdditionalPointModal 공유) */}
+      {showInsertModal && selectedAdditional && (() => {
+        const addrPart = selectedAdditional.address?.trim() || selectedAdditional.destination?.trim() || '';
+        const apKey = `${addrPart}:${(selectedAdditional.complaint || '').trim()}:none`;
+        const apSt = pointStatuses[apKey];
+        const addIdx = additionalPoints.findIndex(p => p.id === selectedAdditional.id);
+        const label = `A${addIdx + 1}`;
+        const insertOptions: { value: number | string | null; label: string }[] = [
+          { value: null, label: '연결 안 함' },
+          ...(currentRoute?.points
+            .filter(p => p.source !== 'fixed' || p.order === 0)
+            .map(p => ({ value: p.order, label: p.order === 0 ? '출발지 다음' : `${p.order}번 다음` })) ?? []),
+          ...additionalPoints
+            .filter(ap => ap.id !== selectedAdditional.id && ap.lat && ap.lng)
+            .map((ap, i) => ({ value: `add_${ap.id}`, label: `A${i + 1} 다음` })),
+        ];
+        return (
+          <AdditionalPointModal
+            key={selectedAdditional.id}
+            label={label}
+            point={selectedAdditional}
+            apSt={apSt}
+            insertOptions={insertOptions}
+            isAdmin={isAuthenticated}
+            onClose={() => { setShowInsertModal(false); setSelectedAdditional(null); document.body.style.overflow = ''; }}
+            onSave={async (data) => {
+              const updated = additionalPoints.map(p =>
+                p.id === selectedAdditional.id
+                  ? { ...p,
+                      address: data.address, destination: data.destination,
+                      complaint: data.complaint, manager: data.manager,
+                      photoUrl: data.photoUrl || p.photoUrl,
+                      lat: data.lat ?? p.lat, lng: data.lng ?? p.lng,
+                      placeName: data.placeName ?? p.placeName,
+                      source: data.source ?? p.source,
+                      coordMessage: data.coordMessage ?? p.coordMessage,
+                      insertAfterOrder: data.insertAfterOrder,
+                    }
+                  : p
+              );
+              setAdditionalPoints(updated);
+              try {
+                const draft = JSON.parse(localStorage.getItem('draft-route') || '{}');
+                draft.additionalPoints = updated;
+                draft.lastModified = Date.now();
+                localStorage.setItem('draft-route', JSON.stringify(draft));
+              } catch {}
+              const today = currentRoute?.date ?? new Date().toLocaleDateString('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/\. /g, '-').replace('.', '');
+              await fetch('/api/save-additional', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ date: today, points: updated }) }).catch(() => {});
+              if (data.status !== undefined) {
+                await fetch('/api/save-status', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ date: today, address: data.address, destination: data.destination, complaint: data.complaint?.trim() ?? '', originalId: null, status: data.status, memo: data.memo }) });
+                setPointStatuses(prev => ({ ...prev, [apKey]: { status: data.status, memo: data.memo, updatedAt: Date.now() } }));
+              }
+            }}
+            onDelete={async () => {
+              const updated = additionalPoints.filter(p => p.id !== selectedAdditional.id);
+              setAdditionalPoints(updated);
+              const today = currentRoute?.date ?? new Date().toLocaleDateString('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/\. /g, '-').replace('.', '');
+              await fetch('/api/save-additional', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ date: today, points: updated }) }).catch(() => {});
+              setShowInsertModal(false); setSelectedAdditional(null); document.body.style.overflow = '';
+            }}
+            onPhotoUpload={async (file) => {
+              const reader = new FileReader();
+              const base64 = await new Promise<string>(res => { reader.onload = () => res(reader.result as string); reader.readAsDataURL(file); });
+              const uploadRes = await fetch('/api/upload-photo', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ imageData: base64, filename: `additional-list-${Date.now()}.jpg` }) });
+              if (uploadRes.ok) { const { url } = await uploadRes.json(); return url as string; }
+              return null;
+            }}
+          />
+        );
+      })()}
+
       {/* 추가 지점 입력/수정 모달 */}
       {showAdditionalModal && (() => {
         const addIdx = editingAdditionalPoint
@@ -2349,157 +2424,142 @@ export default function Home() {
         </div>
       )}
       {/* 지점 상세정보 팝업 */}
-      {showDetailModal && selectedPoint && (
-        <div className="fixed inset-0 flex items-center justify-center z-50"
-          style={{ background: 'rgba(0,0,0,0.6)' }}
-          onClick={() => { setShowDetailModal(false); document.body.style.overflow = ''; }}>
-          <div className="rounded-lg px-5 py-5 w-11/12 max-h-screen overflow-y-auto"
-            style={{ background: (() => { const st = pointStatuses[statusKey(selectedPoint)]; return st && ['민원처리완료','기처리','확인불가'].includes(st.status) ? '#1a3a6e' : '#7a2800'; })() }}
-            onClick={(e) => e.stopPropagation()}>
-            {/* 헤더 */}
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-white font-bold text-base flex items-center gap-2 min-w-0">
-                <span className="w-7 h-7 rounded-full bg-white text-blue-900 text-sm font-bold flex items-center justify-center flex-shrink-0">
-                  {selectedPoint.order}
-                </span>
-                <span className="truncate">
-                  {selectedPoint.destination
-                    ? `${selectedPoint.address} (${selectedPoint.destination})`
-                    : selectedPoint.address}
-                </span>
-              </h2>
-              <span className="text-white cursor-pointer text-lg" onClick={() => { setShowDetailModal(false); document.body.style.overflow = ''; }}>✕</span>
+      {/* ★ 지점 상세정보 팝업 (지도뷰와 동일한 풀스크린 스타일) */}
+      {showDetailModal && selectedPoint && (() => {
+        const st = pointStatuses[statusKey(selectedPoint)];
+        const curStatus = st?.status || '';
+        const curMemo = st?.memo || '';
+        const isDone = ['민원처리완료','기처리','확인불가'].includes(curStatus);
+        const isPOI = selectedPoint.source === 'place_nearest' || selectedPoint.source === 'place_single';
+        const hasWarning = selectedPoint.coordMessage?.includes('⚠️');
+        const rawMsg = selectedPoint.coordMessage ? selectedPoint.coordMessage.replace('⚠️', '').trim() : '';
+        return (
+          <div style={{ position: 'fixed', inset: 0, zIndex: 50, display: 'flex', flexDirection: 'column', background: isDone ? '#1a3a6e' : '#7a2800' }}>
+            {/* 타이틀 바 */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '12px 16px', background: 'rgba(0,0,0,0.25)', borderBottom: '1px solid rgba(255,255,255,0.15)', flexShrink: 0 }}>
+              <span style={{ width: '32px', height: '32px', borderRadius: '50%', background: 'white', color: '#1a3a6e', fontSize: '13px', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                {selectedPoint.order}
+              </span>
+              <span style={{ color: 'white', fontWeight: 'bold', fontSize: '14px', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {selectedPoint.destination ? `${selectedPoint.address} (${selectedPoint.destination})` : selectedPoint.address}
+              </span>
+              <button onClick={() => { setShowDetailModal(false); document.body.style.overflow = ''; }}
+                style={{ background: '#c62828', border: 'none', borderRadius: '6px', width: '36px', height: '36px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}>
+                <span style={{ color: 'white', fontWeight: 'bold', fontSize: '16px' }}>✕</span>
+              </button>
             </div>
 
-            {/* 정보 목록 */}
-            {(() => {
-              const st = pointStatuses[statusKey(selectedPoint)];
-              const curStatus = st?.status || '';
-              const curMemo = st?.memo || '';
-              const isDone = ['민원처리완료','기처리','확인불가'].includes(curStatus);
-              return (
-                <div className="space-y-2">
-                  {[
-                    { label: '주소', value: selectedPoint.address || '' },
-                    { label: '목적지', value: selectedPoint.destination || '' },
-                    { label: '플레이스명', value: (selectedPoint.source === 'place_nearest' || selectedPoint.source === 'place_single') ? (selectedPoint.placeName || '') : '' },
-                    { label: '좌표메시지', value: selectedPoint.coordMessage || '' },
-                  ].map(({ label, value }) => (
-                    <div key={label} className="flex gap-3 items-start">
-                      <span className="text-blue-300 text-xs w-16 flex-shrink-0 pt-0.5">{label}</span>
-                      <span className="text-xs flex-1" style={{ color: selectedPoint.coordMessage?.includes('⚠️') && label === '좌표메시지' ? '#ffb74d' : 'white' }}>{value}</span>
-                    </div>
-                  ))}
-
-                  {/* 좌표확인 아래 수평선 */}
-                  <div style={{ borderTop: '1px solid rgba(255,255,255,0.2)', marginTop: '4px', marginBottom: '4px' }} />
-
-                  {[
-                    { label: '민원번호', value: selectedPoint.originalId ? `${selectedPoint.originalId}번` : '' },
-                    { label: '민원내용', value: selectedPoint.complaint || '' },
-                    { label: '담당자', value: selectedPoint.manager || '' },
-                  ].map(({ label, value }) => (
-                    <div key={label} className="flex gap-3 items-start">
-                      <span className="text-blue-300 text-xs w-16 flex-shrink-0 pt-0.5">{label}</span>
-                      <span className="text-white text-xs flex-1">{value}</span>
-                    </div>
-                  ))}
-
-                  {/* 현장사진 */}
-                  <div className="flex gap-3 items-start">
-                    <span className="text-blue-300 text-xs w-16 flex-shrink-0 pt-0.5">현장사진</span>
-                    <div className="flex-1">
-                      {selectedPoint.photoUrl ? (
-                        <img src={selectedPoint.photoUrl} alt="현장사진" className="w-full rounded" />
-                      ) : (
-                        <div className="rounded h-20 flex items-center justify-center"
-                          style={{ background: 'rgba(255,255,255,0.1)', border: '1px dashed rgba(255,255,255,0.3)' }}>
-                          <span className="text-blue-300 text-xs">사진 없음</span>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* 사진설명 - 레이블 없이 값만 표시 */}
-                  {selectedPoint.photoDescription && (
-                    <div className="flex gap-3 items-start">
-                      <span className="w-16 flex-shrink-0" />
-                      <span className="text-xs flex-1" style={{ color: 'rgba(255,255,255,0.65)' }}>{selectedPoint.photoDescription}</span>
+            {/* 내용 - 스크롤 격리 */}
+            <div style={{ flex: 1, overflowY: 'auto', padding: '16px', display: 'flex', flexDirection: 'column', gap: '10px', overscrollBehavior: 'contain' }}>
+              {/* 주소 */}
+              <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
+                <span style={{ color: '#90caf9', fontSize: '11px', width: '5rem', flexShrink: 0, paddingTop: '2px' }}>주소</span>
+                <span style={{ color: 'white', fontSize: '12px', flex: 1 }}>{selectedPoint.address || ''}</span>
+              </div>
+              {/* 방문지 */}
+              <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
+                <span style={{ color: '#90caf9', fontSize: '11px', width: '5rem', flexShrink: 0, paddingTop: '2px' }}>방문지</span>
+                <span style={{ color: 'white', fontSize: '12px', flex: 1 }}>{selectedPoint.destination || ''}</span>
+              </div>
+              {/* 좌표메시지 */}
+              <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
+                <span style={{ color: '#90caf9', fontSize: '11px', width: '5rem', flexShrink: 0, paddingTop: '2px' }}></span>
+                <span style={{ fontSize: '12px', flex: 1, color: hasWarning ? '#ffb74d' : '#fff176', fontWeight: hasWarning ? 'bold' : 'normal' }}>
+                  {hasWarning ? '⚠️ ' : '✅ '}{rawMsg || selectedPoint.coordMessage || ''}
+                </span>
+              </div>
+              {/* 플레이스명 - POI만 */}
+              {isPOI && selectedPoint.placeName && (
+                <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
+                  <span style={{ color: '#90caf9', fontSize: '11px', width: '5rem', flexShrink: 0, paddingTop: '2px' }}></span>
+                  <span style={{ color: '#a5d6a7', fontSize: '12px', flex: 1 }}>📍 플레이스명: {selectedPoint.placeName}</span>
+                </div>
+              )}
+              {/* 구분선 */}
+              <div style={{ borderTop: '1px solid rgba(255,255,255,0.2)' }} />
+              {/* 사진번호 */}
+              <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
+                <span style={{ color: '#90caf9', fontSize: '11px', width: '5rem', flexShrink: 0, paddingTop: '2px' }}>사진번호</span>
+                <span style={{ color: 'white', fontSize: '12px', flex: 1 }}>{selectedPoint.originalId ? `${selectedPoint.originalId}번` : ''}</span>
+              </div>
+              {/* 방문내용 */}
+              <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
+                <span style={{ color: '#90caf9', fontSize: '11px', width: '5rem', flexShrink: 0, paddingTop: '2px' }}>방문내용</span>
+                <span style={{ color: 'white', fontSize: '12px', flex: 1 }}>{selectedPoint.complaint || ''}</span>
+              </div>
+              {/* 담당자 */}
+              <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
+                <span style={{ color: '#90caf9', fontSize: '11px', width: '5rem', flexShrink: 0, paddingTop: '2px' }}>담당자</span>
+                <span style={{ color: 'white', fontSize: '12px', flex: 1 }}>{selectedPoint.manager || ''}</span>
+              </div>
+              {/* 방문지사진 */}
+              <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
+                <span style={{ color: '#90caf9', fontSize: '11px', width: '5rem', flexShrink: 0, paddingTop: '2px' }}>방문지사진</span>
+                <div style={{ flex: 1 }}>
+                  {selectedPoint.photoUrl ? (
+                    <img src={selectedPoint.photoUrl} alt="방문지사진" style={{ width: '100%', borderRadius: '6px' }} />
+                  ) : (
+                    <div style={{ borderRadius: '6px', height: '60px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(255,255,255,0.1)', border: '1px dashed rgba(255,255,255,0.3)' }}>
+                      <span style={{ color: '#90caf9', fontSize: '11px' }}>(사진없음)</span>
                     </div>
                   )}
-
-                  {/* 작업상태 */}
-                  <div className="mt-1 pt-3" style={{ borderTop: '1px solid rgba(255,255,255,0.2)' }}>
-                    {isAuthenticated ? (
-                      <div className="space-y-2">
-                        <div className="flex gap-2 items-center">
-                          <span className="text-blue-300 text-xs w-16 flex-shrink-0">작업상태</span>
-                          <select
-                            className="flex-1 rounded px-2 py-1.5 text-xs text-white font-bold"
-                            style={{ background: isDone ? 'rgba(255,255,255,0.15)' : 'rgba(235,100,0,0.65)', border: '1px solid rgba(255,255,255,0.3)' }}
-                            value={curStatus}
-                            onChange={(e) => handleSaveStatus(e.target.value, curMemo)}
-                            disabled={savingStatus}>
-                            <option value="" style={{ background: '#1a3a6e' }}></option>
-                            <option value="민원처리완료" style={{ background: '#7a2800' }}>민원처리완료</option>
-                            <option value="기처리" style={{ background: '#7a2800' }}>기처리</option>
-                            <option value="확인불가" style={{ background: '#7a2800' }}>확인불가</option>
-                          </select>
-                        </div>
-                        <div className="flex gap-2 items-start">
-                          <span className="text-blue-300 text-xs w-16 flex-shrink-0 pt-1">작업메모</span>
-                          <textarea
-                            className="flex-1 rounded px-2 py-1.5 text-xs text-white resize-none"
-                            style={{ background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.3)' }}
-                            rows={2}
-                            placeholder="메모 입력..."
-                            defaultValue={curMemo}
-                            onBlur={(e) => { if (e.target.value !== curMemo) handleSaveStatus(curStatus, e.target.value); }}
-                          />
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="space-y-1">
-                        <div className="flex gap-3 items-start">
-                          <span className="text-blue-300 text-xs w-16 flex-shrink-0">작업상태</span>
-                          <span className="text-xs font-bold" style={{ color: '#80cbc4' }}>{curStatus}</span>
-                        </div>
-                        <div className="flex gap-3 items-start">
-                          <span className="text-blue-300 text-xs w-16 flex-shrink-0">작업메모</span>
-                          <span className="text-xs text-white flex-1">{curMemo}</span>
-                        </div>
-                      </div>
-                    )}
-                  </div>
+                  {selectedPoint.photoDescription && (
+                    <p style={{ color: 'rgba(255,255,255,0.65)', fontSize: '11px', marginTop: '4px' }}>{selectedPoint.photoDescription}</p>
+                  )}
                 </div>
-              );
-            })()}
+              </div>
+              {/* 방문결과/방문메모 */}
+              <>
+                <div style={{ borderTop: '1px solid rgba(255,255,255,0.2)' }} />
+                <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                  <span style={{ color: '#90caf9', fontSize: '11px', width: '5rem', flexShrink: 0 }}>방문결과</span>
+                  {isAuthenticated ? (
+                    <select value={curStatus} onChange={e => handleSaveStatus(e.target.value, curMemo)} disabled={savingStatus}
+                      style={{ flex: 1, background: isDone ? 'rgba(255,255,255,0.15)' : 'rgba(235,100,0,0.65)', color: 'white', border: '1px solid rgba(255,255,255,0.3)', borderRadius: '6px', padding: '6px 8px', fontSize: '12px', fontWeight: 'bold' }}>
+                      <option value="" style={{ background: '#1a3a6e' }}>선택 (미완료)</option>
+                      <option value="민원처리완료" style={{ background: '#1a3a6e' }}>민원처리완료</option>
+                      <option value="기처리" style={{ background: '#1a3a6e' }}>기처리</option>
+                      <option value="확인불가" style={{ background: '#1a3a6e' }}>확인불가</option>
+                    </select>
+                  ) : (
+                    <span style={{ flex: 1, color: isDone ? '#a5d6a7' : 'rgba(255,255,255,0.5)', fontSize: '12px', fontWeight: 'bold' }}>
+                      {curStatus || '(미완료)'}
+                    </span>
+                  )}
+                </div>
+                <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
+                  <span style={{ color: '#90caf9', fontSize: '11px', width: '5rem', flexShrink: 0, paddingTop: '6px' }}>방문메모</span>
+                  {isAuthenticated ? (
+                    <textarea rows={2} placeholder="메모 입력..." defaultValue={curMemo}
+                      onBlur={(e) => { if (e.target.value !== curMemo) handleSaveStatus(curStatus, e.target.value); }}
+                      style={{ flex: 1, background: 'rgba(255,255,255,0.1)', color: 'white', border: '1px solid rgba(255,255,255,0.3)', borderRadius: '6px', padding: '6px 8px', fontSize: '12px', resize: 'none' }} />
+                  ) : (
+                    <span style={{ flex: 1, color: curMemo ? 'white' : 'rgba(255,255,255,0.35)', fontSize: '12px', paddingTop: '6px' }}>
+                      {curMemo || '(메모없음)'}
+                    </span>
+                  )}
+                </div>
+              </>
+            </div>
 
-            {/* 티맵 / 네이버지도 / 타임마크 버튼 - 맨 아래 */}
-            <div className="flex gap-2 mt-5 pt-4" style={{ borderTop: '1px solid rgba(255,255,255,0.15)' }}>
-              {/* 타임마크 카메라 버튼 */}
-              <button
-                onClick={() => window.location.href = 'timemarkcamera://'}
+            {/* 하단 버튼 */}
+            <div style={{ display: 'flex', gap: '8px', padding: '12px 16px', borderTop: '1px solid rgba(255,255,255,0.15)', flexShrink: 0 }}>
+              <button onClick={() => window.location.href = 'timemarkcamera://'}
                 title="타임마크 촬영"
-                className="rounded flex items-center justify-center"
-                style={{ background: '#f9d835', width: '44px', flexShrink: 0, minHeight: '36px' }}>
-                <svg width="22" height="20" viewBox="0 0 24 22" fill="none" xmlns="http://www.w3.org/2000/svg">
+                style={{ background: '#f9d835', width: '48px', height: '48px', flexShrink: 0, borderRadius: '8px', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <svg width="24" height="22" viewBox="0 0 24 22" fill="none">
                   <path d="M9 2L7.17 4H4C2.9 4 2 4.9 2 6V18C2 19.1 2.9 20 4 20H20C21.1 20 22 19.1 22 18V6C22 4.9 21.1 4 20 4H16.83L15 2H9ZM12 17C9.24 17 7 14.76 7 12C7 9.24 9.24 7 12 7C14.76 7 17 9.24 17 12C17 14.76 14.76 17 12 17Z" fill="#1a1a1a"/>
                   <circle cx="12" cy="12" r="3.5" fill="#1a1a1a"/>
                 </svg>
               </button>
-              <button
-                onClick={() => window.open(`tmap://route?goalname=${encodeURIComponent(selectedPoint.destination || selectedPoint.address)}&goaly=${selectedPoint.lat}&goalx=${selectedPoint.lng}`)}
-                className="flex-1 py-2 rounded text-sm text-white font-bold"
-                style={{ background: '#0a3d8f' }}>티맵</button>
-              <button
-                onClick={() => window.open(`nmap://navigation?dlat=${selectedPoint.lat}&dlng=${selectedPoint.lng}&dname=${encodeURIComponent(selectedPoint.destination || selectedPoint.address)}&appname=patrol-optimizer`)}
-                className="flex-1 py-2 rounded text-sm text-white font-bold"
-                style={{ background: '#1b5e20' }}>네이버지도</button>
+              <button onClick={() => window.open(`tmap://route?goalname=${encodeURIComponent(selectedPoint.destination || selectedPoint.address)}&goaly=${selectedPoint.lat}&goalx=${selectedPoint.lng}`)}
+                style={{ flex: 1, height: '48px', borderRadius: '8px', background: '#0a3d8f', color: 'white', fontSize: '14px', fontWeight: 'bold', border: 'none', cursor: 'pointer' }}>티맵</button>
+              <button onClick={() => window.open(`nmap://navigation?dlat=${selectedPoint.lat}&dlng=${selectedPoint.lng}&dname=${encodeURIComponent(selectedPoint.destination || selectedPoint.address)}&appname=patrol-optimizer`)}
+                style={{ flex: 1, height: '48px', borderRadius: '8px', background: '#1b5e20', color: 'white', fontSize: '14px', fontWeight: 'bold', border: 'none', cursor: 'pointer' }}>네이버지도</button>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* 이미지 미리보기 모달 */}
       {previewIndex !== null && uploadedImages.length > 0 && (
