@@ -2125,6 +2125,7 @@ export default function Home() {
             apSt={apSt}
             insertOptions={insertOptions}
             isNew={!editingAdditionalPoint}
+            isAdmin={true}
             onClose={async () => {
               setShowAdditionalModal(false);
             }}

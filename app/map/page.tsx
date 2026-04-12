@@ -2543,6 +2543,7 @@ export default function MapPage() {
             point={emptyPoint}
             insertOptions={insertOptions}
             isNew={true}
+            isAdmin={isAdmin}
             onClose={() => {
               setShowMapAddModal(false);
               // onSave 완료 후 최신 additionalPointsRef로 마커 재그리기
