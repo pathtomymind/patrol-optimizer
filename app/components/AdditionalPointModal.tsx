@@ -109,7 +109,12 @@ export default function AdditionalPointModal({
   };
 
   const handleClose = async () => {
-    if (saving) return; // 이미 저장 중이면 무시
+    if (saving) return;
+    // ★ 비관리자이거나 새 지점(isNew)인데 관리자가 아니면 저장 없이 닫기
+    if (!isAdmin) {
+      onClose();
+      return;
+    }
     setSaving(true);
     await onSave(buildData());
     setSaving(false);
