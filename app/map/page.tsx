@@ -217,7 +217,7 @@ export default function MapPage() {
         }
       } catch {}
     };
-    const timer = setInterval(checkNewAdditional, 30000);
+    const timer = setInterval(checkNewAdditional, 15000);
     return () => clearInterval(timer);
   }, []);
 
@@ -1939,6 +1939,7 @@ export default function MapPage() {
     } catch {}
     const today = routeRef.current?.date ?? new Date().toLocaleDateString('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/\. /g, '-').replace('.', '');
     fetch('/api/save-additional', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ date: today, points: updated }) }).catch(() => {});
+    lastAdditionalCountRef.current = updated.filter(function(p) { return p.lat && p.lng; }).length;
     setShowInsertModal(false);
     drawAdditionalMarkers(updated);
   };
@@ -2639,6 +2640,8 @@ export default function MapPage() {
               } catch {}
               const today = routeRef.current?.date ?? new Date().toLocaleDateString('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/\. /g, '-').replace('.', '');
               await fetch('/api/save-additional', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ date: today, points: updated }) }).catch(() => {});
+              // ★ 저장 후 카운트 갱신 (자신에게 배너 뜨지 않도록)
+              lastAdditionalCountRef.current = updated.filter(p => p.lat && p.lng).length;
               // 모달 닫기와 마커 재그리기는 onClose에서 처리
             }}
             onPhotoUpload={async (file) => {
@@ -2715,6 +2718,8 @@ export default function MapPage() {
               } catch {}
               const today = routeRef.current?.date ?? new Date().toLocaleDateString('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/\. /g, '-').replace('.', '');
               await fetch('/api/save-additional', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ date: today, points: updated }) }).catch(() => {});
+              // ★ 저장 후 카운트 갱신 (자신에게 배너 뜨지 않도록)
+              lastAdditionalCountRef.current = updated.filter(p => p.lat && p.lng).length;
               if (data.status !== undefined) {
                 await fetch('/api/save-status', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ date: route?.date ?? today, address: data.address, destination: data.destination, complaint: data.complaint?.trim() ?? '', originalId: null, status: data.status, memo: data.memo }) });
                 statusesRef.current = { ...statusesRef.current, [apKey]: { status: data.status, memo: data.memo, updatedAt: Date.now() } };
