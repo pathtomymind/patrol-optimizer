@@ -2040,7 +2040,7 @@ export default function MapPage() {
   };
 
   return (
-    <div style={{ width: '100vw', height: '100vh', background: '#0d1b2e', display: 'flex', flexDirection: 'column' }}>
+    <div style={{ width: '100vw', height: '100dvh', background: '#0d1b2e', display: 'flex', flexDirection: 'column' }}>
       {/* 상단 헤더 */}
       <div
         style={{
