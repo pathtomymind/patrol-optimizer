@@ -290,6 +290,13 @@ export default function Home() {
   const [password, setPassword] = useState('');
   const [authError, setAuthError] = useState('');
 
+  // 마운트 시 sessionStorage에서 인증 상태 복원 (지도뷰와 공유)
+  useEffect(() => {
+    if (sessionStorage.getItem('patrol-admin-auth') === 'true') {
+      setIsAuthenticated(true);
+    }
+  }, []);
+
   // 이미지 업로드
   const [uploadedImages, setUploadedImages] = useState<{ id: number; url: string; name: string }[]>([]);
   const [extractedPoints, setExtractedPoints] = useState<{ 
@@ -370,7 +377,7 @@ export default function Home() {
       });
       if (res.ok) {
         setIsAuthenticated(true);
-        localStorage.setItem('patrol-admin-auth', 'true');
+        sessionStorage.setItem('patrol-admin-auth', 'true');
         setShowAuthModal(false);
         setPassword('');
         setAuthError('');
