@@ -2212,7 +2212,14 @@ export default function MapPage() {
       )}
 
       {/* 지도 */}
-      <div ref={mapRef} style={{ flex: 1, width: '100%' }} />
+      <div style={{ position: 'relative', flex: 1, width: '100%' }}>
+        <div ref={mapRef} style={{ width: '100%', height: '100%' }} />
+        {/* 비네팅 오버레이 */}
+        <div style={{
+          position: 'absolute', inset: 0, pointerEvents: 'none',
+          background: 'radial-gradient(ellipse at center, transparent 60%, rgba(13,27,46,0.55) 100%)',
+        }} />
+      </div>
 
       {/* 도로 모드 로딩 안내 */}
       {lineMode === 'road' && routeDrawn === false && route && mapReady && !osrmError && (
