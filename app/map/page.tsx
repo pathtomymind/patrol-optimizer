@@ -90,7 +90,6 @@ export default function MapPage() {
   const [newAdditionalAvailable, setNewAdditionalAvailable] = useState(false);
   const lastAdditionalTimestampRef = useRef<number>(-1);
   const [is3D, setIs3D] = useState(false);
-  const [isTilted, setIsTilted] = useState(false);
   const [showMapHelpModal, setShowMapHelpModal] = useState(false);
   const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const blinkIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -341,16 +340,6 @@ export default function MapPage() {
     const naver = (window as any).naver;
     (map as any).setMapTypeId(next ? naver.maps.MapTypeId.HYBRID : naver.maps.MapTypeId.NORMAL);
   };
-  
-  // 8. 틸트 토글 함수 추가
-  const toggleTilt = () => {
-    const map = naverMapRef.current;
-    if (!map) return;
-    const next = !isTilted;
-    setIsTilted(next);
-    (map as any).setOptions({ tilt: next ? 45 : 0 });
-  };
-
   
   const applyZoomVisibility = (zoom: number) => {
     const showMarkers = zoom >= ZOOM_THRESHOLD;
@@ -2220,21 +2209,6 @@ export default function MapPage() {
         )}
         <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'nowrap', overflow: 'hidden', justifyContent: 'flex-end' }}>
           {/* 2D/3D 토글 */}
-          <button
-            onClick={toggleTilt}
-            style={{
-              padding: '4px 8px',
-              borderRadius: '6px',
-              fontSize: '12px',
-              fontWeight: 'bold',
-              background: isTilted ? '#1565c0' : 'rgba(255,255,255,0.15)',
-              color: 'white',
-              border: '1px solid rgba(255,255,255,0.3)',
-              cursor: 'pointer',
-            }}
-          >
-            2.5D
-          </button>
           <button
             onClick={toggle3D}
             style={{
