@@ -348,11 +348,7 @@ export default function MapPage() {
     if (!map) return;
     const next = !isTilted;
     setIsTilted(next);
-    (map as any).morph(
-      (map as any).getCenter(),
-      (map as any).getZoom(),
-      { tilt: next ? 45 : 0, animate: true }
-    );
+    (map as any).setOptions({ tilt: next ? 45 : 0 });
   };
 
   
